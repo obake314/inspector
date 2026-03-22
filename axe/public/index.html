@@ -1,0 +1,1477 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WCAG 2.2 アクセシビリティチェッカー</title>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --navy-100: #f0f2f5;
+            --navy-200: #d8dce5;
+            --navy-300: #b0b8c9;
+            --navy-400: #7a869e;
+            --navy-500: #4a5568;
+            --navy-600: #2d3748;
+            --navy-700: #1a2332;
+            --navy-800: #111827;
+            --navy-900: #0a0f18;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'IBM Plex Sans JP', sans-serif;
+            background: var(--navy-100);
+            color: var(--navy-800);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+        .container { max-width: 1000px; margin: 0 auto; padding: 48px 24px; }
+        header { margin-bottom: 40px; }
+        h1 { font-size: 20px; font-weight: 600; letter-spacing: 0.02em; margin-bottom: 4px; }
+        .subtitle { color: var(--navy-500); font-size: 14px; }
+        .input-section { background: white; border: 1px solid var(--navy-200); padding: 24px; margin-bottom: 24px; }
+        .level-select { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--navy-200); }
+        .level-select-label { font-size: 14px; font-weight: 500; color: var(--navy-500); text-transform: uppercase; letter-spacing: 0.05em; }
+        .level-select-btns { display: flex; gap: 0; }
+        .level-select-btn { background: var(--navy-100); border: 1px solid var(--navy-300); padding: 8px 20px; font-size: 14px; font-weight: 500; cursor: pointer; color: var(--navy-500); }
+        .level-select-btn:first-child { border-right: none; }
+        .level-select-btn:last-child { border-left: none; }
+        .level-select-btn:hover { background: var(--navy-200); }
+        .level-select-btn.active { background: var(--navy-700); border-color: var(--navy-700); color: white; }
+        .url-form { display: flex; gap: 12px; }
+        .url-input {
+            flex: 1; background: var(--navy-100); border: 1px solid var(--navy-300);
+            padding: 12px 16px; font-size: 14px; font-family: 'IBM Plex Mono', monospace; color: var(--navy-800);
+        }
+        .url-input:focus { outline: none; border-color: var(--navy-600); }
+        .url-input::placeholder { color: var(--navy-400); }
+        .check-btn {
+            background: var(--navy-700); color: white; border: none;
+            padding: 12px 24px; font-size: 14px; font-weight: 500; cursor: pointer;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .check-btn:hover { background: var(--navy-800); }
+        .check-btn:disabled { background: var(--navy-400); cursor: not-allowed; }
+        .check-btn .spinner {
+            width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; display: none;
+        }
+        .check-btn.loading .spinner { display: inline-block; }
+        .check-btn.loading .btn-text { display: none; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .note { margin-top: 16px; font-size: 14px; color: var(--navy-500); border-left: 2px solid var(--navy-300); padding-left: 12px; }
+        .skip-rules-section { margin-top: 16px; font-size: 14px; color: var(--navy-500); }
+        .skip-rules-section summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
+        .skip-rules-section summary:hover { color: var(--navy-700); }
+        .skip-rules-list { padding: 12px; background: var(--navy-100); margin-top: 8px; }
+        .skip-rule-item { display: flex; align-items: flex-start; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--navy-200); cursor: pointer; }
+        .skip-rule-item:last-child { border-bottom: none; }
+        .skip-rule-item:hover { background: var(--navy-200); margin: 0 -12px; padding: 8px 12px; }
+        .skip-rule-item input { margin-top: 2px; }
+        .skip-rule-item span { font-family: 'IBM Plex Mono', monospace; font-weight: 500; min-width: 150px; }
+        .skip-rule-item small { color: var(--navy-400); }
+        .results { display: none; }
+        .results.visible { display: block; }
+        .summary { display: grid; grid-template-columns: repeat(6, 1fr); gap: 1px; background: var(--navy-200); border: 1px solid var(--navy-200); margin-bottom: 24px; }
+        .summary-item { background: white; padding: 16px; text-align: center; }
+        .summary-item .count { font-size: 24px; font-weight: 600; color: var(--navy-700); }
+        .summary-item .label { font-size: 14px; color: var(--navy-500); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+        .tabs { display: flex; border-bottom: 1px solid var(--navy-200); margin-bottom: 24px; }
+        .tab {
+            background: none; border: none; padding: 12px 20px; font-size: 14px;
+            color: var(--navy-500); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+        }
+        .tab:hover { color: var(--navy-700); }
+        .tab.active { color: var(--navy-800); border-bottom-color: var(--navy-700); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .section { background: white; border: 1px solid var(--navy-200); margin-bottom: 24px; }
+        .section-header { padding: 16px 20px; border-bottom: 1px solid var(--navy-200); display: flex; align-items: center; justify-content: space-between; }
+        .section-title { font-size: 14px; font-weight: 600; }
+        .section-badge { font-size: 14px; color: var(--navy-500); }
+        .level-filter { display: flex; gap: 4px; }
+        .level-btn {
+            background: var(--navy-100); border: 1px solid var(--navy-200);
+            padding: 4px 10px; font-size: 14px; font-weight: 500; cursor: pointer; color: var(--navy-500);
+        }
+        .level-btn:hover { border-color: var(--navy-400); }
+        .level-btn.active { background: var(--navy-700); border-color: var(--navy-700); color: white; }
+        .violation-list { max-height: 500px; overflow-y: auto; }
+        .violation-item { border-bottom: 1px solid var(--navy-200); }
+        .violation-item:last-child { border-bottom: none; }
+        .violation-header { padding: 14px 20px; cursor: pointer; display: flex; align-items: flex-start; gap: 12px; }
+        .violation-header:hover { background: var(--navy-100); }
+        .badges { display: flex; gap: 6px; flex-shrink: 0; }
+        .badge {
+            padding: 2px 8px; font-size: 14px; font-weight: 500; text-transform: uppercase;
+            letter-spacing: 0.03em; background: var(--navy-200); color: var(--navy-600);
+        }
+        .badge.critical { background: var(--navy-700); color: white; }
+        .badge.serious { background: var(--navy-600); color: white; }
+        .badge.moderate { background: var(--navy-400); color: white; }
+        .badge.minor { background: var(--navy-300); color: var(--navy-700); }
+        .violation-info { flex: 1; min-width: 0; }
+        .violation-title { font-size: 14px; font-weight: 500; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .wcag-ref { font-family: 'IBM Plex Mono', monospace; font-size: 14px; color: var(--navy-500); }
+        .violation-desc { font-size: 14px; color: var(--navy-500); line-height: 1.5; }
+        .violation-meta { margin-top: 8px; font-size: 14px; color: var(--navy-400); }
+        .violation-meta a { color: var(--navy-600); text-decoration: none; }
+        .violation-meta a:hover { text-decoration: underline; }
+        .expand-icon { width: 16px; height: 16px; color: var(--navy-400); transition: transform 0.2s; flex-shrink: 0; }
+        .violation-item.expanded .expand-icon { transform: rotate(180deg); }
+        .violation-details { display: none; padding: 0 20px 16px 20px; margin-left: 100px; }
+        .violation-item.expanded .violation-details { display: block; }
+        .element-list { background: var(--navy-100); padding: 12px; font-size: 14px; }
+        .element-item { padding: 8px 0; border-bottom: 1px solid var(--navy-200); }
+        .element-item:last-child { border-bottom: none; }
+        .element-target { font-family: 'IBM Plex Mono', monospace; font-size: 14px; color: var(--navy-600); margin-bottom: 4px; word-break: break-all; }
+        .element-html { font-family: 'IBM Plex Mono', monospace; font-size: 14px; color: var(--navy-500); background: white; padding: 8px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+        .fix-suggestion { margin-top: 12px; padding: 12px; background: white; border-left: 2px solid var(--navy-400); }
+        .fix-suggestion-title { font-size: 14px; font-weight: 500; color: var(--navy-600); margin-bottom: 4px; }
+        .fix-suggestion-text { font-size: 14px; color: var(--navy-500); white-space: pre-wrap; }
+        .manual-category { border-bottom: 1px solid var(--navy-200); }
+        .manual-category:last-child { border-bottom: none; }
+        .manual-category-header { padding: 14px 20px; background: var(--navy-100); display: flex; align-items: center; justify-content: space-between; font-size: 14px; font-weight: 500; }
+        .manual-category-count { font-size: 14px; color: var(--navy-500); font-weight: 400; }
+        .manual-items { padding: 8px 20px; }
+        .manual-item { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--navy-200); }
+        .manual-item:last-child { border-bottom: none; }
+        .manual-checkbox { width: 18px; height: 18px; border: 1px solid var(--navy-300); flex-shrink: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+        .manual-checkbox:hover { border-color: var(--navy-500); }
+        .manual-checkbox.checked { background: var(--navy-700); border-color: var(--navy-700); }
+        .manual-checkbox.checked::after { content: ''; width: 10px; height: 6px; border-left: 2px solid white; border-bottom: 2px solid white; transform: rotate(-45deg) translateY(-1px); }
+        .manual-content { flex: 1; }
+        .manual-text { font-size: 14px; margin-bottom: 4px; }
+        .manual-info { display: flex; gap: 12px; font-size: 14px; color: var(--navy-400); }
+        .manual-info a { color: var(--navy-500); text-decoration: none; }
+        .manual-info a:hover { text-decoration: underline; }
+        .progress-bar { margin-top: 24px; background: white; border: 1px solid var(--navy-200); padding: 16px 20px; }
+        .progress-label { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; color: var(--navy-500); }
+        .progress-track { height: 4px; background: var(--navy-200); }
+        .progress-fill { height: 100%; background: var(--navy-600); transition: width 0.3s; }
+        .empty-state { text-align: center; padding: 48px 24px; color: var(--navy-400); font-size: 14px; }
+        .error-message { background: white; border: 1px solid var(--navy-300); border-left: 3px solid var(--navy-700); padding: 16px 20px; margin-bottom: 24px; display: none; }
+        .error-message.visible { display: block; }
+        .error-message h4 { font-size: 14px; font-weight: 500; margin-bottom: 8px; }
+        .error-message p { font-size: 14px; color: var(--navy-500); }
+        .export-btn { background: none; color: var(--navy-600); border: 1px solid var(--navy-300); padding: 6px 14px; font-size: 14px; cursor: pointer; }
+        .export-btn:hover { border-color: var(--navy-500); }
+        .wcag-list-item { padding: 10px 20px; border-bottom: 1px solid var(--navy-200); display: flex; align-items: center; gap: 12px; font-size: 14px; }
+        .wcag-list-item:last-child { border-bottom: none; }
+        .wcag-principle { padding: 12px 20px; background: var(--navy-100); font-weight: 500; font-size: 14px; border-bottom: 1px solid var(--navy-200); }
+        .auto-indicator { font-size: 14px; color: var(--navy-400); margin-left: auto; }
+        .scan-time { margin-top: 12px; font-size: 14px; color: var(--navy-400); }
+        /* Mode toggle */
+        .mode-toggle { display: flex; gap: 0; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--navy-200); }
+        .mode-btn { background: var(--navy-100); border: 1px solid var(--navy-300); padding: 8px 20px; font-size: 14px; font-weight: 500; cursor: pointer; color: var(--navy-500); }
+        .mode-btn:first-child { border-right: none; }
+        .mode-btn:last-child { border-left: none; }
+        .mode-btn:hover { background: var(--navy-200); }
+        .mode-btn.active { background: var(--navy-700); border-color: var(--navy-700); color: white; }
+        /* Batch */
+        .batch-input { display: none; }
+        .batch-input.visible { display: block; }
+        .batch-textarea { width: 100%; min-height: 200px; background: var(--navy-100); border: 1px solid var(--navy-300); padding: 12px 16px; font-size: 14px; font-family: 'IBM Plex Mono', monospace; color: var(--navy-800); resize: vertical; line-height: 1.8; }
+        .batch-textarea:focus { outline: none; border-color: var(--navy-600); }
+        .batch-textarea::placeholder { color: var(--navy-400); }
+        .batch-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+        .batch-count { font-size: 14px; color: var(--navy-500); font-family: 'IBM Plex Mono', monospace; }
+        .batch-progress { margin-top: 16px; display: none; }
+        .batch-progress.visible { display: block; }
+        .batch-progress-label { font-size: 14px; color: var(--navy-500); margin-bottom: 8px; }
+        .batch-progress-track { height: 6px; background: var(--navy-200); }
+        .batch-progress-fill { height: 100%; background: var(--navy-600); transition: width 0.3s; width: 0%; }
+        .batch-results-nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+        .batch-page-btn { background: white; border: 1px solid var(--navy-200); padding: 6px 14px; font-size: 14px; cursor: pointer; color: var(--navy-600); font-family: 'IBM Plex Mono', monospace; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .batch-page-btn:hover { border-color: var(--navy-500); }
+        .batch-page-btn.active { background: var(--navy-700); border-color: var(--navy-700); color: white; }
+        .batch-page-btn.error { border-color: #dc2626; color: #dc2626; }
+        .batch-page-btn .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+        .batch-page-btn .status-dot.ok { background: #059669; }
+        .batch-page-btn .status-dot.ng { background: #dc2626; }
+        .batch-summary-table { width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 24px; }
+        .batch-summary-table th, .batch-summary-table td { border: 1px solid var(--navy-200); padding: 8px 12px; text-align: center; }
+        .batch-summary-table th { background: var(--navy-100); font-weight: 500; color: var(--navy-600); font-size: 14px; text-transform: uppercase; letter-spacing: 0.03em; }
+        .batch-summary-table td { background: white; font-family: 'IBM Plex Mono', monospace; }
+        .batch-summary-table td:first-child { text-align: left; font-family: 'IBM Plex Sans JP', sans-serif; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .batch-summary-table tr.has-violations td:first-child { border-left: 3px solid var(--navy-700); }
+        footer { text-align: center; padding: 32px 24px; color: var(--navy-400); font-size: 14px; }
+        footer a { color: var(--navy-500); text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
+        /* Login overlay */
+        .login-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--navy-100); z-index: 9999;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .login-overlay.hidden { display: none; }
+        .login-box {
+            background: white; border: 1px solid var(--navy-200); padding: 40px;
+            width: 100%; max-width: 380px; text-align: center;
+        }
+        .login-box h2 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+        .login-box p { font-size: 14px; color: var(--navy-500); margin-bottom: 24px; }
+        .login-box input {
+            width: 100%; background: var(--navy-100); border: 1px solid var(--navy-300);
+            padding: 12px 16px; font-size: 14px; text-align: center; margin-bottom: 12px;
+        }
+        .login-box input:focus { outline: none; border-color: var(--navy-600); }
+        .login-box button {
+            width: 100%; background: var(--navy-700); color: white; border: none;
+            padding: 12px; font-size: 14px; font-weight: 500; cursor: pointer;
+        }
+        .login-box button:hover { background: var(--navy-800); }
+        .login-error { color: #dc2626; font-size: 14px; margin-bottom: 12px; display: none; }
+        /* Settings modal */
+        .settings-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.4); z-index: 8000;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .settings-overlay.hidden { display: none; }
+        .settings-box {
+            background: white; border: 1px solid var(--navy-200); padding: 32px;
+            width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto;
+        }
+        .settings-box h2 { font-size: 16px; font-weight: 600; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; }
+        .settings-box h2 button { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--navy-500); }
+        .settings-group { margin-bottom: 20px; }
+        .settings-group label { display: block; font-size: 14px; font-weight: 500; color: var(--navy-600); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.03em; }
+        .settings-group input, .settings-group textarea {
+            width: 100%; background: var(--navy-100); border: 1px solid var(--navy-300);
+            padding: 10px 14px; font-size: 14px; font-family: 'IBM Plex Mono', monospace;
+        }
+        .settings-group input:focus, .settings-group textarea:focus { outline: none; border-color: var(--navy-600); }
+        .settings-group textarea { min-height: 80px; resize: vertical; }
+        .settings-group .hint { font-size: 14px; color: var(--navy-400); margin-top: 4px; }
+        .settings-save-btn {
+            width: 100%; background: var(--navy-700); color: white; border: none;
+            padding: 12px; font-size: 14px; font-weight: 500; cursor: pointer; margin-top: 8px;
+        }
+        .settings-save-btn:hover { background: var(--navy-800); }
+        .settings-save-btn:disabled { background: var(--navy-400); cursor: not-allowed; }
+        .settings-msg { font-size: 14px; margin-top: 12px; text-align: center; }
+        .settings-msg.ok { color: #059669; }
+        .settings-msg.ng { color: #dc2626; }
+        .settings-gear {
+            background: none; border: 1px solid var(--navy-300); width: 32px; height: 32px;
+            display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--navy-500); font-size: 16px;
+        }
+        .settings-gear:hover { border-color: var(--navy-500); color: var(--navy-700); }
+        @media (max-width: 768px) {
+            .url-form { flex-direction: column; }
+            .summary { grid-template-columns: repeat(3, 1fr); }
+            .violation-details { margin-left: 0; }
+            .section-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Login overlay -->
+    <div class="login-overlay" id="loginOverlay">
+        <div class="login-box">
+            <h2>WCAG Checker</h2>
+            <p>パスワードを入力してください</p>
+            <div class="login-error" id="loginError">パスワードが正しくありません</div>
+            <input type="password" id="loginPassword" placeholder="パスワード" autocomplete="current-password">
+            <button type="button" id="loginBtn">ログイン</button>
+        </div>
+    </div>
+
+    <!-- Settings modal -->
+    <div class="settings-overlay hidden" id="settingsOverlay">
+        <div class="settings-box">
+            <h2>設定 <button type="button" onclick="closeSettings()">&times;</button></h2>
+            <div class="settings-group">
+                <label>Gemini API Key</label>
+                <input type="password" id="settGeminiKey" placeholder="AIza...">
+                <div class="hint">Gemini AI評価に使用</div>
+            </div>
+            <div class="settings-group">
+                <label>Google Service Account Key (JSON)</label>
+                <textarea id="settServiceAccount" placeholder='{"type":"service_account","project_id":...}'></textarea>
+                <div class="hint">Google Sheets連携に必要なサービスアカウントの鍵</div>
+            </div>
+            <div class="settings-group">
+                <label>Google Drive Folder ID（検査データ保存先）</label>
+                <input type="text" id="settFolderId" placeholder="1aBcDeFgHiJkLmNoPqRsTuVwXyZ">
+                <div class="hint">検査結果のスプレッドシートを保存するフォルダのID</div>
+            </div>
+            <div class="settings-group">
+                <label>レポート出力先 Folder ID（空欄＝上記と同じ）</label>
+                <input type="text" id="settReportFolderId" placeholder="空欄の場合は検査データと同じフォルダ">
+                <div class="hint">レポート用スプレッドシートの保存先（別フォルダにしたい場合）</div>
+            </div>
+            <div class="settings-group">
+                <label>アプリパスワード変更</label>
+                <input type="password" id="settNewPassword" placeholder="新しいパスワード（変更する場合のみ）">
+                <div class="hint">空欄の場合は変更しません</div>
+            </div>
+            <button type="button" class="settings-save-btn" id="settSaveBtn" onclick="saveSettings()">保存</button>
+            <div class="settings-msg" id="settingsMsg"></div>
+        </div>
+    </div>
+
+    <div class="container">
+        <header style="display: flex; align-items: flex-start; justify-content: space-between;">
+            <div>
+                <h1>WCAG 2.2 アクセシビリティチェッカー</h1>
+                <p class="subtitle">ウェブコンテンツ・アクセシビリティ・ガイドライン 2.2</p>
+            </div>
+            <button type="button" class="settings-gear" id="settingsGear" onclick="openSettings()" title="設定">&#9881;</button>
+        </header>
+        <div class="input-section">
+            <div class="mode-toggle">
+                <button type="button" class="mode-btn active" data-mode="single">単一ページ</button>
+                <button type="button" class="mode-btn" data-mode="batch">一括検査（最大10件）</button>
+            </div>
+            <div class="level-select">
+                <span class="level-select-label">対象レベル</span>
+                <div class="level-select-btns">
+                    <button type="button" class="level-select-btn" data-level="A">A</button>
+                    <button type="button" class="level-select-btn" data-level="AA">AA</button>
+                    <button type="button" class="level-select-btn active" data-level="AAA">AAA</button>
+                </div>
+            </div>
+            <div id="singleInput">
+                <form class="url-form" id="urlForm">
+                    <input type="url" class="url-input" id="urlInput" placeholder="https://example.com" required>
+                    <button type="submit" class="check-btn" id="checkBtn">
+                        <span class="btn-text">チェック</span>
+                        <div class="spinner"></div>
+                    </button>
+                </form>
+            </div>
+            <div id="batchInput" class="batch-input">
+                <textarea class="batch-textarea" id="batchUrls" placeholder="URLを1行ずつ入力（最大10件）&#10;https://example.com&#10;https://example.com/about&#10;https://example.com/contact"></textarea>
+                <div class="batch-actions">
+                    <button type="button" class="check-btn" id="batchCheckBtn">
+                        <span class="btn-text">一括チェック</span>
+                        <div class="spinner"></div>
+                    </button>
+                    <span class="batch-count" id="batchCount">0 / 10 URL</span>
+                </div>
+                <div class="batch-progress" id="batchProgress">
+                    <div class="batch-progress-label" id="batchProgressLabel">検査中...</div>
+                    <div class="batch-progress-track"><div class="batch-progress-fill" id="batchProgressFill"></div></div>
+                </div>
+            </div>
+            <details class="basic-auth-section" style="margin-top: 12px;">
+                <summary style="cursor: pointer; font-size: 14px; color: var(--navy-500);">Basic認証（必要な場合）</summary>
+                <div style="display: flex; gap: 12px; margin-top: 8px;">
+                    <input type="text" id="basicUser" class="url-input" placeholder="ユーザー名" style="flex: 1;">
+                    <input type="password" id="basicPass" class="url-input" placeholder="パスワード" style="flex: 1;">
+                </div>
+            </details>
+            <div class="note" id="levelNote">Level AAA: A + AA + AAA の全基準をチェック（最高水準）</div>
+            <details class="skip-rules-section">
+                <summary>除外ルール設定</summary>
+                <div class="skip-rules-list">
+                    <label class="skip-rule-item">
+                        <input type="checkbox" checked data-rule="region">
+                        <span>region</span>
+                        <small>ランドマーク外コンテンツ（トップへ戻るボタン等）</small>
+                    </label>
+                    <label class="skip-rule-item">
+                        <input type="checkbox" data-rule="landmark-one-main">
+                        <span>landmark-one-main</span>
+                        <small>main要素が1つだけか</small>
+                    </label>
+                    <label class="skip-rule-item">
+                        <input type="checkbox" data-rule="heading-order">
+                        <span>heading-order</span>
+                        <small>見出しレベルの順序</small>
+                    </label>
+                    <label class="skip-rule-item">
+                        <input type="checkbox" data-rule="color-contrast">
+                        <span>color-contrast</span>
+                        <small>コントラスト比（デザイン意図がある場合）</small>
+                    </label>
+                </div>
+            </details>
+        </div>
+        <div class="error-message" id="errorMessage">
+            <h4>エラー</h4>
+            <p id="errorText"></p>
+        </div>
+        <div class="results" id="batchResults" style="display:none;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+                <h2 style="font-size: 16px; font-weight: 600;">一括検査結果</h2>
+                <button class="export-btn" id="batchReportBtn" onclick="exportBatchReport()" style="display:none;background:#1a73e8;color:#fff;padding:10px 24px;font-size:14px;font-weight:600;border:none;border-radius:4px;cursor:pointer;">レポート出力（Sheets）</button>
+            </div>
+            <div id="batchSummaryArea"></div>
+            <div class="batch-results-nav" id="batchResultsNav"></div>
+            <div id="batchDetailArea"></div>
+        </div>
+        <div class="results" id="results">
+            <div class="summary">
+                <div class="summary-item"><div class="count" id="criticalCount">0</div><div class="label">緊急</div></div>
+                <div class="summary-item"><div class="count" id="seriousCount">0</div><div class="label">重大</div></div>
+                <div class="summary-item"><div class="count" id="moderateCount">0</div><div class="label">中程度</div></div>
+                <div class="summary-item"><div class="count" id="minorCount">0</div><div class="label">軽微</div></div>
+                <div class="summary-item"><div class="count" id="passCount">0</div><div class="label">合格</div></div>
+                <div class="summary-item"><div class="count" id="totalCount">0</div><div class="label">合計</div></div>
+            </div>
+            <div class="scan-time" id="scanTime"></div>
+            <div class="scan-debug" id="scanDebug" style="font-size: 14px; color: var(--navy-400); margin-bottom: 16px; font-family: 'IBM Plex Mono', monospace;"></div>
+            <div style="display:flex;gap:8px;margin-bottom:16px;">
+                <button class="export-btn" id="reportBtn" onclick="exportToSheets()" style="display:none;background:#1a73e8;color:#fff;padding:10px 24px;font-size:14px;font-weight:600;border:none;border-radius:4px;cursor:pointer;">レポート出力（Sheets）</button>
+                <button class="export-btn" id="csvBtn" onclick="exportCSV()" style="display:none;padding:10px 16px;font-size:13px;">CSV出力</button>
+            </div>
+            <div class="tabs">
+                <button class="tab active" data-tab="auto">違反項目</button>
+                <button class="tab" data-tab="passes">合格項目</button>
+                <button class="tab" data-tab="incomplete">要確認</button>
+                <button class="tab" data-tab="manual">手動チェック</button>
+            </div>
+            <div class="tab-content active" id="tab-auto">
+                <div class="section">
+                    <div class="section-header">
+                        <div><span class="section-title">違反項目</span> <span class="section-badge" id="violationsBadge">0</span></div>
+                    </div>
+                    <div class="violation-list" id="violationsList"></div>
+                </div>
+            </div>
+            <div class="tab-content" id="tab-passes">
+                <div class="section">
+                    <div class="section-header">
+                        <div><span class="section-title">合格したルール</span> <span class="section-badge" id="passBadge">0</span></div>
+                    </div>
+                    <div class="violation-list" id="passList"></div>
+                </div>
+            </div>
+            <div class="tab-content" id="tab-incomplete">
+                <div class="section">
+                    <div class="section-header">
+                        <div><span class="section-title">要確認項目</span> <span class="section-badge" id="incompleteBadge">0</span></div>
+                    </div>
+                    <div class="violation-list" id="incompleteList"></div>
+                </div>
+            </div>
+            <div class="tab-content" id="tab-manual">
+                <div class="ai-evaluate-section" style="margin-bottom: 16px; padding: 16px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 4px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+                        <div style="color: white;">
+                            <div style="font-weight: 600; font-size: 14px;">🤖 AI自動評価</div>
+                            <div style="font-size: 14px; opacity: 0.9;">Gemini AIが手動チェック項目を自動評価します</div>
+                        </div>
+                        <button id="aiEvaluateBtn" onclick="runAIEvaluation()" style="background: white; color: #667eea; border: none; padding: 10px 20px; font-size: 14px; font-weight: 600; cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 8px;">
+                            <span class="ai-btn-text">AI評価を実行</span>
+                            <span class="ai-spinner" style="display: none; width: 14px; height: 14px; border: 2px solid rgba(102,126,234,0.3); border-top-color: #667eea; border-radius: 50%; animation: spin 0.8s linear infinite;"></span>
+                        </button>
+                    </div>
+                    <div id="aiStatus" style="margin-top: 12px; font-size: 14px; color: white; display: none;"></div>
+                </div>
+                <div class="section" id="manualSection"></div>
+                <div class="progress-bar">
+                    <div class="progress-label"><span>手動チェック進捗</span><span id="progressPercent">0%</span></div>
+                    <div class="progress-track"><div class="progress-fill" id="progressFill" style="width: 0%"></div></div>
+                </div>
+            </div>
+        </div>
+        <footer>
+            <p><a href="https://github.com/dequelabs/axe-core" target="_blank">axe-core</a> + Puppeteer で動作</p>
+        </footer>
+    </div>
+    <script>
+        // axe-coreルールID → 日本語翻訳辞書
+        const axeRulesJa = {
+            'area-alt': { name: 'エリア要素の代替テキスト', desc: '<area>要素にalt属性またはARIAラベルが必要です' },
+            'aria-allowed-attr': { name: 'ARIA属性の適合', desc: 'ARIA属性がロールに対して適切である必要があります' },
+            'aria-allowed-role': { name: 'ARIAロールの適合', desc: '要素に設定されたARIAロールが適切である必要があります' },
+            'aria-command-name': { name: 'ARIAコマンドの名前', desc: 'ARIAコマンド要素にアクセシブルな名前が必要です' },
+            'aria-dialog-name': { name: 'ARIAダイアログの名前', desc: 'ARIAダイアログ要素にアクセシブルな名前が必要です' },
+            'aria-hidden-body': { name: 'bodyのaria-hidden', desc: 'body要素にaria-hidden="true"が設定されてはいけません' },
+            'aria-hidden-focus': { name: 'aria-hidden要素のフォーカス', desc: 'aria-hidden="true"の要素にフォーカス可能な要素を含めてはいけません' },
+            'aria-input-field-name': { name: 'ARIA入力フィールドの名前', desc: 'ARIA入力フィールドにアクセシブルな名前が必要です' },
+            'aria-meter-name': { name: 'ARIAメーターの名前', desc: 'ARIAメーター要素にアクセシブルな名前が必要です' },
+            'aria-progressbar-name': { name: 'ARIAプログレスバーの名前', desc: 'ARIAプログレスバーにアクセシブルな名前が必要です' },
+            'aria-required-attr': { name: 'ARIA必須属性の欠落', desc: 'ARIAロールに必須の属性が設定されている必要があります' },
+            'aria-required-children': { name: 'ARIA必須子要素の欠落', desc: 'ARIAロールに必須の子要素が含まれている必要があります' },
+            'aria-required-parent': { name: 'ARIA必須親要素の欠落', desc: 'ARIAロールに必須の親要素が存在する必要があります' },
+            'aria-roledescription': { name: 'aria-roledescription', desc: 'aria-roledescriptionが適切なロールに設定されている必要があります' },
+            'aria-roles': { name: 'ARIAロール値の不正', desc: 'ARIA role属性の値が有効である必要があります' },
+            'aria-toggle-field-name': { name: 'ARIAトグルの名前', desc: 'ARIAトグルフィールドにアクセシブルな名前が必要です' },
+            'aria-tooltip-name': { name: 'ARIAツールチップの名前', desc: 'ARIAツールチップにアクセシブルな名前が必要です' },
+            'aria-valid-attr': { name: 'ARIA属性名の不正', desc: 'ARIA属性名が有効である必要があります' },
+            'aria-valid-attr-value': { name: 'ARIA属性値の不正', desc: 'ARIA属性値が有効である必要があります' },
+            'blink': { name: 'blink要素の使用禁止', desc: '<blink>要素は使用してはいけません' },
+            'button-name': { name: 'ボタンの名前不足', desc: 'ボタンにアクセシブルな名前が必要です' },
+            'bypass': { name: 'スキップナビゲーション', desc: 'ページにメインコンテンツへのスキップリンクが必要です' },
+            'color-contrast': { name: '色のコントラスト比不足', desc: 'テキストと背景色のコントラスト比が十分である必要があります' },
+            'color-contrast-enhanced': { name: '色のコントラスト比不足（強化）', desc: 'テキストと背景色のコントラスト比が強化基準を満たす必要があります' },
+            'definition-list': { name: '定義リストの構造不正', desc: '<dl>要素の子要素が<dt>と<dd>のみである必要があります' },
+            'dlitem': { name: '定義リスト項目の構造不正', desc: '<dt>と<dd>は<dl>要素内に配置する必要があります' },
+            'document-title': { name: 'ページタイトルの欠落', desc: 'ページに<title>要素が必要です' },
+            'duplicate-id': { name: 'ID属性の重複', desc: 'id属性値が一意である必要があります' },
+            'duplicate-id-active': { name: 'アクティブ要素のID重複', desc: 'アクティブ要素のid属性値が一意である必要があります' },
+            'duplicate-id-aria': { name: 'ARIA参照先のID重複', desc: 'ARIAで参照されるid属性値が一意である必要があります' },
+            'empty-heading': { name: '空の見出し', desc: '見出し要素にテキストコンテンツが必要です' },
+            'empty-table-header': { name: '空のテーブルヘッダー', desc: 'テーブルヘッダーにテキストコンテンツが必要です' },
+            'form-field-multiple-labels': { name: '複数ラベルのフォーム要素', desc: 'フォーム要素に複数のラベルが関連付けられています' },
+            'frame-focusable-content': { name: 'フレーム内のフォーカス', desc: 'tabindex=-1のフレーム内にフォーカス可能なコンテンツがあってはいけません' },
+            'frame-title': { name: 'フレームのタイトル欠落', desc: 'iframe/frame要素にtitle属性が必要です' },
+            'frame-title-unique': { name: 'フレームタイトルの重複', desc: 'iframe/frame要素のtitle属性が一意である必要があります' },
+            'heading-order': { name: '見出しレベルの順序不正', desc: '見出しレベルが1段階ずつ増加する必要があります' },
+            'html-has-lang': { name: 'lang属性の欠落', desc: '<html>要素にlang属性が必要です' },
+            'html-lang-valid': { name: 'lang属性値の不正', desc: '<html>要素のlang属性値が有効である必要があります' },
+            'html-xml-lang-mismatch': { name: 'langとxml:langの不一致', desc: '<html>要素のlangとxml:langが一致する必要があります' },
+            'image-alt': { name: '画像の代替テキスト欠落', desc: '画像にalt属性による代替テキストが必要です' },
+            'image-redundant-alt': { name: '画像の冗長な代替テキスト', desc: '画像の代替テキストが周囲のテキストと重複しています' },
+            'input-button-name': { name: '入力ボタンの名前不足', desc: '入力ボタンにアクセシブルな名前が必要です' },
+            'input-image-alt': { name: '入力画像の代替テキスト欠落', desc: 'type="image"の入力にalt属性が必要です' },
+            'label': { name: 'フォームラベルの欠落', desc: 'フォーム要素にラベルが必要です' },
+            'label-content-name-mismatch': { name: 'ラベルと名前の不一致', desc: '表示ラベルとアクセシブルな名前が一致する必要があります' },
+            'landmark-banner-is-top-level': { name: 'バナーのトップレベル配置', desc: 'バナーランドマークがトップレベルに配置される必要があります' },
+            'landmark-complementary-is-top-level': { name: '補足のトップレベル配置', desc: '補足ランドマークがトップレベルに配置される必要があります' },
+            'landmark-contentinfo-is-top-level': { name: 'コンテンツ情報のトップレベル配置', desc: 'コンテンツ情報ランドマークがトップレベルに配置される必要があります' },
+            'landmark-main-is-top-level': { name: 'メインのトップレベル配置', desc: 'メインランドマークがトップレベルに配置される必要があります' },
+            'landmark-no-duplicate-banner': { name: 'バナーの重複', desc: 'バナーランドマークが1つのみである必要があります' },
+            'landmark-no-duplicate-contentinfo': { name: 'コンテンツ情報の重複', desc: 'コンテンツ情報ランドマークが1つのみである必要があります' },
+            'landmark-no-duplicate-main': { name: 'メインの重複', desc: 'メインランドマークが1つのみである必要があります' },
+            'landmark-one-main': { name: 'メインランドマークの欠落', desc: 'ページに1つのメインランドマークが必要です' },
+            'landmark-unique': { name: 'ランドマークの一意性', desc: 'ランドマークが一意のラベルを持つ必要があります' },
+            'link-in-text-block': { name: 'テキスト内リンクの識別', desc: 'リンクが色以外の方法でも識別可能である必要があります' },
+            'link-name': { name: 'リンクの名前不足', desc: 'リンクにアクセシブルな名前が必要です' },
+            'list': { name: 'リストの構造不正', desc: '<ul>/<ol>の直接の子要素が<li>等である必要があります' },
+            'listitem': { name: 'リスト項目の構造不正', desc: '<li>要素が<ul>/<ol>内に配置される必要があります' },
+            'marquee': { name: 'marquee要素の使用禁止', desc: '<marquee>要素は使用してはいけません' },
+            'meta-refresh': { name: 'meta refreshの使用', desc: '<meta http-equiv="refresh">は使用してはいけません' },
+            'meta-refresh-no-exceptions': { name: 'meta refreshの使用（例外なし）', desc: '<meta http-equiv="refresh">は一切使用してはいけません' },
+            'meta-viewport': { name: 'ビューポートのズーム無効', desc: 'ビューポートのズームが無効化されてはいけません' },
+            'meta-viewport-large': { name: 'ビューポートの拡大制限', desc: 'ビューポートの最大スケールが過度に制限されてはいけません' },
+            'nested-interactive': { name: 'インタラクティブ要素のネスト', desc: 'インタラクティブ要素が入れ子になってはいけません' },
+            'no-autoplay-audio': { name: '音声の自動再生', desc: '音声が自動再生されてはいけません（3秒以上）' },
+            'object-alt': { name: 'オブジェクトの代替テキスト欠落', desc: '<object>要素に代替テキストが必要です' },
+            'p-as-heading': { name: 'p要素の見出し使用', desc: '<p>要素を見出しの代わりに使用してはいけません' },
+            'page-has-heading-one': { name: 'h1見出しの欠落', desc: 'ページにレベル1の見出し（h1）が必要です' },
+            'presentation-role-conflict': { name: 'プレゼンテーションロールの競合', desc: 'role="presentation/none"が他の属性と競合しています' },
+            'region': { name: 'ランドマーク外のコンテンツ', desc: 'すべてのコンテンツがランドマーク領域内に含まれる必要があります' },
+            'role-img-alt': { name: 'role="img"の代替テキスト欠落', desc: 'role="img"要素にアクセシブルな名前が必要です' },
+            'scope-attr-valid': { name: 'scope属性値の不正', desc: 'scope属性の値が有効である必要があります' },
+            'scrollable-region-focusable': { name: 'スクロール領域のフォーカス不可', desc: 'スクロール可能な領域がキーボードでアクセス可能である必要があります' },
+            'select-name': { name: 'セレクトの名前不足', desc: 'セレクト要素にアクセシブルな名前が必要です' },
+            'server-side-image-map': { name: 'サーバーサイドイメージマップ', desc: 'サーバーサイドイメージマップは使用してはいけません' },
+            'skip-link': { name: 'スキップリンクのターゲット欠落', desc: 'スキップリンクのターゲットが存在する必要があります' },
+            'svg-img-alt': { name: 'SVGの代替テキスト欠落', desc: 'role="img"のSVG要素にアクセシブルな名前が必要です' },
+            'tabindex': { name: 'tabindexの不正値', desc: 'tabindex属性値が0より大きくてはいけません' },
+            'table-duplicate-name': { name: 'テーブル名の重複', desc: 'テーブルのキャプションとsummaryが同一であってはいけません' },
+            'table-fake-caption': { name: 'テーブルの偽キャプション', desc: 'テーブルの擬似キャプションの代わりに<caption>を使用してください' },
+            'td-has-header': { name: 'テーブルセルのヘッダー欠落', desc: 'テーブルのデータセルにヘッダーが関連付けられている必要があります' },
+            'td-headers-attr': { name: 'headers属性の不正', desc: 'テーブルセルのheaders属性が正しいセルを参照する必要があります' },
+            'th-has-data-cells': { name: 'テーブルヘッダーのデータセル欠落', desc: 'テーブルヘッダーにデータセルが関連付けられている必要があります' },
+            'valid-lang': { name: 'lang属性値の不正', desc: 'lang属性値が有効な言語コードである必要があります' },
+            'video-caption': { name: '動画キャプションの欠落', desc: '動画要素にキャプションが必要です' },
+            'autocomplete-valid': { name: 'autocomplete属性の不正', desc: 'autocomplete属性の値が有効である必要があります' },
+            'avoid-inline-spacing': { name: 'インラインスタイルの余白', desc: 'テキスト間隔をインラインスタイルで上書きしてはいけません' },
+            'css-orientation-lock': { name: '画面方向の固定', desc: 'CSSで画面の向きを固定してはいけません' },
+            'focus-order-semantics': { name: 'フォーカス順序の意味的不整合', desc: 'フォーカス順序が意味的に適切である必要があります' },
+            'hidden-content': { name: '非表示コンテンツ', desc: '非表示コンテンツが検査対象から除外されています' },
+            'identical-links-same-purpose': { name: '同一リンクの目的一致', desc: '同じテキストのリンクは同じ目的を持つ必要があります' },
+            'label-title-only': { name: 'タイトルのみのラベル', desc: 'フォーム要素がtitle属性のみでラベル付けされています' },
+            'table-has-header': { name: 'テーブルヘッダーの欠落', desc: 'テーブルにヘッダーセルが必要です' },
+            'target-size': { name: 'ターゲットサイズ不足', desc: 'タッチターゲットのサイズが24x24px以上である必要があります' },
+        };
+
+        // failureSummary の英語パターンを日本語に変換
+        function translateFailureSummary(text) {
+            if (!text) return '';
+            return text
+                .replace(/Fix any of the following:/gi, '以下のいずれかを修正してください:')
+                .replace(/Fix all of the following:/gi, '以下のすべてを修正してください:')
+                .replace(/Element does not have an alt attribute/gi, '要素にalt属性がありません')
+                .replace(/aria-label attribute does not exist or is empty/gi, 'aria-label属性が存在しないか空です')
+                .replace(/aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty/gi, 'aria-labelledby属性が存在しないか、参照先が空です')
+                .replace(/Element has no title attribute/gi, '要素にtitle属性がありません')
+                .replace(/Element's default semantics were not overridden with/gi, '要素のデフォルトセマンティクスが上書きされていません:')
+                .replace(/Element does not have text that is visible to screen readers/gi, 'スクリーンリーダーに見えるテキストがありません')
+                .replace(/Element has a tabindex greater than 0/gi, 'tabindex値が0より大きい値です')
+                .replace(/Document does not have a main landmark/gi, 'メインランドマークがありません')
+                .replace(/Expected the document to have a valid lang attribute/gi, '有効なlang属性が必要です')
+                .replace(/Element has insufficient color contrast/gi, '色のコントラスト比が不十分です')
+                .replace(/Element's background color could not be determined/gi, '背景色を判定できませんでした')
+                .replace(/Element is not contained by a landmark/gi, 'ランドマーク領域内に含まれていません');
+        }
+
+        // ルールIDから日本語名を取得
+        function getJaRuleName(id) {
+            return axeRulesJa[id]?.name || id;
+        }
+        function getJaRuleDesc(id, fallback) {
+            return axeRulesJa[id]?.desc || fallback || '';
+        }
+
+        const manualCheckItems = [
+            { text: "すべての機能がキーボードで操作可能", ref: "2.1.1", level: "A", category: "キーボード" },
+            { text: "キーボードトラップがない", ref: "2.1.2", level: "A", category: "キーボード" },
+            { text: "キーボード操作可能（例外なし）", ref: "2.1.3", level: "AAA", category: "キーボード" },
+            { text: "文字キーショートカットの無効化・変更が可能", ref: "2.1.4", level: "A", category: "キーボード" },
+            { text: "論理的なフォーカス順序", ref: "2.4.3", level: "A", category: "キーボード" },
+            { text: "フォーカスインジケータが見える", ref: "2.4.7", level: "AA", category: "キーボード" },
+            { text: "フォーカスが隠れない（最低限）", ref: "2.4.11", level: "AA", category: "キーボード" },
+            { text: "フォーカスが隠れない（強化）", ref: "2.4.12", level: "AAA", category: "キーボード" },
+            { text: "フォーカス表示が要件を満たす", ref: "2.4.13", level: "AAA", category: "キーボード" },
+            { text: "音声のみのコンテンツにテキスト代替がある", ref: "1.2.1", level: "A", category: "メディア" },
+            { text: "動画にキャプションがある", ref: "1.2.2", level: "A", category: "メディア" },
+            { text: "動画に音声解説がある", ref: "1.2.3", level: "A", category: "メディア" },
+            { text: "ライブ動画にキャプションがある", ref: "1.2.4", level: "AA", category: "メディア" },
+            { text: "収録済み動画に音声解説がある", ref: "1.2.5", level: "AA", category: "メディア" },
+            { text: "手話通訳が提供されている", ref: "1.2.6", level: "AAA", category: "メディア" },
+            { text: "拡張音声解説がある", ref: "1.2.7", level: "AAA", category: "メディア" },
+            { text: "メディアの完全なテキスト代替がある", ref: "1.2.8", level: "AAA", category: "メディア" },
+            { text: "ライブ音声にテキスト代替がある", ref: "1.2.9", level: "AAA", category: "メディア" },
+            { text: "色だけで情報を伝えていない", ref: "1.4.1", level: "A", category: "視覚" },
+            { text: "音声の制御が可能", ref: "1.4.2", level: "A", category: "視覚" },
+            { text: "テキストを200%まで拡大可能", ref: "1.4.4", level: "AA", category: "視覚" },
+            { text: "文字画像を使用していない", ref: "1.4.5", level: "AA", category: "視覚" },
+            { text: "文字画像を使用していない（例外なし）", ref: "1.4.9", level: "AAA", category: "視覚" },
+            { text: "320pxでリフローする", ref: "1.4.10", level: "AA", category: "視覚" },
+            { text: "テキスト間隔の調整が可能", ref: "1.4.12", level: "AA", category: "視覚" },
+            { text: "ホバー/フォーカス時のコンテンツが解除可能", ref: "1.4.13", level: "AA", category: "視覚" },
+            { text: "背景音が-20dB以下またはなし", ref: "1.4.7", level: "AAA", category: "視覚" },
+            { text: "視覚的表現の要件を満たす", ref: "1.4.8", level: "AAA", category: "視覚" },
+            { text: "繰り返しコンテンツをスキップ可能", ref: "2.4.1", level: "A", category: "ナビゲーション" },
+            { text: "ページを見つける複数の方法がある", ref: "2.4.5", level: "AA", category: "ナビゲーション" },
+            { text: "現在位置が示されている", ref: "2.4.8", level: "AAA", category: "ナビゲーション" },
+            { text: "リンクテキストだけで目的がわかる", ref: "2.4.9", level: "AAA", category: "ナビゲーション" },
+            { text: "セクション見出しが使用されている", ref: "2.4.10", level: "AAA", category: "ナビゲーション" },
+            { text: "ナビゲーションが一貫している", ref: "3.2.3", level: "AA", category: "ナビゲーション" },
+            { text: "コンポーネントの識別が一貫している", ref: "3.2.4", level: "AA", category: "ナビゲーション" },
+            { text: "ヘルプの位置が一貫している", ref: "3.2.6", level: "A", category: "ナビゲーション" },
+            { text: "フォーカス時に予期しない変化がない", ref: "3.2.1", level: "A", category: "フォーム" },
+            { text: "入力時に予期しない変化がない", ref: "3.2.2", level: "A", category: "フォーム" },
+            { text: "ユーザーの要求でのみ変化する", ref: "3.2.5", level: "AAA", category: "フォーム" },
+            { text: "エラーが特定されている", ref: "3.3.1", level: "A", category: "フォーム" },
+            { text: "エラー修正の提案がある", ref: "3.3.3", level: "AA", category: "フォーム" },
+            { text: "送信の取消・確認・修正が可能", ref: "3.3.4", level: "AA", category: "フォーム" },
+            { text: "状況に応じたヘルプがある", ref: "3.3.5", level: "AAA", category: "フォーム" },
+            { text: "すべての送信でエラー防止", ref: "3.3.6", level: "AAA", category: "フォーム" },
+            { text: "冗長な入力が不要", ref: "3.3.7", level: "A", category: "フォーム" },
+            { text: "認知テストなしで認証可能（最低限）", ref: "3.3.8", level: "AA", category: "フォーム" },
+            { text: "認知テストなしで認証可能（強化）", ref: "3.3.9", level: "AAA", category: "フォーム" },
+            { text: "制限時間の調整・延長が可能", ref: "2.2.1", level: "A", category: "時間" },
+            { text: "動くコンテンツを停止可能", ref: "2.2.2", level: "A", category: "時間" },
+            { text: "制限時間がない", ref: "2.2.3", level: "AAA", category: "時間" },
+            { text: "中断の抑制が可能", ref: "2.2.4", level: "AAA", category: "時間" },
+            { text: "再認証後もデータが保持される", ref: "2.2.5", level: "AAA", category: "時間" },
+            { text: "タイムアウトの警告がある", ref: "2.2.6", level: "AAA", category: "時間" },
+            { text: "3回/秒以上の点滅がない", ref: "2.3.1", level: "A", category: "発作" },
+            { text: "点滅コンテンツがない", ref: "2.3.2", level: "AAA", category: "発作" },
+            { text: "アニメーションを無効化可能", ref: "2.3.3", level: "AAA", category: "発作" },
+            { text: "マルチポイントジェスチャの代替がある", ref: "2.5.1", level: "A", category: "ポインタ" },
+            { text: "ポインタ操作のキャンセルが可能", ref: "2.5.2", level: "A", category: "ポインタ" },
+            { text: "モーション操作の代替がある", ref: "2.5.4", level: "A", category: "ポインタ" },
+            { text: "ターゲットサイズが44x44px以上", ref: "2.5.5", level: "AAA", category: "ポインタ" },
+            { text: "複数の入力方式をサポート", ref: "2.5.6", level: "AAA", category: "ポインタ" },
+            { text: "ドラッグ操作の代替がある", ref: "2.5.7", level: "AA", category: "ポインタ" },
+            { text: "ターゲットサイズが24x24px以上", ref: "2.5.8", level: "AA", category: "ポインタ" },
+            { text: "専門用語が定義されている", ref: "3.1.3", level: "AAA", category: "可読性" },
+            { text: "略語が展開されている", ref: "3.1.4", level: "AAA", category: "可読性" },
+            { text: "中学校レベルの読解力で読める", ref: "3.1.5", level: "AAA", category: "可読性" },
+            { text: "発音が提供されている", ref: "3.1.6", level: "AAA", category: "可読性" },
+            { text: "読み順序が意味のある順序", ref: "1.3.2", level: "A", category: "構造" },
+            { text: "感覚的特徴だけに依存しない", ref: "1.3.3", level: "A", category: "構造" },
+            { text: "UI要素の目的が特定可能", ref: "1.3.6", level: "AAA", category: "構造" },
+            { text: "ステータスメッセージがARIAで通知される", ref: "4.1.3", level: "AA", category: "構造" }
+        ];
+
+        let lastResults = null, checkedItems = new Set();
+        let targetLevel = 'AAA';
+        const $ = id => document.getElementById(id);
+
+        // --- ログイン・設定 ---
+        let sessionPassword = '';
+
+        (async function initAuth() {
+            try {
+                const res = await fetch('/api/auth-status');
+                const data = await res.json();
+                if (!data.passwordRequired) {
+                    $('loginOverlay').classList.add('hidden');
+                    return;
+                }
+                // パスワード入力待ち
+                $('loginBtn').addEventListener('click', doLogin);
+                $('loginPassword').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+            } catch (e) {
+                $('loginOverlay').classList.add('hidden');
+            }
+        })();
+
+        async function doLogin() {
+            const pw = $('loginPassword').value;
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: pw })
+                });
+                if (res.ok) {
+                    sessionPassword = pw;
+                    $('loginOverlay').classList.add('hidden');
+                    $('loginError').style.display = 'none';
+                } else {
+                    $('loginError').style.display = 'block';
+                    $('loginPassword').value = '';
+                    $('loginPassword').focus();
+                }
+            } catch (e) {
+                $('loginError').style.display = 'block';
+            }
+        }
+
+        function openSettings() {
+            $('settingsOverlay').classList.remove('hidden');
+            $('settingsMsg').textContent = '';
+            // 現在値をロード
+            fetch('/api/settings-get', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: sessionPassword })
+            }).then(r => r.json()).then(data => {
+                $('settGeminiKey').value = data.geminiApiKey || '';
+                $('settServiceAccount').value = data.serviceAccountKey || '';
+                $('settFolderId').value = data.driveFolderId || '';
+                $('settReportFolderId').value = data.reportFolderId || '';
+                $('settNewPassword').value = '';
+                // 環境変数フォールバックの表示
+                $('settGeminiKey').placeholder = data.envGemini ? '環境変数で設定済み' : 'AIza...';
+                $('settServiceAccount').placeholder = data.envServiceAccount ? '環境変数で設定済み' : '{"type":"service_account",...}';
+                $('settFolderId').placeholder = data.envFolder ? '環境変数で設定済み' : 'フォルダIDを入力';
+            }).catch(() => {});
+        }
+
+        function closeSettings() {
+            $('settingsOverlay').classList.add('hidden');
+        }
+
+        async function saveSettings() {
+            const btn = $('settSaveBtn');
+            btn.disabled = true;
+            btn.textContent = '保存中...';
+            $('settingsMsg').textContent = '';
+            try {
+                const res = await fetch('/api/settings-save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        password: sessionPassword,
+                        geminiApiKey: $('settGeminiKey').value,
+                        serviceAccountKey: $('settServiceAccount').value,
+                        driveFolderId: $('settFolderId').value,
+                        reportFolderId: $('settReportFolderId').value,
+                        newPassword: $('settNewPassword').value || undefined
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error);
+                $('settingsMsg').className = 'settings-msg ok';
+                $('settingsMsg').textContent = '保存しました';
+                // パスワード変更時はセッション更新
+                if ($('settNewPassword').value) {
+                    sessionPassword = $('settNewPassword').value;
+                }
+                // Sheets設定を再チェック
+                checkSheetsStatusFn();
+            } catch (e) {
+                $('settingsMsg').className = 'settings-msg ng';
+                $('settingsMsg').textContent = 'エラー: ' + e.message;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '保存';
+            }
+        }
+
+        // ESCで設定を閉じる
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && !$('settingsOverlay').classList.contains('hidden')) closeSettings();
+        });
+
+        const levelNotes = {
+            'A': 'Level A: 最低限の基準をチェック',
+            'AA': 'Level AA: A + AA の基準をチェック（推奨水準）',
+            'AAA': 'Level AAA: A + AA + AAA の全基準をチェック（最高水準）'
+        };
+        const impactLabels = {
+            'critical': '緊急',
+            'serious': '重大',
+            'moderate': '中程度',
+            'minor': '軽微'
+        };
+
+        document.querySelectorAll('.level-select-btn').forEach(b => b.addEventListener('click', () => {
+            document.querySelectorAll('.level-select-btn').forEach(x => x.classList.remove('active'));
+            b.classList.add('active');
+            targetLevel = b.dataset.level;
+            $('levelNote').textContent = levelNotes[targetLevel];
+        }));
+
+        document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+            document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(x => x.classList.remove('active'));
+            t.classList.add('active');
+            $(`tab-${t.dataset.tab}`).classList.add('active');
+        }));
+        
+        function updateProgress() { 
+            const levelOrder = { 'A': 1, 'AA': 2, 'AAA': 3 };
+            const targetLevelNum = levelOrder[targetLevel];
+            const filteredItems = manualCheckItems.filter(item => levelOrder[item.level] <= targetLevelNum);
+            const relevantChecked = [...checkedItems].filter(i => {
+                const item = manualCheckItems[i];
+                return item && levelOrder[item.level] <= targetLevelNum;
+            });
+            const p = filteredItems.length > 0 ? Math.round((relevantChecked.length / filteredItems.length) * 100) : 0;
+            $('progressPercent').textContent = `${p}%`; 
+            $('progressFill').style.width = `${p}%`; 
+        }
+
+        window.toggleCheck = (i, el) => { 
+            checkedItems.has(i) ? (checkedItems.delete(i), el.classList.remove('checked')) : (checkedItems.add(i), el.classList.add('checked')); 
+            updateProgress(); 
+        };
+
+        function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+
+        function renderViolation(v) {
+            const els = v.nodes.slice(0, 5), more = v.nodes.length - 5;
+            const impactLabel = impactLabels[v.impact] || v.impact || '情報';
+            const wcagLevel = getWcagLevel(v.tags);
+            const wcagRef = extractWcagRef(v.tags);
+            const jaName = getJaRuleName(v.id);
+            const jaDesc = getJaRuleDesc(v.id, v.description || v.help);
+            return `<div class="violation-item" data-level="${wcagLevel.toLowerCase()}" onclick="this.classList.toggle('expanded')">
+                <div class="violation-header">
+                    <div class="badges"><span class="badge ${v.impact}">${impactLabel}</span><span class="badge">${wcagLevel}</span></div>
+                    <div class="violation-info">
+                        <div class="violation-title">${jaName} <span class="wcag-ref">${v.id}</span> ${wcagRef ? `<span class="wcag-ref">${wcagRef}</span>` : ''}</div>
+                        <div class="violation-desc">${jaDesc}</div>
+                        <div class="violation-meta"><span>${v.nodes.length}件</span> ${v.helpUrl ? `<a href="${v.helpUrl}" target="_blank" onclick="event.stopPropagation()">詳細</a>` : ''}</div>
+                    </div>
+                    <svg class="expand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                </div>
+                <div class="violation-details">
+                    <div class="element-list">
+                        ${els.map(n => `<div class="element-item"><div class="element-target">${Array.isArray(n.target) ? n.target.join(' > ') : n.target}</div><div class="element-html">${escapeHtml((n.html || '').substring(0, 300))}${(n.html || '').length > 300 ? '...' : ''}</div></div>`).join('')}
+                        ${more > 0 ? `<div class="element-item" style="text-align:center">他${more}件</div>` : ''}
+                    </div>
+                    ${v.nodes[0]?.failureSummary ? `<div class="fix-suggestion"><div class="fix-suggestion-title">修正方法</div><div class="fix-suggestion-text">${escapeHtml(translateFailureSummary(v.nodes[0].failureSummary))}</div></div>` : ''}
+                </div>
+            </div>`;
+        }
+
+        function displayResults(results, url) {
+            // axe-coreの生の結果を保存
+            lastResults = { ...results, url, timestamp: new Date().toISOString(), level: targetLevel };
+            
+            const imp = { critical: 0, serious: 0, moderate: 0, minor: 0 };
+            results.violations.forEach(v => { imp[v.impact] = (imp[v.impact] || 0) + v.nodes.length; });
+            $('criticalCount').textContent = imp.critical;
+            $('seriousCount').textContent = imp.serious;
+            $('moderateCount').textContent = imp.moderate;
+            $('minorCount').textContent = imp.minor;
+            $('passCount').textContent = results.passes.length;
+            $('totalCount').textContent = results.violations.length + results.passes.length + (results.incomplete?.length || 0);
+            $('violationsBadge').textContent = results.violations.length;
+            $('passBadge').textContent = results.passes.length;
+            $('incompleteBadge').textContent = results.incomplete?.length || 0;
+            
+            $('scanTime').textContent = `スキャン: ${url} （${new Date().toLocaleString('ja-JP')}）`;
+            
+            // デバッグ情報
+            $('scanDebug').textContent = `違反: ${results.violations.length}件 | 合格: ${results.passes.length}件 | 要確認: ${results.incomplete?.length || 0}件`;
+            
+            $('violationsList').innerHTML = results.violations.length === 0 
+                ? '<div class="empty-state">違反は検出されませんでした</div>' 
+                : [...results.violations].sort((a, b) => ({ critical: 0, serious: 1, moderate: 2, minor: 3 })[a.impact] - ({ critical: 0, serious: 1, moderate: 2, minor: 3 })[b.impact]).map(renderViolation).join('');
+            
+            $('passList').innerHTML = results.passes.length === 0
+                ? '<div class="empty-state">合格した項目はありません</div>'
+                : results.passes.map(p => `<div class="wcag-list-item"><span class="wcag-ref">${extractWcagRef(p.tags) || ''}</span><span class="badge">${getWcagLevel(p.tags) || 'A'}</span><span>${getJaRuleName(p.id)}</span><span class="wcag-ref" style="margin-left:auto;">${p.id}</span></div>`).join('');
+            
+            $('incompleteList').innerHTML = !results.incomplete || results.incomplete.length === 0
+                ? '<div class="empty-state">要確認項目はありません</div>'
+                : results.incomplete.map(renderViolation).join('');
+            
+            renderManualChecklist();
+            $('results').classList.add('visible');
+            $('csvBtn').style.display = '';
+        }
+        
+        // WCAGタグからレベルを取得
+        function getWcagLevel(tags) {
+            if (!tags) return 'A';
+            for (const tag of tags) {
+                if (tag.includes('aaa')) return 'AAA';
+                if (tag.includes('aa')) return 'AA';
+            }
+            return 'A';
+        }
+        
+        // WCAGタグから基準番号を抽出
+        function extractWcagRef(tags) {
+            if (!tags) return '';
+            for (const tag of tags) {
+                const match = tag.match(/wcag(\d)(\d)(\d+)/);
+                if (match) return `${match[1]}.${match[2]}.${match[3]}`;
+            }
+            return '';
+        }
+
+        async function check(url) {
+            $('checkBtn').classList.add('loading'); 
+            $('checkBtn').disabled = true;
+            $('errorMessage').classList.remove('visible'); 
+            $('results').classList.remove('visible');
+            
+            try {
+                // Basic認証情報を取得
+                const basicUser = $('basicUser')?.value?.trim() || '';
+                const basicPass = $('basicPass')?.value || '';
+                const basicAuth = (basicUser && basicPass) ? { user: basicUser, pass: basicPass } : null;
+                
+                const response = await fetch('/api/check', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url, level: targetLevel, basicAuth })
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || data.error || 'チェックに失敗しました');
+                }
+                
+                // 新しいレスポンス形式に対応（data.results内にaxe結果がある）
+                displayResults(data.results, url);
+            } catch (e) { 
+                $('errorText').textContent = e.message; 
+                $('errorMessage').classList.add('visible'); 
+            } finally { 
+                $('checkBtn').classList.remove('loading'); 
+                $('checkBtn').disabled = false; 
+            }
+        }
+
+        function exportCSV() {
+            if (!lastResults) return;
+            const lv = { A: 0, AA: 0, AAA: 0 };
+            lastResults.violations.forEach(v => lv[v.wcagLevel || 'A']++);
+            const report = `# WCAG 2.2 アクセシビリティレポート
+
+## 概要
+- URL: ${lastResults.url}
+- 日時: ${new Date(lastResults.timestamp).toLocaleString('ja-JP')}
+- レベル: ${lastResults.level}
+
+## 違反件数
+| レベル | 件数 |
+|-------|------|
+| A | ${lv.A} |
+| AA | ${lv.AA} |
+| AAA | ${lv.AAA} |
+| 合計 | ${lastResults.violations.length} |
+
+合格: ${lastResults.passes.length}件
+要確認: ${lastResults.incomplete?.length || 0}件
+
+## 違反の詳細
+${lastResults.violations.map(v => `### ${v.id} [${v.wcagLevel || 'A'}] - ${impactLabels[v.impact] || v.impact}
+${sanitizeHtmlTags(v.description)}
+該当箇所: ${v.nodes.length}件
+${v.nodes.slice(0, 5).map(n => `- ${sanitizeHtmlTags(Array.isArray(n.target) ? n.target.join(' > ') : n.target)}`).join('\n')}
+${v.helpUrl ? `参考: ${v.helpUrl}` : ''}
+`).join('\n')}
+
+## 手動チェック項目
+### Level A
+${manualCheckItems.filter(i => i.level === 'A').map(i => `- [ ] ${i.text} (${i.ref})`).join('\n')}
+### Level AA
+${manualCheckItems.filter(i => i.level === 'AA').map(i => `- [ ] ${i.text} (${i.ref})`).join('\n')}
+### Level AAA
+${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i.ref})`).join('\n')}
+`;
+            const a = document.createElement('a'); 
+            a.href = URL.createObjectURL(new Blob([report], { type: 'text/markdown' })); 
+            a.download = `wcag-report-${new Date().toISOString().split('T')[0]}.md`; 
+            a.click();
+        }
+
+        // AI評価結果を保存
+        let aiResults = {};
+
+        async function runAIEvaluation() {
+            if (!lastResults?.url) {
+                alert('先にURLをチェックしてください');
+                return;
+            }
+
+            const btn = $('aiEvaluateBtn');
+            const btnText = btn.querySelector('.ai-btn-text');
+            const spinner = btn.querySelector('.ai-spinner');
+            const status = $('aiStatus');
+
+            btn.disabled = true;
+            btnText.textContent = '評価中...';
+            spinner.style.display = 'inline-block';
+            status.style.display = 'block';
+            status.textContent = '🔄 Gemini AIに接続中...';
+
+            try {
+                // 対象レベルに応じたチェック項目をフィルタ
+                const levelOrder = { 'A': 1, 'AA': 2, 'AAA': 3 };
+                const targetLevelNum = levelOrder[targetLevel];
+                const filteredItems = manualCheckItems
+                    .map((item, index) => ({ ...item, index }))
+                    .filter(item => levelOrder[item.level] <= targetLevelNum);
+
+                status.textContent = `🔄 ${filteredItems.length}項目を評価中...（1-2分かかります）`;
+
+                const response = await fetch('/api/ai-evaluate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        url: lastResults.url,
+                        checkItems: filteredItems
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.message || data.error || 'AI評価に失敗しました');
+                }
+
+                // 結果を適用
+                aiResults = {};
+                let passCount = 0, failCount = 0, manualCount = 0, naCount = 0;
+
+                data.results.forEach((result) => {
+                    const idx = result.index;
+                    const originalIndex = filteredItems[idx]?.index;
+                    if (originalIndex !== undefined) {
+                        aiResults[originalIndex] = result;
+                        
+                        // 合格・該当なしは自動でチェックを入れる
+                        if (result.status === 'pass' || result.status === 'not_applicable') {
+                            checkedItems.add(originalIndex);
+                            if (result.status === 'pass') passCount++;
+                            else naCount++;
+                        } else if (result.status === 'fail') {
+                            failCount++;
+                        } else if (result.status === 'manual_required') {
+                            manualCount++;
+                        }
+                    }
+                });
+
+                // UIを更新
+                renderManualChecklist();
+                updateProgress();
+                
+                status.innerHTML = `✅ 評価完了！ <span style="background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 10px; margin-left: 8px;">✅合格: ${passCount} / ❌不合格: ${failCount} / 🔧要手動: ${manualCount} / ➖該当なし: ${naCount}</span>`;
+                
+            } catch (error) {
+                status.textContent = `❌ エラー: ${error.message}`;
+                console.error('AI評価エラー:', error);
+            } finally {
+                btn.disabled = false;
+                btnText.textContent = 'AI評価を実行';
+                spinner.style.display = 'none';
+            }
+        }
+
+        // 手動チェックリストをレンダリング（AI結果を反映）
+        function renderManualChecklist() {
+            const levelOrder = { 'A': 1, 'AA': 2, 'AAA': 3 };
+            const targetLevelNum = levelOrder[targetLevel];
+            const filteredItems = manualCheckItems
+                .map((item, index) => ({ ...item, index }))
+                .filter(item => levelOrder[item.level] <= targetLevelNum);
+            
+            const categories = [...new Set(filteredItems.map(i => i.category))];
+            $('manualSection').innerHTML = categories.map(cat => {
+                const items = filteredItems.filter(i => i.category === cat);
+                return `<div class="manual-category">
+                    <div class="manual-category-header">${cat}<span class="manual-category-count">${items.length}項目</span></div>
+                    <div class="manual-items">${items.map(item => {
+                        const ai = aiResults[item.index];
+                        const aiStatusClass = ai ? `ai-${ai.status}` : '';
+                        
+                        // ステータスに応じたアイコンと色
+                        let aiIcon = '', bgColor = '', textColor = '', statusLabel = '';
+                        if (ai) {
+                            switch (ai.status) {
+                                case 'pass':
+                                    aiIcon = '✅'; bgColor = '#ecfdf5'; textColor = '#059669'; statusLabel = '合格';
+                                    break;
+                                case 'fail':
+                                    aiIcon = '❌'; bgColor = '#fef2f2'; textColor = '#dc2626'; statusLabel = '不合格';
+                                    break;
+                                case 'manual_required':
+                                    aiIcon = '🔧'; bgColor = '#fef3c7'; textColor = '#d97706'; statusLabel = '要手動確認';
+                                    break;
+                                case 'not_applicable':
+                                    aiIcon = '➖'; bgColor = '#f3f4f6'; textColor = '#6b7280'; statusLabel = '該当なし';
+                                    break;
+                                default:
+                                    aiIcon = '❓'; bgColor = '#fffbeb'; textColor = '#d97706'; statusLabel = '不明';
+                            }
+                        }
+                        
+                        return `<div class="manual-item ${aiStatusClass}">
+                            <div class="manual-checkbox ${checkedItems.has(item.index) ? 'checked' : ''}" data-index="${item.index}" onclick="toggleCheck(${item.index}, this)"></div>
+                            <div class="manual-content">
+                                <div class="manual-text">${aiIcon} ${item.text}</div>
+                                ${ai ? `<div class="ai-reason" style="font-size: 14px; color: ${textColor}; margin-top: 4px; padding: 6px 8px; background: ${bgColor}; border-radius: 4px;">
+                                    <strong>AI判定: ${statusLabel}</strong> - ${ai.reason || ''}
+                                    ${ai.suggestion ? `<br><strong>💡 改善案:</strong> ${ai.suggestion}` : ''}
+                                    <span style="opacity: 0.6; margin-left: 8px;">(確信度: ${Math.round((ai.confidence || 0) * 100)}%)</span>
+                                </div>` : ''}
+                                <div class="manual-info">
+                                    <span class="wcag-ref">${item.ref}</span>
+                                    <span class="badge">${item.level}</span>
+                                    <a href="https://www.w3.org/WAI/WCAG22/Understanding/${item.ref.replace(/\./g, '')}" target="_blank">詳細</a>
+                                </div>
+                            </div>
+                        </div>`;
+                    }).join('')}</div>
+                </div>`;
+            }).join('');
+            updateProgress();
+        }
+
+        // --- Mode toggle ---
+        let currentMode = 'single';
+        document.querySelectorAll('.mode-btn').forEach(b => b.addEventListener('click', () => {
+            document.querySelectorAll('.mode-btn').forEach(x => x.classList.remove('active'));
+            b.classList.add('active');
+            currentMode = b.dataset.mode;
+            $('singleInput').style.display = currentMode === 'single' ? 'block' : 'none';
+            $('batchInput').classList.toggle('visible', currentMode === 'batch');
+        }));
+
+        // Batch URL count
+        $('batchUrls').addEventListener('input', () => {
+            const urls = $('batchUrls').value.split('\n').map(u => u.trim()).filter(u => u.length > 0);
+            $('batchCount').textContent = `${urls.length} / 10 URL`;
+            $('batchCount').style.color = urls.length > 10 ? '#dc2626' : '';
+        });
+
+        // --- Batch results state ---
+        let batchResultsData = [];
+
+        function renderBatchSummary() {
+            const rows = batchResultsData.map((r, i) => {
+                if (!r.success) {
+                    return `<tr><td title="${r.url}">${r.url}</td><td colspan="6" style="color:#dc2626;text-align:left;">${r.error}</td></tr>`;
+                }
+                const imp = { critical: 0, serious: 0, moderate: 0, minor: 0 };
+                r.results.violations.forEach(v => { imp[v.impact] = (imp[v.impact] || 0) + v.nodes.length; });
+                const total = r.results.violations.length;
+                const cls = total > 0 ? ' class="has-violations"' : '';
+                return `<tr${cls}>
+                    <td title="${r.url}">${r.url}</td>
+                    <td>${imp.critical || '-'}</td>
+                    <td>${imp.serious || '-'}</td>
+                    <td>${imp.moderate || '-'}</td>
+                    <td>${imp.minor || '-'}</td>
+                    <td>${r.results.passes.length}</td>
+                    <td><strong>${total}</strong></td>
+                </tr>`;
+            }).join('');
+
+            $('batchSummaryArea').innerHTML = `<table class="batch-summary-table">
+                <thead><tr><th>URL</th><th>緊急</th><th>重大</th><th>中程度</th><th>軽微</th><th>合格</th><th>違反数</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+        }
+
+        function renderBatchNav(activeIdx) {
+            $('batchResultsNav').innerHTML = batchResultsData.map((r, i) => {
+                const dotClass = r.success ? (r.results.violations.length > 0 ? 'ng' : 'ok') : 'ng';
+                const btnClass = (i === activeIdx ? ' active' : '') + (!r.success ? ' error' : '');
+                let label;
+                try { label = new URL(r.url).pathname || '/'; } catch (e) { label = r.url; }
+                return `<button class="batch-page-btn${btnClass}" onclick="showBatchDetail(${i})" title="${r.url}"><span class="status-dot ${dotClass}"></span>${label}</button>`;
+            }).join('');
+        }
+
+        window.showBatchDetail = function(idx) {
+            renderBatchNav(idx);
+            const r = batchResultsData[idx];
+            if (!r.success) {
+                $('batchDetailArea').innerHTML = `<div class="error-message visible"><h4>エラー</h4><p>${r.url}: ${r.error}</p></div>`;
+                return;
+            }
+            // Reuse existing display by temporarily switching to single view
+            displayResults(r.results, r.url);
+            $('results').classList.add('visible');
+        };
+
+        async function batchCheck() {
+            const raw = $('batchUrls').value.split('\n').map(u => u.trim()).filter(u => u.length > 0);
+            if (raw.length === 0) return;
+            if (raw.length > 10) { alert('最大10件までです'); return; }
+
+            const btn = $('batchCheckBtn');
+            btn.classList.add('loading');
+            btn.disabled = true;
+            $('errorMessage').classList.remove('visible');
+            $('results').classList.remove('visible');
+            $('batchResults').style.display = 'none';
+
+            const progress = $('batchProgress');
+            const progressFill = $('batchProgressFill');
+            const progressLabel = $('batchProgressLabel');
+            progress.classList.add('visible');
+            progressFill.style.width = '0%';
+            progressLabel.textContent = `${raw.length}件のURLを検査中...`;
+
+            try {
+                const basicUser = $('basicUser')?.value?.trim() || '';
+                const basicPass = $('basicPass')?.value || '';
+                const basicAuth = (basicUser && basicPass) ? { user: basicUser, pass: basicPass } : null;
+
+                // Animate progress while waiting
+                let progressVal = 0;
+                const progressTimer = setInterval(() => {
+                    if (progressVal < 90) {
+                        progressVal += (90 - progressVal) * 0.05;
+                        progressFill.style.width = `${progressVal}%`;
+                    }
+                }, 300);
+
+                const response = await fetch('/api/batch-check', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ urls: raw, level: targetLevel, basicAuth })
+                });
+
+                clearInterval(progressTimer);
+                progressFill.style.width = '100%';
+
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || '一括チェックに失敗しました');
+
+                batchResultsData = data.results;
+                progressLabel.textContent = `完了: ${batchResultsData.filter(r => r.success).length}/${batchResultsData.length}件 成功`;
+
+                renderBatchSummary();
+                renderBatchNav(0);
+                $('batchResults').style.display = 'block';
+
+                // Show first successful result detail
+                const firstOk = batchResultsData.findIndex(r => r.success);
+                if (firstOk >= 0) showBatchDetail(firstOk);
+
+            } catch (e) {
+                $('errorText').textContent = e.message;
+                $('errorMessage').classList.add('visible');
+            } finally {
+                btn.classList.remove('loading');
+                btn.disabled = false;
+            }
+        }
+
+        $('batchCheckBtn').addEventListener('click', batchCheck);
+        $('urlForm').addEventListener('submit', e => { e.preventDefault(); const u = $('urlInput').value.trim(); if (u) check(u); });
+        renderManualChecklist();
+
+        // --- Google Sheets連携 ---
+        let sheetsConfigured = false;
+        let sheetsFolderMode = false;
+        async function checkSheetsStatusFn() {
+            try {
+                const res = await fetch('/api/sheets-status');
+                const data = await res.json();
+                sheetsConfigured = data.configured;
+                sheetsFolderMode = !!data.folderId;
+                if (sheetsConfigured) {
+                    $('reportBtn').style.display = '';
+                    $('batchReportBtn').style.display = '';
+                }
+            } catch (e) { /* ignore */ }
+        }
+        checkSheetsStatusFn();
+
+        /**
+         * 統合レポート行を生成（1URL分）
+         * 列: 検査項目番号, 検査項目, 結果, 場所, 検出数, 詳細, 改善案
+         * axe violations → 不合格
+         * axe passes → 合格
+         * axe incomplete → 判定不能
+         * manualCheckItems + aiResults → AI判定 or 未検証
+         */
+        // HTMLタグを読みやすいタグ表記に変換  <h1> → h1タグ, </div> → /divタグ
+        function sanitizeHtmlTags(str) {
+            if (!str) return str;
+            return String(str)
+                .replace(/<\s*\/\s*([a-zA-Z][a-zA-Z0-9]*)\s*>/g, '/$1タグ')
+                .replace(/<\s*([a-zA-Z][a-zA-Z0-9]*)(\s[^>]*)?\s*\/?>/g, '$1タグ');
+        }
+
+        // axe-coreのtagsからWCAGレベルを抽出
+        function getWcagLevelFromTags(tags) {
+            if (!tags) return '';
+            for (const t of tags) { if (/wcag\d*aaa$/.test(t)) return 'AAA'; }
+            for (const t of tags) { if (/wcag\d*aa$/.test(t)) return 'AA'; }
+            for (const t of tags) { if (/wcag\d+a$/.test(t)) return 'A'; }
+            return '';
+        }
+
+        function buildReportRows(results, url) {
+            const impactJa = { critical: '緊急', serious: '重大', moderate: '中程度', minor: '軽微' };
+            const rows = [];
+            let itemNo = 1;
+
+            // --- 自動検査: violations → 不合格 ---
+            (results.violations || []).forEach(v => {
+                const targets = v.nodes.slice(0, 5).map(n =>
+                    Array.isArray(n.target) ? n.target.join(' > ') : n.target
+                );
+                const locationStr = targets.join('\n') + (v.nodes.length > 5 ? '\n他' + (v.nodes.length - 5) + '件' : '');
+                rows.push([
+                    String(itemNo++),
+                    `[自動] ${getJaRuleName(v.id)}（${v.id}）`,
+                    getWcagLevelFromTags(v.tags),
+                    '不合格',
+                    locationStr,
+                    String(v.nodes.length),
+                    `[${impactJa[v.impact] || v.impact}] ${getJaRuleDesc(v.id, v.description || v.help)}`,
+                    translateFailureSummary(v.nodes[0]?.failureSummary || '')
+                ]);
+            });
+
+            // --- 自動検査: incomplete → 判定不能 ---
+            (results.incomplete || []).forEach(v => {
+                const targets = v.nodes.slice(0, 5).map(n =>
+                    Array.isArray(n.target) ? n.target.join(' > ') : n.target
+                );
+                const locationStr = targets.join('\n') + (v.nodes.length > 5 ? '\n他' + (v.nodes.length - 5) + '件' : '');
+                rows.push([
+                    String(itemNo++),
+                    `[自動] ${getJaRuleName(v.id)}（${v.id}）`,
+                    getWcagLevelFromTags(v.tags),
+                    '判定不能',
+                    locationStr,
+                    String(v.nodes.length),
+                    `[${impactJa[v.impact] || v.impact}] ${getJaRuleDesc(v.id, v.description || v.help)}`,
+                    ''
+                ]);
+            });
+
+            // --- 自動検査: passes → 合格 ---
+            (results.passes || []).forEach(v => {
+                rows.push([
+                    String(itemNo++),
+                    `[自動] ${getJaRuleName(v.id)}（${v.id}）`,
+                    getWcagLevelFromTags(v.tags),
+                    '合格',
+                    '',
+                    '',
+                    getJaRuleDesc(v.id, v.description || v.help),
+                    ''
+                ]);
+            });
+
+            // --- 手動/AIチェック項目 ---
+            const statusMap = {
+                pass: '合格', fail: '不合格',
+                manual_required: '判定不能', not_applicable: '該当なし'
+            };
+            manualCheckItems.forEach((item, i) => {
+                const ai = aiResults[i];
+                let result = '未検証';
+                let location = '';
+                let count = '';
+                let detail = '';
+                let suggestion = '';
+
+                if (ai) {
+                    result = statusMap[ai.status] || '未検証';
+                    detail = ai.reason || '';
+                    suggestion = ai.suggestion || '';
+                    if (ai.status === 'fail' || ai.status === 'manual_required') {
+                        location = '（AI評価による検出）';
+                        count = '—';
+                    }
+                }
+
+                rows.push([
+                    String(itemNo++),
+                    `[WCAG ${item.ref}] ${item.text}`,
+                    item.level,
+                    result,
+                    location,
+                    count,
+                    detail,
+                    suggestion
+                ]);
+            });
+
+            // 全セルのHTMLタグをサニタイズ
+            return rows.map(row => row.map(cell => sanitizeHtmlTags(cell)));
+        }
+
+        // 単一ページレポート出力（Sheets）
+        async function exportToSheets() {
+            if (!lastResults) { alert('先にチェックを実行してください'); return; }
+            const btn = $('reportBtn');
+            btn.disabled = true;
+            btn.textContent = '出力中...';
+            try {
+                const url = lastResults.url;
+                const rows = buildReportRows(lastResults, url);
+                const timestamp = lastResults.timestamp || new Date().toISOString();
+
+                const res = await fetch('/api/export-report', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        pages: [{ url, rows, timestamp }]
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '保存失敗');
+                window.open(data.url, '_blank');
+            } catch (e) {
+                alert('レポート出力エラー: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'レポート出力（Sheets）';
+            }
+        }
+
+        // 一括検査レポート出力
+        async function exportBatchReport() {
+            if (batchResultsData.length === 0) return;
+            const btn = $('batchReportBtn');
+            btn.disabled = true;
+            btn.textContent = '出力中...';
+            try {
+                const pages = batchResultsData.filter(r => r.success).map(r => ({
+                    url: r.url,
+                    rows: buildReportRows(r.results, r.url),
+                    timestamp: r.results.timestamp || new Date().toISOString()
+                }));
+                if (pages.length === 0) { alert('成功した検査結果がありません'); return; }
+
+                const res = await fetch('/api/export-report', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pages })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '保存失敗');
+                window.open(data.url, '_blank');
+            } catch (e) {
+                alert('レポート出力エラー: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'レポート出力（Sheets）';
+            }
+        }
+    </script>
+</body>
+</html>

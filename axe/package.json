@@ -1,0 +1,16 @@
+{
+  "name": "wcag-accessibility-checker",
+  "version": "2.0.0",
+  "description": "WCAG 2.2 アクセシビリティチェッカー（axe-core + Gemini AI）",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@axe-core/puppeteer": "^4.10.0",
+    "@google/generative-ai": "^0.21.0",
+    "dotenv": "^16.3.1",
+    "express": "^4.21.0",
+    "puppeteer": "^24.15.0"
+  }
+}

@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta property="og:type" content="website" />
+<meta property="og:locale" content="ja_JP" />
+<meta property="og:site_name" content="SEO MOLE" />
+<meta property="og:title" content="WEBページのSEO到達率をチェックします" />
+<meta property="og:description" content="キーワードに即したWEBページのSEO到達率をチェック。" />
+<meta property="og:image" content="https://seomole.netlify.app//img/ogp.jpg" />
+<meta property="og:image:secure_url" content="https://seomole.netlify.app/img/ogp.jpg" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="キーワードに即したWEBページのSEO到達率をチェック。" />
+
+<title>SEO MOLE</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;background:#fff;color:#000;line-height:1.6;padding:2rem}
+.container{max-width:1200px;margin:0 auto}
+.header{border-bottom:2px solid #000;padding-bottom:1rem;margin-bottom:2rem}
+.header h1{font-size:1.5rem;font-weight:700;margin-bottom:.5rem}
+.header p{font-size:.9rem;color:#666}
+.section{border:1px solid #000;padding:1.5rem;margin-bottom:1.5rem}
+.section-title{font-size:1.2rem;font-weight:700;margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid #000}
+.tabs{display:flex;border-bottom:1px solid #000;margin-bottom:1rem}
+.tab{padding:.75rem 1.5rem;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;font-weight:500;color:#666}
+.tab.active{color:#000;border-bottom-color:#000}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.kw-inputs{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;margin-bottom:1rem}
+.kw-label{font-size:.85rem;font-weight:600;margin-bottom:.5rem}
+input,textarea{width:100%;padding:.75rem;border:1px solid #000;font-size:.9rem;font-family:inherit}
+input:focus,textarea:focus{outline:2px solid #000;outline-offset:2px}
+textarea{min-height:200px;resize:vertical;margin-bottom:1rem}
+button{padding:.75rem 1.5rem;background:#000;color:#fff;border:none;font-size:.9rem;font-weight:600;cursor:pointer;width:160px;}
+button:hover{background:#333}
+button:disabled{background:#ccc;cursor:not-allowed}
+.note{font-size:.85rem;color:#666;margin-top:.75rem;padding:.75rem;background:#f5f5f5;border-left:2px solid #000}
+.loading{text-align:center;padding:3rem}
+.spinner{width:40px;height:40px;border:3px solid #f0f0f0;border-top-color:#000;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 1rem}
+@keyframes spin{to{transform:rotate(360deg)}}
+.score-section{border:2px solid #000;padding:1.5rem;margin-bottom:1.5rem;text-align:center}
+.score-value{font-size:3rem;font-weight:700;margin:.5rem 0}
+.score-label{font-size:.9rem;color:#666}
+.kw-section{border:2px solid #000;padding:1.5rem;margin-bottom:1.5rem}
+.kw-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem;margin-top:1rem}
+.kw-card{border:1px solid #000;padding:1rem}
+.kw-name{font-size:1.1rem;font-weight:700;margin-bottom:.75rem;padding-bottom:.5rem;border-bottom:1px solid #000}
+.kw-metric{display:flex;justify-content:space-between;padding:.5rem 0;border-bottom:1px solid #e0e0e0;font-size:.85rem}
+.kw-metric:last-child{border-bottom:none}
+.kw-metric .label{color:#666}
+.kw-metric .value{font-weight:600}
+.kw-metric .value.yes{color:#2ecc71}
+.kw-metric .value.no{color:#e74c3c}
+.rank-section{border:1px solid #000;padding:1rem;margin-top:1rem;background:#f9f9f9}
+.rank-title{font-size:.95rem;font-weight:600;margin-bottom:.75rem}
+.rank-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem}
+.rank-item{text-align:center;padding:.75rem;border:1px solid #000;background:#fff}
+.rank-kw{font-size:.85rem;color:#666;margin-bottom:.25rem}
+.rank-value{font-size:1.5rem;font-weight:700}
+.rank-note{font-size:.75rem;color:#999;margin-top:.25rem}
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.5rem}
+.summary-card{border:1px solid #000;padding:1rem;text-align:center}
+.summary-card.error{border-left:4px solid #e74c3c;background:#fef5f5}
+.summary-card.warning{border-left:4px solid #f39c12;background:#fef9f3}
+.summary-card.success{border-left:4px solid #2ecc71;background:#f0fdf4}
+.summary-label{font-size:.85rem;color:#666;margin-bottom:.5rem}
+.summary-value{font-size:2rem;font-weight:700}
+.summary-card.error .summary-value{color:#e74c3c}
+.summary-card.warning .summary-value{color:#f39c12}
+.summary-card.success .summary-value{color:#2ecc71}
+.check-section{border:1px solid #000;padding:1.5rem;margin-bottom:1rem}
+.check-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;padding-bottom:.75rem;border-bottom:1px solid #000}
+.check-title{font-size:1.1rem;font-weight:700}
+.check-badge{padding:.25rem .75rem;font-size:.75rem;font-weight:600}
+.check-badge.error{background:#e74c3c;color:#fff}
+.check-badge.warning{background:#f39c12;color:#fff}
+.check-badge.success{background:#2ecc71;color:#fff}
+.check-item{padding:1rem;margin-bottom:.75rem;border:1px solid #ddd;background:#fff}
+.check-item.error{border-left:4px solid #e74c3c;background:#fef5f5}
+.check-item.warning{border-left:4px solid #f39c12;background:#fef9f3}
+.check-item.success{border-left:4px solid #2ecc71;background:#f0fdf4}
+.check-item-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.5rem}
+.check-item-title{font-weight:600;font-size:.95rem}
+.check-status{padding:.2rem .5rem;font-size:.75rem;font-weight:600}
+.check-status.error{background:#e74c3c;color:#fff}
+.check-status.warning{background:#f39c12;color:#fff}
+.check-status.success{background:#2ecc71;color:#fff}
+.check-desc{font-size:.85rem;color:#666;margin-bottom:.5rem}
+.code-block{background:#f5f5f5;border:1px solid #ddd;padding:.75rem;font-family:monospace;font-size:.75rem;overflow-x:auto;margin:.5rem 0;max-height:200px;overflow-y:auto}
+.suggestion{background:#f0fdf4;border-left:2px solid #2ecc71;padding:.75rem;margin-top:.5rem;font-size:.85rem}
+.suggestion-title{font-weight:600;margin-bottom:.25rem;color:#2ecc71}
+.export-btn{width:100%;margin-top:1.5rem;padding:1rem;background:#000;color:#fff;border:none;font-size:.9rem;font-weight:600;cursor:pointer}
+.export-btn:hover{background:#333}
+@media (max-width:768px){
+.kw-inputs,.summary,.kw-grid,.rank-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+<h1>SEO MOLE</h1>
+<p>技術的SEO分析 + キーワード最適化診断</p>
+</div>
+<div class="section">
+<div class="tabs">
+<button class="tab active" onclick="switchTab('url')">URL入力</button>
+<button class="tab" onclick="switchTab('html')">HTML貼り付け</button>
+</div>
+<div id="urlTab" class="tab-content active">
+<div style="margin-bottom:1rem">
+<div class="kw-label">ターゲットキーワード（最大3つ）</div>
+<div class="kw-inputs">
+<input type="text" id="kw1" placeholder="キーワード1"/>
+<input type="text" id="kw2" placeholder="キーワード2（任意）"/>
+<input type="text" id="kw3" placeholder="キーワード3（任意）"/>
+</div>
+</div>
+<div style="display:flex;gap:.75rem;margin-bottom:.75rem">
+<input type="url" id="urlInput" placeholder="https://example.com"/>
+<button id="urlBtn">解析開始</button>
+</div>
+<div class="note">
+<strong>注意：</strong>多くのサイトはCORSでブロックされます。取得失敗時はHTML貼り付けモードをご利用ください。キーワードを入力するとページ内最適化レベルを分析します。
+</div>
+</div>
+<div id="htmlTab" class="tab-content">
+<div style="margin-bottom:1rem">
+<div class="kw-label">ターゲットキーワード（最大3つ）</div>
+<div class="kw-inputs">
+<input type="text" id="kwh1" placeholder="キーワード1"/>
+<input type="text" id="kwh2" placeholder="キーワード2（任意）"/>
+<input type="text" id="kwh3" placeholder="キーワード3（任意）"/>
+</div>
+</div>
+<textarea id="htmlInput" placeholder="HTMLソースコードをここに貼り付けてください..."></textarea>
+<button id="htmlBtn">チェック開始</button>
+<div class="note">
+<strong>HTML貼り付け手順：</strong><br>
+1. 対象ページを開く → 2. F12キーを押す → 3. Elementsタブで&lt;html&gt;を右クリック → 4. Copy outerHTMLを選択 → 5. ここに貼り付け
+</div>
+</div>
+</div>
+<div id="results"></div>
+</div>
+<script>
+function switchTab(tab) {
+    const tabs = document.querySelectorAll('.tab');
+    const contents = document.querySelectorAll('.tab-content');
+    tabs.forEach(t => t.classList.remove('active'));
+    contents.forEach(c => c.classList.remove('active'));
+    if (tab === 'url') {
+        tabs[0].classList.add('active');
+        document.getElementById('urlTab').classList.add('active');
+    } else {
+        tabs[1].classList.add('active');
+        document.getElementById('htmlTab').classList.add('active');
+    }
+}
+
+const urlInput = document.getElementById('urlInput');
+const htmlInput = document.getElementById('htmlInput');
+const urlBtn = document.getElementById('urlBtn');
+const htmlBtn = document.getElementById('htmlBtn');
+const results = document.getElementById('results');
+
+urlBtn.addEventListener('click', checkFromUrl);
+htmlBtn.addEventListener('click', checkFromHtml);
+urlInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') checkFromUrl();
+});
+
+async function checkFromUrl() {
+    const url = urlInput.value.trim();
+    if (!url) {
+        alert('URLを入力してください');
+        return;
+    }
+    const keywords = [
+        document.getElementById('kw1').value.trim(),
+        document.getElementById('kw2').value.trim(),
+        document.getElementById('kw3').value.trim()
+    ].filter(k => k);
+    
+    results.innerHTML = '<div class="loading"><div class="spinner"></div><p>分析中...</p></div>';
+    urlBtn.disabled = true;
+    
+    const proxies = [
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+        `https://corsproxy.io/?${encodeURIComponent(url)}`,
+        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+        `https://thingproxy.freeboard.io/fetch/${encodeURIComponent(url)}`
+    ];
+    
+    let html = null;
+    let lastError = null;
+    
+    for (const proxyUrl of proxies) {
+        try {
+            const response = await fetch(proxyUrl);
+            if (response.ok) {
+                html = await response.text();
+                break;
+            }
+        } catch (error) {
+            lastError = error;
+            continue;
+        }
+    }
+    
+    if (html) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const checkResults = performSEOChecks(doc, url, keywords);
+        displayResults(checkResults, keywords, url);
+    } else {
+        results.innerHTML = `
+            <div class="section">
+                <div class="section-title">取得失敗</div>
+                <p style="margin-bottom:1rem">CORS制限によりURLからの取得に失敗しました。</p>
+                <div style="background:#f5f5f5;padding:1rem;border-left:2px solid #000;font-size:.85rem">
+                    <strong>解決方法：HTML貼り付けモードを使用</strong><br><br>
+                    1. ブラウザで対象ページを開く<br>
+                    2. <strong>F12</strong>キーで開発者ツールを開く<br>
+                    3. <strong>Elements</strong>（要素）タブを選択<br>
+                    4. <strong>&lt;html&gt;</strong>タグを右クリック<br>
+                    5. <strong>Copy → Copy outerHTML</strong>を選択<br>
+                    6. 上部の「HTML貼り付け」タブに切り替え<br>
+                    7. 貼り付けてチェック開始
+                </div>
+                <div style="margin-top:1rem;font-size:.85rem;color:#666">
+                    エラー詳細: ${lastError ? escapeHtml(lastError.message) : 'CORSポリシーによりブロック'}
+                </div>
+            </div>
+        `;
+    }
+    
+    urlBtn.disabled = false;
+}
+
+function checkFromHtml() {
+    const html = htmlInput.value.trim();
+    if (!html) {
+        alert('HTMLを貼り付けてください');
+        return;
+    }
+    const keywords = [
+        document.getElementById('kwh1').value.trim(),
+        document.getElementById('kwh2').value.trim(),
+        document.getElementById('kwh3').value.trim()
+    ].filter(k => k);
+    
+    results.innerHTML = '<div class="loading"><div class="spinner"></div><p>分析中...</p></div>';
+    htmlBtn.disabled = true;
+    
+    setTimeout(() => {
+        try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            console.log('HTML解析完了');
+            const checkResults = performSEOChecks(doc, '(貼り付けHTML)', keywords);
+            console.log('SEOチェック完了', checkResults);
+            displayResults(checkResults, keywords, null);
+            console.log('結果表示完了');
+        } catch (error) {
+            console.error('エラー発生:', error);
+            results.innerHTML = `<div class="section"><p style="text-align:center;color:var(--e)">エラーが発生しました<br><br>${escapeHtml(error.message)}<br><br>${escapeHtml(error.stack || '')}</p></div>`;
+        } finally {
+            htmlBtn.disabled = false;
+        }
+    }, 500);
+}
+
+function analyzeKeywords(doc, keywords) {
+    if (!keywords || keywords.length === 0) return null;
+    const analysis = [];
+    for (const keyword of keywords) {
+        const lowerKw = keyword.toLowerCase();
+        const bodyText = doc.body ? doc.body.textContent.toLowerCase() : '';
+        const regex = new RegExp(lowerKw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+        const totalCount = (bodyText.match(regex) || []).length;
+        const title = doc.querySelector('title');
+        const inTitle = title && title.textContent.toLowerCase().includes(lowerKw);
+        const metaDesc = doc.querySelector('meta[name="description"]');
+        const inDesc = metaDesc && metaDesc.content.toLowerCase().includes(lowerKw);
+        const h1s = doc.querySelectorAll('h1');
+        const inH1 = Array.from(h1s).some(h => h.textContent.toLowerCase().includes(lowerKw));
+        const h2s = doc.querySelectorAll('h2');
+        const inH2 = Array.from(h2s).some(h => h.textContent.toLowerCase().includes(lowerKw));
+        const images = doc.querySelectorAll('img[alt]');
+        const inAlt = Array.from(images).some(img => img.alt.toLowerCase().includes(lowerKw));
+        const wordCount = bodyText.trim().split(/\s+/).length;
+        const density = wordCount > 0 ? ((totalCount / wordCount) * 100).toFixed(2) : 0;
+        
+        // スコア計算の詳細
+        const scoreDetails = {
+            title: inTitle ? 25 : 0,
+            description: inDesc ? 20 : 0,
+            h1: inH1 ? 20 : 0,
+            h2: inH2 ? 15 : 0,
+            imageAlt: inAlt ? 10 : 0,
+            frequency: totalCount >= 5 ? 10 : totalCount >= 3 ? 5 : 0
+        };
+        
+        const totalScore = Object.values(scoreDetails).reduce((a, b) => a + b, 0);
+        
+        analysis.push({
+            keyword: keyword,
+            score: Math.min(100, totalScore),
+            scoreDetails: scoreDetails,
+            totalCount: totalCount,
+            density: density,
+            inTitle: inTitle,
+            inDesc: inDesc,
+            inH1: inH1,
+            inH2: inH2,
+            inAlt: inAlt
+        });
+    }
+    return analysis;
+}
+
+function performSEOChecks(doc, url, keywords) {
+    console.log('SEO分析開始:', url);
+    const checks = [];
+    let score = 100;
+    let errorCount = 0;
+    let warningCount = 0;
+    let successCount = 0;
+    const keywordAnalysis = analyzeKeywords(doc, keywords);
+    console.log('キーワード分析完了:', keywordAnalysis);
+    
+    const title = doc.querySelector('title');
+    if (!title || !title.textContent.trim()) {
+        checks.push({cat:'メタ情報',tit:'タイトルタグなし',st:'e',des:'titleタグは必須です',sug:'50-60文字程度のタイトルを設定してください'});
+        errorCount++;score -= 10;
+    } else {
+        const titleLen = title.textContent.length;
+        if (titleLen < 30) {
+            checks.push({cat:'メタ情報',tit:'タイトルが短い',st:'w',des:`現在: ${titleLen}文字（推奨: 30-60文字）`,sug:'より詳細な30文字以上のタイトルを推奨します'});
+            warningCount++;score -= 3;
+        } else if (titleLen > 60) {
+            checks.push({cat:'メタ情報',tit:'タイトルが長い',st:'w',des:`現在: ${titleLen}文字（推奨: 30-60文字）`,sug:'検索結果で切り詰められる可能性があります',code:escapeHtml(title.outerHTML)});
+            warningCount++;score -= 2;
+        } else {
+            checks.push({cat:'メタ情報',tit:'タイトルタグ',st:'s',des:`${titleLen}文字 - 適切な長さです`,code:escapeHtml(title.outerHTML)});
+            successCount++;
+        }
+    }
+    
+    const metaDesc = doc.querySelector('meta[name="description"]');
+    if (!metaDesc || !metaDesc.content.trim()) {
+        checks.push({cat:'メタ情報',tit:'メタディスクリプションなし',st:'e',des:'検索結果の説明文が未設定です',sug:'120-160文字でページ内容を要約してください'});
+        errorCount++;score -= 8;
+    } else {
+        const descLen = metaDesc.content.length;
+        if (descLen < 120) {
+            checks.push({cat:'メタ情報',tit:'ディスクリプションが短い',st:'w',des:`現在: ${descLen}文字（推奨: 120-160文字）`,sug:'より詳細な説明を追加してください'});
+            warningCount++;score -= 3;
+        } else if (descLen > 160) {
+            checks.push({cat:'メタ情報',tit:'ディスクリプションが長い',st:'w',des:`現在: ${descLen}文字（推奨: 120-160文字）`,sug:'160文字以内に収めることを推奨します'});
+            warningCount++;score -= 2;
+        } else {
+            checks.push({cat:'メタ情報',tit:'メタディスクリプション',st:'s',des:`${descLen}文字 - 適切な長さです`});
+            successCount++;
+        }
+    }
+    
+    const h1 = doc.querySelectorAll('h1');
+    
+    // bodyTextとwordCountを先に定義（後のチェックで使用）
+    const bodyText = doc.body ? doc.body.textContent : '';
+    const wordCount = bodyText.trim().split(/\s+/).length;
+    
+    if (h1.length === 0) {
+        checks.push({cat:'見出し構造',tit:'H1タグなし',st:'e',des:'ページの主題を示すH1タグがありません',sug:'ページに1つのH1タグを配置してください'});
+        errorCount++;score -= 8;
+    } else if (h1.length > 1) {
+        checks.push({cat:'見出し構造',tit:'H1タグが複数',st:'w',des:`${h1.length}個のH1タグが検出されました`,sug:'H1タグは1ページに1つが推奨されます'});
+        warningCount++;score -= 3;
+    } else {
+        checks.push({cat:'見出し構造',tit:'H1タグ',st:'s',des:'適切に配置されています',code:escapeHtml(h1[0].outerHTML)});
+        successCount++;
+    }
+    
+    const h2 = doc.querySelectorAll('h2');
+    const h3 = doc.querySelectorAll('h3');
+    const h4 = doc.querySelectorAll('h4');
+    const h5 = doc.querySelectorAll('h5');
+    const h6 = doc.querySelectorAll('h6');
+    
+    // 見出しの総数チェック
+    checks.push({cat:'見出し構造',tit:'見出し統計',st:'s',des:`H1:${h1.length} H2:${h2.length} H3:${h3.length} H4:${h4.length} H5:${h5.length} H6:${h6.length}`});
+    successCount++;
+    
+    // 見出し階層の適切性チェック
+    if (h1.length > 0 && h2.length === 0 && (h3.length > 0 || h4.length > 0)) {
+        checks.push({cat:'見出し構造',tit:'見出し階層が不適切',st:'w',des:'H1の次にH3やH4が使われています（H2が不足）',sug:'見出しは順序通り（H1→H2→H3...）に使用してください'});
+        warningCount++;score -= 2;
+    } else if (h2.length > 0 && h3.length === 0 && (h4.length > 0 || h5.length > 0)) {
+        checks.push({cat:'見出し構造',tit:'見出し階層が不適切',st:'w',des:'H2の次にH4やH5が使われています（H3が不足）',sug:'見出しは順序通りに使用してください'});
+        warningCount++;score -= 2;
+    } else if (h1.length > 0 && h2.length > 0) {
+        checks.push({cat:'見出し構造',tit:'見出し階層',st:'s',des:'適切な階層構造です'});
+        successCount++;
+    }
+    
+    // H2の数チェック
+    if (h2.length === 0 && wordCount > 500) {
+        checks.push({cat:'見出し構造',tit:'H2タグなし',st:'w',des:'コンテンツ量に対してH2が不足しています',sug:'内容をH2で適切にセクション分けしてください'});
+        warningCount++;score -= 2;
+    } else if (h2.length > 0 && h2.length < 3 && wordCount > 1000) {
+        checks.push({cat:'見出し構造',tit:'H2タグが少ない',st:'w',des:`H2が${h2.length}個のみ（${wordCount}単語のコンテンツ）`,sug:'長文は複数のH2でセクション分けすることを推奨します'});
+        warningCount++;score -= 1;
+    } else if (h2.length >= 3) {
+        checks.push({cat:'見出し構造',tit:'H2タグ',st:'s',des:`${h2.length}個 - 適切にセクション分けされています`});
+        successCount++;
+    }
+    
+    // 見出しテキストの長さチェック
+    const allHeadings = doc.querySelectorAll('h1, h2, h3, h4, h5, h6');
+    const longHeadings = Array.from(allHeadings).filter(h => h.textContent.length > 60);
+    const shortHeadings = Array.from(allHeadings).filter(h => h.textContent.trim().length < 5);
+    if (longHeadings.length > 0) {
+        checks.push({cat:'見出し構造',tit:'見出しが長すぎる',st:'w',des:`${longHeadings.length}個の見出しが60文字を超えています`,sug:'見出しは簡潔に（60文字以内推奨）'});
+        warningCount++;score -= 1;
+    }
+    if (shortHeadings.length > 0) {
+        checks.push({cat:'見出し構造',tit:'見出しが短すぎる',st:'w',des:`${shortHeadings.length}個の見出しが5文字未満です`,sug:'見出しには具体的な説明を含めてください'});
+        warningCount++;score -= 1;
+    }
+    
+    const images = doc.querySelectorAll('img');
+    const imagesNoAlt = Array.from(images).filter(x => !x.hasAttribute('alt'));
+    if (imagesNoAlt.length > 0) {
+        // alt属性のない画像を具体的に特定
+        const imageDetails = imagesNoAlt.slice(0, 5).map((img, index) => {
+            const src = img.src || img.getAttribute('src') || '(src未指定)';
+            const id = img.id ? `id="${img.id}"` : '';
+            const className = img.className ? `class="${img.className}"` : '';
+            const parent = img.parentElement ? img.parentElement.tagName.toLowerCase() : '';
+            const identifiers = [id, className].filter(x => x).join(' ');
+            
+            return `${index + 1}. ${src}\n   ${identifiers || `親要素: <${parent}>`}`;
+        }).join('\n\n');
+        
+        const sampleCode = imagesNoAlt.slice(0, 3).map(img => escapeHtml(img.outerHTML)).join('\n\n');
+        
+        checks.push({
+            cat:'画像',
+            tit:'alt属性なし',
+            st:'e',
+            des:`${imagesNoAlt.length}個/${images.length}個の画像にalt属性がありません\n\n【問題のある画像:】\n${imageDetails}${imagesNoAlt.length > 5 ? '\n\n...他 ' + (imagesNoAlt.length - 5) + '個' : ''}`,
+            sug:'すべての画像にalt属性を設定してください',
+            code:sampleCode
+        });
+        errorCount++;score -= 5;
+    } else if (images.length > 0) {
+        checks.push({cat:'画像',tit:'画像のalt属性',st:'s',des:`すべての画像（${images.length}個）にalt属性が設定されています`});
+        successCount++;
+    }
+    
+    const viewport = doc.querySelector('meta[name="viewport"]');
+    if (!viewport) {
+        checks.push({cat:'モバイル対応',tit:'viewportなし',st:'e',des:'モバイル対応に必須のviewportが未設定です',sug:'viewportメタタグを設定してください'});
+        errorCount++;score -= 8;
+    } else {
+        checks.push({cat:'モバイル対応',tit:'viewport',st:'s',des:'設定済み',code:escapeHtml(viewport.outerHTML)});
+        successCount++;
+    }
+    
+    const mainTag = doc.querySelector('main, MAIN');
+    const mainRole = doc.querySelector('[role="main"]');
+    if (!mainTag && !mainRole) {
+        checks.push({cat:'セマンティックHTML',tit:'mainタグなし',st:'e',des:'メインコンテンツ領域を示す<main>タグまたはrole="main"が必須です',sug:'ページのメインコンテンツを<main>タグで囲んでください'});
+        errorCount++;score -= 7;
+    } else {
+        const element = mainTag || mainRole;
+        const mainType = mainTag ? '<main>タグ' : 'role="main"属性';
+        checks.push({cat:'セマンティックHTML',tit:'メインコンテンツ領域',st:'s',des:`${mainType}で適切にマークアップされています`,code:escapeHtml(element.outerHTML.substring(0, 200) + '...')});
+        successCount++;
+    }
+    
+    const headerTag = doc.querySelector('header, HEADER, [role="banner"]');
+    if (!headerTag) {
+        checks.push({cat:'セマンティックHTML',tit:'headerタグなし',st:'w',des:'ヘッダー領域を示す<header>タグの使用を推奨します'});
+        warningCount++;score -= 3;
+    } else {
+        checks.push({cat:'セマンティックHTML',tit:'headerタグ',st:'s',des:'実装されています',code:escapeHtml(headerTag.outerHTML.substring(0, 200) + '...')});
+        successCount++;
+    }
+    
+    const footerTag = doc.querySelector('footer, FOOTER, [role="contentinfo"]');
+    if (!footerTag) {
+        checks.push({cat:'セマンティックHTML',tit:'footerタグなし',st:'w',des:'フッター領域を示す<footer>タグの使用を推奨します'});
+        warningCount++;score -= 3;
+    } else {
+        checks.push({cat:'セマンティックHTML',tit:'footerタグ',st:'s',des:'実装されています',code:escapeHtml(footerTag.outerHTML.substring(0, 200) + '...')});
+        successCount++;
+    }
+    
+    const navTags = doc.querySelectorAll('nav, NAV, [role="navigation"]');
+    if (navTags.length === 0) {
+        checks.push({cat:'セマンティックHTML',tit:'navタグなし',st:'w',des:'ナビゲーション領域を示す<nav>タグの使用を推奨します'});
+        warningCount++;score -= 2;
+    } else {
+        const navCode = Array.from(navTags).slice(0, 2).map(nav => escapeHtml(nav.outerHTML.substring(0, 150) + '...')).join('\n\n');
+        checks.push({cat:'セマンティックHTML',tit:'navタグ',st:'s',des:`${navTags.length}個のナビゲーション領域`,code:navCode});
+        successCount++;
+    }
+    
+    const charset = doc.querySelector('meta[charset]');
+    if (!charset) {
+        checks.push({cat:'基本設定',tit:'文字コード未指定',st:'w',des:'文字コードの明示的な指定がありません',sug:'UTF-8の指定を推奨します'});
+        warningCount++;score -= 2;
+    } else {
+        checks.push({cat:'基本設定',tit:'文字コード',st:'s',des:`${charset.getAttribute('charset')}が設定されています`});
+        successCount++;
+    }
+    
+    const doctype = doc.doctype;
+    if (!doctype || doctype.name !== 'html') {
+        checks.push({cat:'基本設定',tit:'DOCTYPE不正',st:'e',des:'HTML5のDOCTYPE宣言が必要です',sug:'ファイル先頭に<!DOCTYPE html>を追加してください'});
+        errorCount++;score -= 5;
+    } else {
+        checks.push({cat:'基本設定',tit:'DOCTYPE',st:'s',des:'HTML5 DOCTYPE宣言済み'});
+        successCount++;
+    }
+    
+    const canonical = doc.querySelector('link[rel="canonical"]');
+    if (!canonical) {
+        checks.push({cat:'メタ情報',tit:'canonical未設定',st:'w',des:'重複コンテンツ対策のため設定を推奨します',sug:'正規URLを指定してください'});
+        warningCount++;score -= 3;
+    } else {
+        checks.push({cat:'メタ情報',tit:'canonical URL',st:'s',des:'設定済み',code:escapeHtml(canonical.outerHTML)});
+        successCount++;
+    }
+    
+    // === インデックス＆クロール系 ===
+    
+    // robots metaタグ - index/noindex判定
+    const robotsMeta = doc.querySelector('meta[name="robots"]');
+    const robotsContent = robotsMeta ? robotsMeta.content.toLowerCase() : '';
+    const hasNoindex = robotsContent.includes('noindex');
+    const hasNofollow = robotsContent.includes('nofollow');
+    const hasIndex = robotsContent.includes('index') || (!hasNoindex && !robotsMeta);
+    
+    if (hasNoindex) {
+        checks.push({cat:'インデックス＆クロール',tit:'noindex設定',st:'e',des:'このページは検索エンジンにインデックスされません',sug:'意図的でない場合は削除してください',code:escapeHtml(robotsMeta.outerHTML)});
+        errorCount++;score -= 8;
+    } else if (hasIndex) {
+        const indexText = robotsMeta ? 'index指定あり' : 'インデックス可能（デフォルト）';
+        checks.push({cat:'インデックス＆クロール',tit:'インデックス可能',st:'s',des:indexText,code:robotsMeta ? escapeHtml(robotsMeta.outerHTML) : 'robots metaタグなし（デフォルトでインデックス可能）'});
+        successCount++;
+    }
+    
+    if (hasNofollow) {
+        checks.push({cat:'インデックス＆クロール',tit:'nofollow設定',st:'w',des:'このページからのリンクはクロールされません',code:escapeHtml(robotsMeta.outerHTML)});
+        warningCount++;score -= 2;
+    }
+    
+    // canonical と noindex の矛盾チェック
+    if (canonical && hasNoindex) {
+        checks.push({cat:'インデックス＆クロール',tit:'canonical と noindex が矛盾',st:'e',des:'canonicalが設定されているのにnoindexが設定されています',sug:'どちらか一方を削除してください'});
+        errorCount++;score -= 5;
+    }
+    
+    // X-Robots-Tag ヘッダーの説明
+    checks.push({cat:'インデックス＆クロール',tit:'X-Robots-Tagヘッダー',st:'s',des:'HTTPヘッダーでのrobots指定は開発者ツールのNetworkタブで確認してください'});
+    successCount++;
+    
+    // robots.txt への言及
+    let robotsTxtUrl = '';
+    try {
+        if (url.startsWith('http')) {
+            robotsTxtUrl = new URL(url).origin + '/robots.txt';
+        }
+    } catch (e) {
+        // URL解析エラーは無視
+    }
+    
+    if (robotsTxtUrl) {
+        checks.push({cat:'インデックス＆クロール',tit:'robots.txt',st:'s',des:`${robotsTxtUrl} の内容を確認してください`,sug:'Disallow設定やサイトマップの記載を確認'});
+        successCount++;
+    } else {
+        checks.push({cat:'インデックス＆クロール',tit:'robots.txt',st:'w',des:'robots.txtの存在を確認できません（HTML貼り付けモード）',sug:'実際のURLでチェックしてください'});
+        warningCount++;score -= 1;
+    }
+    
+    // sitemap.xml への言及
+    let sitemapUrl = '';
+    try {
+        if (url.startsWith('http')) {
+            sitemapUrl = new URL(url).origin + '/sitemap.xml';
+        }
+    } catch (e) {
+        // URL解析エラーは無視
+    }
+    
+    if (sitemapUrl) {
+        checks.push({cat:'インデックス＆クロール',tit:'sitemap.xml',st:'s',des:`${sitemapUrl} の存在を確認してください`,sug:'Google Search Consoleでサイトマップを登録'});
+        successCount++;
+    } else {
+        checks.push({cat:'インデックス＆クロール',tit:'sitemap.xml',st:'w',des:'sitemap.xmlの存在を確認できません（HTML貼り付けモード）',sug:'実際のURLでチェックしてください'});
+        warningCount++;score -= 1;
+    }
+    
+    // ページネーション - rel=next/prev
+    const nextPage = doc.querySelector('link[rel="next"]');
+    const prevPage = doc.querySelector('link[rel="prev"]');
+    if (nextPage || prevPage) {
+        const pageInfo = [];
+        if (prevPage) pageInfo.push('前ページ: ' + prevPage.href);
+        if (nextPage) pageInfo.push('次ページ: ' + nextPage.href);
+        const pageCode = [prevPage, nextPage].filter(p => p).map(p => escapeHtml(p.outerHTML)).join('\n\n');
+        checks.push({cat:'インデックス＆クロール',tit:'ページネーション設定',st:'s',des:pageInfo.join(' / '),code:pageCode});
+        successCount++;
+    } else {
+        const paginationLinks = doc.querySelectorAll('a[href*="page="], a[href*="/page/"], a[aria-label*="次"], a[aria-label*="前"]');
+        if (paginationLinks.length > 0) {
+            checks.push({cat:'インデックス＆クロール',tit:'ページネーション未最適化',st:'w',des:`ページ送りリンクは存在しますが、rel="next/prev"が未設定です`,sug:'複数ページにまたがるコンテンツにはrel="next/prev"を設定してください',code:'&lt;link rel="prev" href="page1.html"&gt;\n&lt;link rel="next" href="page3.html"&gt;'});
+            warningCount++;score -= 2;
+        }
+    }
+    
+    // hreflang（多言語対応）
+    const hreflangTags = doc.querySelectorAll('link[rel="alternate"][hreflang]');
+    if (hreflangTags.length > 0) {
+        const sampleCode = Array.from(hreflangTags).slice(0, 3).map(tag => escapeHtml(tag.outerHTML)).join('\n\n');
+        checks.push({cat:'インデックス＆クロール',tit:'hreflang設定',st:'s',des:`${hreflangTags.length}言語の代替ページが設定されています`,code:sampleCode});
+        successCount++;
+    }
+    
+    const ogTitle = doc.querySelector('meta[property="og:title"]');
+    const ogDesc = doc.querySelector('meta[property="og:description"]');
+    const ogImage = doc.querySelector('meta[property="og:image"]');
+    const ogUrl = doc.querySelector('meta[property="og:url"]');
+    const ogType = doc.querySelector('meta[property="og:type"]');
+    const ogMissing = [];
+    if (!ogTitle) ogMissing.push('og:title');
+    if (!ogDesc) ogMissing.push('og:description');
+    if (!ogImage) ogMissing.push('og:image');
+    if (!ogUrl) ogMissing.push('og:url');
+    if (!ogType) ogMissing.push('og:type');
+    if (ogMissing.length > 0) {
+        checks.push({cat:'SNS対応',tit:'OGPタグ不完全',st:'w',des:`未設定: ${ogMissing.join(', ')}`,sug:'SNSでのシェア最適化のため全OGPタグの設定を推奨します'});
+        warningCount++;score -= 3;
+    } else {
+        checks.push({cat:'SNS対応',tit:'OGPタグ',st:'s',des:'すべて設定されています'});
+        successCount++;
+    }
+    
+    const twitterCard = doc.querySelector('meta[name="twitter:card"]');
+    if (!twitterCard) {
+        checks.push({cat:'SNS対応',tit:'Twitter Card未設定',st:'w',des:'Twitter表示最適化のため設定を推奨します'});
+        warningCount++;score -= 2;
+    } else {
+        checks.push({cat:'SNS対応',tit:'Twitter Card',st:'s',des:'設定済み'});
+        successCount++;
+    }
+    
+    const jsonLd = doc.querySelectorAll('script[type="application/ld+json"]');
+    if (jsonLd.length === 0) {
+        checks.push({cat:'構造化データ',tit:'構造化データなし',st:'w',des:'リッチリザルト表示のため実装を推奨します',sug:'JSON-LD形式の構造化データを追加してください'});
+        warningCount++;score -= 4;
+    } else {
+        checks.push({cat:'構造化データ',tit:'構造化データ',st:'s',des:`${jsonLd.length}個実装されています`});
+        successCount++;
+    }
+    
+    const lang = doc.documentElement.getAttribute('lang');
+    if (!lang) {
+        checks.push({cat:'基本設定',tit:'lang属性未設定',st:'e',des:'<html>タグにlang属性が必須です',sug:'ページの言語を明示してください'});
+        errorCount++;score -= 4;
+    } else {
+        checks.push({cat:'基本設定',tit:'lang属性',st:'s',des:`言語: ${lang}`});
+        successCount++;
+    }
+    
+    const internalLinks = doc.querySelectorAll('a[href^="/"],a[href^="./"],a[href^="../"]');
+    const externalLinks = doc.querySelectorAll('a[href^="http"]');
+    checks.push({cat:'リンク構造',tit:'リンク統計',st:'s',des:`内部リンク: ${internalLinks.length}個、外部リンク: ${externalLinks.length}個`});
+    successCount++;
+    
+    // bodyTextとwordCountは既に定義済み（先頭付近で定義）
+    if (wordCount < 300) {
+        checks.push({cat:'コンテンツ量',tit:'コンテンツが少ない',st:'w',des:`約${wordCount}単語（推奨: 300単語以上）`,sug:'より充実したコンテンツの作成を推奨します'});
+        warningCount++;score -= 3;
+    } else {
+        checks.push({cat:'コンテンツ量',tit:'コンテンツ量',st:'s',des:`約${wordCount}単語 - 十分な量です`});
+        successCount++;
+    }
+    
+    const favicon = doc.querySelector('link[rel*="icon"]');
+    if (!favicon) {
+        checks.push({cat:'基本設定',tit:'faviconなし',st:'w',des:'ブランディングのためfaviconの設定を推奨します'});
+        warningCount++;score -= 1;
+    } else {
+        checks.push({cat:'基本設定',tit:'favicon',st:'s',des:'設定済み'});
+        successCount++;
+    }
+    
+    if (url.startsWith('http:')) {
+        checks.push({cat:'セキュリティ',tit:'HTTPS未使用',st:'e',des:'HTTPSで保護されていません - SEOに悪影響',sug:'SSL証明書を導入してHTTPSに移行してください'});
+        errorCount++;score -= 10;
+    } else if (url.startsWith('https:')) {
+        checks.push({cat:'セキュリティ',tit:'HTTPS',st:'s',des:'保護されています'});
+        successCount++;
+    }
+    
+    const breadcrumbs = doc.querySelectorAll('[itemtype*="BreadcrumbList"],nav[aria-label*="breadcrumb" i]');
+    if (breadcrumbs.length > 0) {
+        checks.push({cat:'ユーザビリティ',tit:'パンくずリスト',st:'s',des:'実装されています'});
+        successCount++;
+    } else {
+        checks.push({cat:'ユーザビリティ',tit:'パンくず未実装',st:'w',des:'ユーザビリティ向上のため実装を推奨します'});
+        warningCount++;score -= 2;
+    }
+    
+    // === パフォーマンス関連 ===
+    const inlineStyles = doc.querySelectorAll('style');
+    const inlineScripts = doc.querySelectorAll('script:not([src])');
+    if (inlineStyles.length > 5 || inlineScripts.length > 5) {
+        checks.push({cat:'パフォーマンス',tit:'インラインCSS/JSが多い',st:'w',des:`style:${inlineStyles.length}個、script:${inlineScripts.length}個`,sug:'外部ファイル化してキャッシュ効率を向上させてください'});
+        warningCount++;score -= 2;
+    } else {
+        checks.push({cat:'パフォーマンス',tit:'インラインリソース',st:'s',des:`適切な量です（style:${inlineStyles.length}個、script:${inlineScripts.length}個）`});
+        successCount++;
+    }
+    
+    const externalCSS = doc.querySelectorAll('link[rel="stylesheet"]');
+    const externalJS = doc.querySelectorAll('script[src]');
+    if (externalCSS.length > 10 || externalJS.length > 10) {
+        checks.push({cat:'パフォーマンス',tit:'外部リソースが多い',st:'w',des:`CSS:${externalCSS.length}個、JS:${externalJS.length}個`,sug:'リソースの結合・最小化を検討してください'});
+        warningCount++;score -= 2;
+    } else {
+        checks.push({cat:'パフォーマンス',tit:'外部リソース',st:'s',des:`CSS:${externalCSS.length}個、JS:${externalJS.length}個`});
+        successCount++;
+    }
+    
+    const webpImages = Array.from(images).filter(img => img.src && img.src.toLowerCase().includes('.webp'));
+    if (images.length > 0 && webpImages.length === 0) {
+        checks.push({cat:'パフォーマンス',tit:'WebP未使用',st:'w',des:'次世代画像フォーマットが未使用です',sug:'WebP形式の画像を使用して読み込み速度を改善してください'});
+        warningCount++;score -= 2;
+    } else if (webpImages.length > 0) {
+        const sampleCode = webpImages.slice(0, 2).map(img => escapeHtml(img.outerHTML)).join('\n\n');
+        checks.push({cat:'パフォーマンス',tit:'WebP使用',st:'s',des:`${webpImages.length}個の画像がWebP形式です`,code:sampleCode});
+        successCount++;
+    }
+    
+    const lazyImages = Array.from(images).filter(img => img.loading === 'lazy' || img.hasAttribute('data-src'));
+    if (images.length > 10 && lazyImages.length === 0) {
+        checks.push({cat:'パフォーマンス',tit:'Lazy Loading未実装',st:'w',des:'画像の遅延読み込みが未実装です',sug:'loading="lazy"属性を追加してください',code:'&lt;img src="image.jpg" loading="lazy" alt="説明"&gt;'});
+        warningCount++;score -= 2;
+    } else if (lazyImages.length > 0) {
+        const sampleCode = lazyImages.slice(0, 2).map(img => escapeHtml(img.outerHTML)).join('\n\n');
+        checks.push({cat:'パフォーマンス',tit:'Lazy Loading',st:'s',des:`${lazyImages.length}個の画像で実装済み`,code:sampleCode});
+        successCount++;
+    }
+    
+    const preload = doc.querySelectorAll('link[rel="preload"]');
+    const prefetch = doc.querySelectorAll('link[rel="prefetch"]');
+    const preconnect = doc.querySelectorAll('link[rel="preconnect"]');
+    const totalPreload = preload.length + prefetch.length + preconnect.length;
+    if (totalPreload > 0) {
+        const samples = [];
+        if (preload.length > 0) samples.push(escapeHtml(preload[0].outerHTML));
+        if (prefetch.length > 0) samples.push(escapeHtml(prefetch[0].outerHTML));
+        if (preconnect.length > 0) samples.push(escapeHtml(preconnect[0].outerHTML));
+        checks.push({cat:'パフォーマンス',tit:'リソースヒント',st:'s',des:`preload:${preload.length}、prefetch:${prefetch.length}、preconnect:${preconnect.length}`,code:samples.join('\n\n')});
+        successCount++;
+    } else {
+        checks.push({cat:'パフォーマンス',tit:'リソースヒント未使用',st:'w',des:'preload/prefetch/preconnectで最適化可能',sug:'重要リソースにpreloadを使用してください',code:'&lt;link rel="preload" href="style.css" as="style"&gt;'});
+        warningCount++;score -= 1;
+    }
+    
+    // === アクセシビリティ ===
+    // スキップリンク検出を改善
+    const skipLinks = doc.querySelectorAll('a[href^="#"]');
+    const actualSkipLinks = Array.from(skipLinks).filter(link => {
+        const href = link.href.toLowerCase();
+        const text = link.textContent.toLowerCase();
+        const ariaLabel = (link.getAttribute('aria-label') || '').toLowerCase();
+        
+        // スキップリンクの特徴
+        const skipKeywords = ['skip', 'スキップ', 'main', 'メイン', 'content', 'コンテンツ', '本文'];
+        
+        // hrefにキーワードが含まれる または リンクテキスト/aria-labelにスキップ系のワードがある
+        return skipKeywords.some(kw => href.includes(kw) || text.includes(kw) || ariaLabel.includes(kw));
+    });
+    
+    if (actualSkipLinks.length === 0) {
+        checks.push({cat:'アクセシビリティ',tit:'スキップリンクなし',st:'w',des:'キーボードユーザー向けのスキップリンクがありません',sug:'メインコンテンツへのスキップリンクを追加してください',code:'&lt;a href="#main-content"&gt;メインコンテンツへスキップ&lt;/a&gt;'});
+        warningCount++;score -= 2;
+    } else {
+        const sampleCode = actualSkipLinks.slice(0, 2).map(link => escapeHtml(link.outerHTML)).join('\n\n');
+        checks.push({cat:'アクセシビリティ',tit:'スキップリンク',st:'s',des:`${actualSkipLinks.length}個実装されています`,code:sampleCode});
+        successCount++;
+    }
+    
+    const ariaLabels = doc.querySelectorAll('[aria-label], [aria-labelledby]');
+    if (ariaLabels.length > 0) {
+        checks.push({cat:'アクセシビリティ',tit:'ARIA属性',st:'s',des:`${ariaLabels.length}個の要素で使用されています`});
+        successCount++;
+    } else {
+        checks.push({cat:'アクセシビリティ',tit:'ARIA属性未使用',st:'w',des:'支援技術向けのラベルが不足している可能性',sug:'必要な要素にaria-labelを追加してください'});
+        warningCount++;score -= 1;
+    }
+    
+    const inputs = doc.querySelectorAll('input:not([type="hidden"]), select, textarea');
+    const inputsWithoutLabel = Array.from(inputs).filter(input => {
+        const id = input.id;
+        if (!id) return true;
+        const label = doc.querySelector(`label[for="${id}"]`);
+        return !label && !input.hasAttribute('aria-label');
+    });
+    if (inputsWithoutLabel.length > 0) {
+        // ラベルのないフォーム要素を具体的に特定
+        const inputDetails = inputsWithoutLabel.slice(0, 5).map((input, index) => {
+            const type = input.type || input.tagName.toLowerCase();
+            const name = input.name ? `name="${input.name}"` : '';
+            const id = input.id ? `id="${input.id}"` : '(id未設定)';
+            const placeholder = input.placeholder ? `placeholder="${input.placeholder}"` : '';
+            const identifiers = [name, placeholder].filter(x => x).join(' ');
+            
+            return `${index + 1}. <${type}> ${id} ${identifiers}`;
+        }).join('\n');
+        
+        const sampleCode = inputsWithoutLabel.slice(0, 3).map(input => escapeHtml(input.outerHTML)).join('\n\n');
+        
+        checks.push({
+            cat:'アクセシビリティ',
+            tit:'フォームのlabelなし',
+            st:'e',
+            des:`${inputsWithoutLabel.length}個のフォーム要素にラベルがありません\n\n【問題のある要素:】\n${inputDetails}${inputsWithoutLabel.length > 5 ? '\n\n...他 ' + (inputsWithoutLabel.length - 5) + '個' : ''}`,
+            sug:'すべてのinput要素にlabel要素を関連付けてください',
+            code:sampleCode
+        });
+        errorCount++;score -= 3;
+    } else if (inputs.length > 0) {
+        checks.push({cat:'アクセシビリティ',tit:'フォームのlabel',st:'s',des:'すべてのフォーム要素にラベルがあります'});
+        successCount++;
+    }
+    
+    const buttons = doc.querySelectorAll('button, input[type="button"], input[type="submit"]');
+    const buttonsWithoutText = Array.from(buttons).filter(btn => !btn.textContent.trim() && !btn.value && !btn.hasAttribute('aria-label'));
+    if (buttonsWithoutText.length > 0) {
+        // テキストのないボタンを具体的に特定
+        const buttonDetails = buttonsWithoutText.slice(0, 5).map((btn, index) => {
+            const type = btn.type || 'button';
+            const id = btn.id ? `id="${btn.id}"` : '';
+            const className = btn.className ? `class="${btn.className}"` : '';
+            const identifiers = [id, className].filter(x => x).join(' ');
+            
+            return `${index + 1}. <${btn.tagName.toLowerCase()} type="${type}"> ${identifiers || '(識別子なし)'}`;
+        }).join('\n');
+        
+        const sampleCode = buttonsWithoutText.slice(0, 3).map(btn => escapeHtml(btn.outerHTML)).join('\n\n');
+        
+        checks.push({
+            cat:'アクセシビリティ',
+            tit:'テキストのないボタン',
+            st:'w',
+            des:`${buttonsWithoutText.length}個のボタンにテキストがありません\n\n【問題のあるボタン:】\n${buttonDetails}${buttonsWithoutText.length > 5 ? '\n\n...他 ' + (buttonsWithoutText.length - 5) + '個' : ''}`,
+            sug:'ボタンには適切なテキストかaria-labelを設定してください',
+            code:sampleCode
+        });
+        warningCount++;score -= 2;
+    } else if (buttons.length > 0) {
+        checks.push({cat:'アクセシビリティ',tit:'ボタンのテキスト',st:'s',des:'すべてのボタンに適切なテキストがあります'});
+        successCount++;
+    }
+    
+    // === リンク構造の詳細 ===
+    const allLinks = doc.querySelectorAll('a[href]');
+    const emptyLinks = Array.from(allLinks).filter(link => !link.textContent.trim() && !link.querySelector('img[alt]') && !link.hasAttribute('aria-label'));
+    if (emptyLinks.length > 0) {
+        // 空のリンクを具体的に特定
+        const linkDetails = emptyLinks.slice(0, 5).map((link, index) => {
+            const href = link.href || link.getAttribute('href') || '';
+            const id = link.id ? `id="${link.id}"` : '';
+            const className = link.className ? `class="${link.className}"` : '';
+            const identifiers = [id, className].filter(x => x).join(' ');
+            
+            return `${index + 1}. ${href}\n   ${identifiers || '(識別子なし)'}`;
+        }).join('\n\n');
+        
+        const sampleCode = emptyLinks.slice(0, 3).map(link => escapeHtml(link.outerHTML)).join('\n\n');
+        
+        checks.push({
+            cat:'リンク構造',
+            tit:'空のリンクテキスト',
+            st:'w',
+            des:`${emptyLinks.length}個のリンクにテキストがありません\n\n【問題のあるリンク:】\n${linkDetails}${emptyLinks.length > 5 ? '\n\n...他 ' + (emptyLinks.length - 5) + '個' : ''}`,
+            sug:'すべてのリンクに適切なテキストを設定してください',
+            code:sampleCode
+        });
+        warningCount++;score -= 2;
+    } else if (allLinks.length > 0) {
+        checks.push({cat:'リンク構造',tit:'リンクテキスト',st:'s',des:'すべてのリンクに適切なテキストがあります'});
+        successCount++;
+    }
+    
+    const externalLinksNoRel = Array.from(externalLinks).filter(link => {
+        const rel = link.getAttribute('rel') || '';
+        return link.target === '_blank' && !rel.includes('noopener');
+    });
+    if (externalLinksNoRel.length > 0) {
+        checks.push({cat:'リンク構造',tit:'外部リンクのrel属性不足',st:'w',des:`${externalLinksNoRel.length}個のtarget="_blank"リンクにrel="noopener"がありません`,sug:'セキュリティのためrel="noopener noreferrer"を追加してください'});
+        warningCount++;score -= 2;
+    } else if (externalLinks.length > 0) {
+        checks.push({cat:'リンク構造',tit:'外部リンクのrel属性',st:'s',des:'適切に設定されています'});
+        successCount++;
+    }
+    
+    const targetBlankLinks = doc.querySelectorAll('a[target="_blank"]');
+    if (targetBlankLinks.length > 0) {
+        checks.push({cat:'リンク構造',tit:'target="_blank"使用',st:'s',des:`${targetBlankLinks.length}個のリンクで使用（rel属性を確認してください）`});
+        successCount++;
+    }
+    
+    // === メタ情報の拡充 ===
+    const author = doc.querySelector('meta[name="author"]');
+    if (!author) {
+        checks.push({cat:'メタ情報',tit:'author未設定',st:'w',des:'著者情報が未設定です',sug:'コンテンツの信頼性向上のため設定を推奨します'});
+        warningCount++;score -= 1;
+    } else {
+        checks.push({cat:'メタ情報',tit:'author',st:'s',des:'設定済み',code:escapeHtml(author.outerHTML)});
+        successCount++;
+    }
+    
+    const themeColor = doc.querySelector('meta[name="theme-color"]');
+    if (!themeColor) {
+        checks.push({cat:'メタ情報',tit:'theme-color未設定',st:'w',des:'モバイルブラウザのテーマカラー未設定',sug:'ブランドカラーを設定してください'});
+        warningCount++;score -= 1;
+    } else {
+        checks.push({cat:'メタ情報',tit:'theme-color',st:'s',des:'設定済み',code:escapeHtml(themeColor.outerHTML)});
+        successCount++;
+    }
+    
+    const appleTouchIcon = doc.querySelector('link[rel="apple-touch-icon"]');
+    if (!appleTouchIcon) {
+        checks.push({cat:'メタ情報',tit:'apple-touch-icon未設定',st:'w',des:'iOSホーム画面アイコン未設定',sug:'180x180pxのアイコンを設定してください'});
+        warningCount++;score -= 1;
+    } else {
+        checks.push({cat:'メタ情報',tit:'apple-touch-icon',st:'s',des:'設定済み',code:escapeHtml(appleTouchIcon.outerHTML)});
+        successCount++;
+    }
+    
+    // === コンテンツ品質 ===
+    const paragraphs = doc.querySelectorAll('p');
+    let totalSentences = 0;
+    let totalKanji = 0;
+    let totalChars = 0;
+    paragraphs.forEach(p => {
+        const text = p.textContent;
+        totalSentences += (text.match(/[。！？]/g) || []).length;
+        totalKanji += (text.match(/[\u4e00-\u9faf]/g) || []).length;
+        totalChars += text.length;
+    });
+    const avgSentenceLength = totalSentences > 0 ? Math.round(totalChars / totalSentences) : 0;
+    const kanjiRatio = totalChars > 0 ? Math.round((totalKanji / totalChars) * 100) : 0;
+    
+    if (avgSentenceLength > 100) {
+        checks.push({cat:'コンテンツ品質',tit:'文が長すぎる',st:'w',des:`平均文長: ${avgSentenceLength}文字（推奨: 60-80文字）`,sug:'文を短く分割して読みやすくしてください'});
+        warningCount++;score -= 2;
+    } else if (avgSentenceLength > 0) {
+        checks.push({cat:'コンテンツ品質',tit:'文の長さ',st:'s',des:`平均文長: ${avgSentenceLength}文字 - 読みやすい長さです`});
+        successCount++;
+    }
+    
+    if (kanjiRatio > 40) {
+        checks.push({cat:'コンテンツ品質',tit:'漢字が多い',st:'w',des:`漢字率: ${kanjiRatio}%（推奨: 20-30%）`,sug:'ひらがなを適度に使用して読みやすくしてください'});
+        warningCount++;score -= 1;
+    } else if (totalChars > 0) {
+        checks.push({cat:'コンテンツ品質',tit:'漢字率',st:'s',des:`${kanjiRatio}% - 適切なバランスです`});
+        successCount++;
+    }
+    
+    const longParagraphs = Array.from(paragraphs).filter(p => p.textContent.length > 300);
+    if (longParagraphs.length > 0) {
+        checks.push({cat:'コンテンツ品質',tit:'長い段落',st:'w',des:`${longParagraphs.length}個の段落が300文字以上です`,sug:'段落を適切な長さに分割してください'});
+        warningCount++;score -= 1;
+    } else if (paragraphs.length > 0) {
+        checks.push({cat:'コンテンツ品質',tit:'段落の長さ',st:'s',des:'適切な長さです'});
+        successCount++;
+    }
+    
+    const lists = doc.querySelectorAll('ul, ol');
+    if (lists.length > 0) {
+        checks.push({cat:'コンテンツ品質',tit:'リスト要素',st:'s',des:`${lists.length}個のリストで情報を構造化しています`});
+        successCount++;
+    } else {
+        checks.push({cat:'コンテンツ品質',tit:'リスト未使用',st:'w',des:'リスト要素で情報を構造化することを推奨します'});
+        warningCount++;score -= 1;
+    }
+    
+    const tables = doc.querySelectorAll('table');
+    const tablesWithoutCaption = Array.from(tables).filter(table => !table.querySelector('caption'));
+    if (tablesWithoutCaption.length > 0) {
+        checks.push({cat:'コンテンツ品質',tit:'テーブルのcaptionなし',st:'w',des:`${tablesWithoutCaption.length}個のテーブルにcaptionがありません`,sug:'テーブルには説明的なcaptionを追加してください'});
+        warningCount++;score -= 1;
+    } else if (tables.length > 0) {
+        checks.push({cat:'コンテンツ品質',tit:'テーブルのcaption',st:'s',des:'すべてのテーブルにcaptionがあります'});
+        successCount++;
+    }
+    
+    // === ソーシャルメディア拡張 ===
+    const fbAppId = doc.querySelector('meta[property="fb:app_id"]');
+    if (!fbAppId) {
+        checks.push({cat:'SNS対応',tit:'Facebook App ID未設定',st:'w',des:'Facebook Insightsが利用できません',sug:'fb:app_idを設定してください'});
+        warningCount++;score -= 1;
+    } else {
+        checks.push({cat:'SNS対応',tit:'Facebook App ID',st:'s',des:'設定済み'});
+        successCount++;
+    }
+    
+    const twitterSite = doc.querySelector('meta[name="twitter:site"]');
+    if (!twitterSite) {
+        checks.push({cat:'SNS対応',tit:'Twitter サイトアカウント未設定',st:'w',des:'Twitter Cardに運営者情報が表示されません',sug:'twitter:siteを設定してください'});
+        warningCount++;score -= 1;
+    } else {
+        checks.push({cat:'SNS対応',tit:'Twitter サイトアカウント',st:'s',des:'設定済み',code:escapeHtml(twitterSite.outerHTML)});
+        successCount++;
+    }
+    
+    // === 技術的SEO ===
+    // 推定読み込み時間（リソース数から）
+    const totalResources = externalCSS.length + externalJS.length + images.length;
+    const estimatedLoadTime = totalResources * 0.1; // 簡易推定
+    if (estimatedLoadTime > 5) {
+        checks.push({cat:'技術的SEO',tit:'読み込み時間推定',st:'w',des:`推定: ${estimatedLoadTime.toFixed(1)}秒（リソース${totalResources}個）`,sug:'リソースを最適化してください'});
+        warningCount++;score -= 2;
+    } else {
+        checks.push({cat:'技術的SEO',tit:'読み込み時間推定',st:'s',des:`推定: ${estimatedLoadTime.toFixed(1)}秒 - 良好です`});
+        successCount++;
+    }
+    
+    score = Math.max(0, Math.min(100, score));
+    console.log('SEOチェック完了 - スコア:', score, 'チェック数:', checks.length);
+    return {url:url,time:new Date().toLocaleString('ja-JP'),score:Math.round(score),sum:{tot:checks.length,e:errorCount,w:warningCount,s:successCount},checks:checks,keywordAnalysis:keywordAnalysis};
+}
+
+function displayResults(res, keywords, url) {
+    console.log('結果表示開始:', res);
+    const gc = res.checks.reduce((a,c)=>{if(!a[c.cat])a[c.cat]=[];a[c.cat].push(c);return a},{});
+    console.log('カテゴリ別グループ化完了:', Object.keys(gc));
+    results.innerHTML = '';
+    
+    if (res.keywordAnalysis && res.keywordAnalysis.length > 0) {
+        const kwSection = document.createElement('div');
+        kwSection.className = 'kw-section';
+        let kwHtml = '<div class="section-title">キーワード分析</div><div class="kw-grid">';
+        for (const kw of res.keywordAnalysis) {
+            kwHtml += `
+                <div class="kw-card">
+                    <div class="kw-name">${escapeHtml(kw.keyword)}</div>
+                    <div class="kw-metric"><span class="label">総合スコア</span><span class="value" style="font-size:1.2rem;color:#000">${kw.score}/100点</span></div>
+                    <div style="margin:.75rem 0;padding:.75rem;background:#f9f9f9;border:1px solid #e0e0e0;border-radius:4px">
+                        <div style="font-size:.8rem;font-weight:600;margin-bottom:.5rem;color:#666">スコア内訳:</div>
+                        <div class="kw-metric" style="border:none;padding:.25rem 0"><span class="label">タイトル内</span><span class="value ${kw.scoreDetails.title > 0 ? 'yes' : 'no'}">${kw.inTitle ? '○' : '×'} ${kw.scoreDetails.title}点</span></div>
+                        <div class="kw-metric" style="border:none;padding:.25rem 0"><span class="label">ディスクリプション内</span><span class="value ${kw.scoreDetails.description > 0 ? 'yes' : 'no'}">${kw.inDesc ? '○' : '×'} ${kw.scoreDetails.description}点</span></div>
+                        <div class="kw-metric" style="border:none;padding:.25rem 0"><span class="label">H1内</span><span class="value ${kw.scoreDetails.h1 > 0 ? 'yes' : 'no'}">${kw.inH1 ? '○' : '×'} ${kw.scoreDetails.h1}点</span></div>
+                        <div class="kw-metric" style="border:none;padding:.25rem 0"><span class="label">H2内</span><span class="value ${kw.scoreDetails.h2 > 0 ? 'yes' : 'no'}">${kw.inH2 ? '○' : '×'} ${kw.scoreDetails.h2}点</span></div>
+                        <div class="kw-metric" style="border:none;padding:.25rem 0"><span class="label">画像alt内</span><span class="value ${kw.scoreDetails.imageAlt > 0 ? 'yes' : 'no'}">${kw.inAlt ? '○' : '×'} ${kw.scoreDetails.imageAlt}点</span></div>
+                        <div class="kw-metric" style="border:none;padding:.25rem 0"><span class="label">出現回数 (${kw.totalCount}回)</span><span class="value ${kw.scoreDetails.frequency > 0 ? 'yes' : 'no'}">${kw.scoreDetails.frequency}点</span></div>
+                    </div>
+                    <div class="kw-metric"><span class="label">キーワード密度</span><span class="value">${kw.density}%</span></div>
+                    <div style="font-size:.75rem;color:#999;margin-top:.5rem;line-height:1.5">
+                        最適な密度: 1-3%<br>
+                        推奨出現回数: 5回以上
+                    </div>
+                </div>
+            `;
+        }
+        kwHtml += '</div>';
+        if (url && url !== '(貼り付けHTML)') {
+            kwHtml += '<div class="rank-section">';
+            kwHtml += '<div class="rank-title">キーワード最適化レベル</div>';
+            kwHtml += '<div style="font-size:.75rem;color:#999;margin-bottom:.75rem">※実際の検索順位はGoogle Search Consoleで確認してください</div>';
+            kwHtml += '<div class="rank-grid">';
+            for (const kw of res.keywordAnalysis) {
+                let level = '';
+                let levelColor = '';
+                if (kw.score >= 80) {
+                    level = '優秀';
+                    levelColor = '#2ecc71';
+                } else if (kw.score >= 60) {
+                    level = '良好';
+                    levelColor = '#3498db';
+                } else if (kw.score >= 40) {
+                    level = '要改善';
+                    levelColor = '#f39c12';
+                } else {
+                    level = '大幅改善必要';
+                    levelColor = '#e74c3c';
+                }
+                kwHtml += `
+                    <div class="rank-item">
+                        <div class="rank-kw">${escapeHtml(kw.keyword)}</div>
+                        <div class="rank-value" style="color:${levelColor}">${level}</div>
+                        <div class="rank-note">${kw.score}点</div>
+                    </div>
+                `;
+            }
+            kwHtml += '</div>';
+            kwHtml += '<div style="font-size:.75rem;color:#666;margin-top:1rem;padding:.75rem;background:#f9f9f9;border:1px solid #e0e0e0">';
+            kwHtml += '<strong>最適化レベルの目安:</strong><br>';
+            kwHtml += '80点以上: 上位表示の可能性が高い<br>';
+            kwHtml += '60-79点: 中程度の最適化<br>';
+            kwHtml += '40-59点: 改善の余地あり<br>';
+            kwHtml += '39点以下: 大幅な改善が必要';
+            kwHtml += '</div></div>';
+        }
+        kwSection.innerHTML = kwHtml;
+        results.appendChild(kwSection);
+    }
+    
+    const scoreSection = document.createElement('div');
+    scoreSection.className = 'score-section';
+    scoreSection.innerHTML = `<div class="score-value">${res.score}</div><div class="score-label">SEOスコア / 100点</div>`;
+    results.appendChild(scoreSection);
+    
+    const summary = document.createElement('div');
+    summary.className = 'summary';
+    summary.appendChild(createSummaryCard('error','エラー',res.sum.e));
+    summary.appendChild(createSummaryCard('warning','警告',res.sum.w));
+    summary.appendChild(createSummaryCard('success','成功',res.sum.s));
+    results.appendChild(summary);
+    
+    for(const[cat,its]of Object.entries(gc)){
+        results.appendChild(createSection(cat,its));
+    }
+    
+    const exportBtn = document.createElement('button');
+    exportBtn.className = 'export-btn';
+    exportBtn.textContent = 'HTMLレポートをダウンロード';
+    exportBtn.onclick = exportHTML;
+    results.appendChild(exportBtn);
+    
+    window.currentResults = res;
+}
+
+function createSummaryCard(type,label,value){
+    const card = document.createElement('div');
+    card.className = `summary-card ${type}`;
+    card.innerHTML = `<div class="summary-label">${label}</div><div class="summary-value">${value}</div>`;
+    return card;
+}
+
+function createSection(category,items){
+    const section = document.createElement('div');
+    section.className = 'check-section';
+    const errorItems = items.filter(i=>i.st==='e').length;
+    const warningItems = items.filter(i=>i.st==='w').length;
+    const badgeClass = errorItems>0?'error':warningItems>0?'warning':'success';
+    const badgeText = errorItems>0?`${errorItems}件のエラー`:warningItems>0?`${warningItems}件の警告`:'OK';
+    section.innerHTML = `
+        <div class="check-header">
+            <div class="check-title">${category}</div>
+            <div class="check-badge ${badgeClass}">${badgeText}</div>
+        </div>
+    `;
+    items.forEach(item=>{
+        const checkItem = createCheckItem(item);
+        section.appendChild(checkItem);
+    });
+    return section;
+}
+
+function createCheckItem(item){
+    const div = document.createElement('div');
+    div.className = `check-item ${item.st==='e'?'error':item.st==='w'?'warning':'success'}`;
+    const statusText = item.st==='e'?'エラー':item.st==='w'?'警告':'OK';
+    let html = `
+        <div class="check-item-header">
+            <div class="check-item-title">${item.tit}</div>
+            <div class="check-status ${item.st==='e'?'error':item.st==='w'?'warning':'success'}">${statusText}</div>
+        </div>
+        <div class="check-desc">${item.des}</div>
+    `;
+    if(item.code){
+        html += `<div class="code-block">${item.code}</div>`;
+    }
+    if(item.sug){
+        html += `<div class="suggestion"><div class="suggestion-title">改善提案</div>${item.sug}</div>`;
+    }
+    div.innerHTML = html;
+    return div;
+}
+
+function escapeHtml(t){
+    const d = document.createElement('div');
+    d.textContent = t;
+    return d.innerHTML;
+}
+
+function exportHTML(){
+    const res = window.currentResults;
+    if(!res)return;
+    const clone = document.cloneNode(true);
+    const cloneResults = clone.getElementById('results');
+    const exportBtn = cloneResults.querySelector('.export-btn');
+    if(exportBtn)exportBtn.remove();
+    const blob = new Blob([clone.documentElement.outerHTML],{type:'text/html;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `seo-report-${new Date().getTime()}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>

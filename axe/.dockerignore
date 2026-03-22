@@ -1,0 +1,6 @@
+node_modules
+.env
+.git
+.settings.json
+test.txt
+README.md
