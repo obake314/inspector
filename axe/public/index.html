@@ -852,7 +852,7 @@
                 </div>
                 <div class="violation-details">
                     <div class="element-list">
-                        ${els.map(n => `<div class="element-item"><div class="element-target">${Array.isArray(n.target) ? n.target.join(' > ') : n.target}</div><div class="element-html">${escapeHtml((n.html || '').substring(0, 300))}${(n.html || '').length > 300 ? '...' : ''}</div></div>`).join('')}
+                        ${els.map(n => `<div class="element-item"><div class="element-target">${escapeHtml(Array.isArray(n.target) ? n.target.join(' > ') : n.target)}</div><div class="element-html">${escapeHtml((n.html || '').substring(0, 300))}${(n.html || '').length > 300 ? '...' : ''}</div></div>`).join('')}
                         ${more > 0 ? `<div class="element-item" style="text-align:center">他${more}件</div>` : ''}
                     </div>
                     ${v.nodes[0]?.failureSummary ? `<div class="fix-suggestion"><div class="fix-suggestion-title">修正方法</div><div class="fix-suggestion-text">${escapeHtml(translateFailureSummary(v.nodes[0].failureSummary))}</div></div>` : ''}
@@ -1124,8 +1124,8 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                             <div class="manual-content">
                                 <div class="manual-text">${aiIcon} ${item.text}</div>
                                 ${ai ? `<div class="ai-reason" style="font-size: 14px; color: ${textColor}; margin-top: 4px; padding: 6px 8px; background: ${bgColor}; border-radius: 4px;">
-                                    <strong>AI判定: ${statusLabel}</strong> - ${ai.reason || ''}
-                                    ${ai.suggestion ? `<br><strong>💡 改善案:</strong> ${ai.suggestion}` : ''}
+                                    <strong>AI判定: ${statusLabel}</strong> - ${escapeHtml(ai.reason || '')}
+                                    ${ai.suggestion ? `<br><strong>💡 改善案:</strong> ${escapeHtml(ai.suggestion)}` : ''}
                                     <span style="opacity: 0.6; margin-left: 8px;">(確信度: ${Math.round((ai.confidence || 0) * 100)}%)</span>
                                 </div>` : ''}
                                 <div class="manual-info">
