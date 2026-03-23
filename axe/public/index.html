@@ -97,8 +97,12 @@
         .level-btn:hover { border-color: var(--navy-400); }
         .level-btn.active { background: var(--navy-700); border-color: var(--navy-700); color: white; }
         .violation-list { max-height: 500px; overflow-y: auto; }
-        .violation-item { border-bottom: 1px solid var(--navy-200); }
+        .violation-item { border-bottom: 1px solid var(--navy-200); border-left: 3px solid transparent; }
         .violation-item:last-child { border-bottom: none; }
+        .violation-item[data-impact="critical"] { border-left-color: #7f1d1d; }
+        .violation-item[data-impact="serious"] { border-left-color: #dc2626; }
+        .violation-item[data-impact="moderate"] { border-left-color: #d97706; }
+        .violation-item[data-impact="minor"] { border-left-color: #6b7280; }
         .violation-header { padding: 14px 20px; cursor: pointer; display: flex; align-items: flex-start; gap: 12px; }
         .violation-header:hover { background: var(--navy-100); }
         .badges { display: flex; gap: 6px; flex-shrink: 0; }
@@ -106,10 +110,10 @@
             padding: 2px 8px; font-size: 14px; font-weight: 500; text-transform: uppercase;
             letter-spacing: 0.03em; background: var(--navy-200); color: var(--navy-600);
         }
-        .badge.critical { background: var(--navy-700); color: white; }
-        .badge.serious { background: var(--navy-600); color: white; }
-        .badge.moderate { background: var(--navy-400); color: white; }
-        .badge.minor { background: var(--navy-300); color: var(--navy-700); }
+        .badge.critical { background: #7f1d1d; color: white; }
+        .badge.serious { background: #dc2626; color: white; }
+        .badge.moderate { background: #d97706; color: white; }
+        .badge.minor { background: #6b7280; color: white; }
         .violation-info { flex: 1; min-width: 0; }
         .violation-title { font-size: 14px; font-weight: 500; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
         .wcag-ref { font-family: 'IBM Plex Mono', monospace; font-size: 14px; color: var(--navy-500); }
@@ -258,11 +262,11 @@
             display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--navy-500); font-size: 16px;
         }
         .settings-gear:hover { border-color: var(--navy-500); color: var(--navy-700); }
-        .config-status { display: flex; gap: 12px; margin-top: 6px; flex-wrap: wrap; }
-        .config-status-item { font-size: 12px; font-family: 'IBM Plex Mono', monospace; display: flex; align-items: center; gap: 4px; color: var(--navy-400); }
-        .config-status-item .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--navy-300); flex-shrink: 0; }
-        .config-status-item.ok .dot { background: #059669; }
-        .config-status-item.ok { color: var(--navy-500); }
+        .config-status { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+        .config-status-item { font-size: 11px; font-family: 'IBM Plex Mono', monospace; display: flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid var(--navy-300); color: var(--navy-400); background: white; }
+        .config-status-item .st { font-weight: 600; }
+        .config-status-item.ok { border-color: #059669; color: #059669; }
+        .config-status-item.ng { border-color: #dc2626; color: #dc2626; }
         .achievement-banner { background: white; border: 1px solid var(--navy-200); padding: 24px 28px; margin-bottom: 24px; display: flex; align-items: center; gap: 32px; }
         .achievement-rate { font-size: 48px; font-weight: 600; font-family: 'IBM Plex Mono', monospace; color: var(--navy-700); line-height: 1; }
         .achievement-detail { flex: 1; }
@@ -328,9 +332,9 @@
                 <h1>WCAG 2.2 アクセシビリティチェッカー</h1>
                 <p class="subtitle">ウェブコンテンツ・アクセシビリティ・ガイドライン 2.2</p>
                 <div class="config-status" id="configStatus">
-                    <span class="config-status-item" id="statusGemini"><span class="dot"></span>Gemini</span>
-                    <span class="config-status-item" id="statusSheets"><span class="dot"></span>Sheets</span>
-                    <span class="config-status-item" id="statusDrive"><span class="dot"></span>Drive</span>
+                    <span class="config-status-item" id="statusGemini">Gemini <span class="st" id="stGemini">--</span></span>
+                    <span class="config-status-item" id="statusSheets">Sheets <span class="st" id="stSheets">--</span></span>
+                    <span class="config-status-item" id="statusDrive">Drive <span class="st" id="stDrive">--</span></span>
                 </div>
             </div>
             <button type="button" class="settings-gear" id="settingsGear" onclick="openSettings()" title="設定">&#9881;</button>
@@ -472,18 +476,18 @@
                 </div>
             </div>
             <div class="tab-content" id="tab-manual">
-                <div class="ai-evaluate-section" style="margin-bottom: 16px; padding: 16px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 4px;">
+                <div class="ai-evaluate-section" style="margin-bottom: 16px; padding: 16px; background: white; border: 1px solid var(--navy-200); border-left: 3px solid var(--navy-600);">
                     <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
-                        <div style="color: white;">
-                            <div style="font-weight: 600; font-size: 14px;">🤖 AI自動評価</div>
-                            <div style="font-size: 14px; opacity: 0.9;">Gemini AIが手動チェック項目を自動評価します</div>
+                        <div>
+                            <div style="font-weight: 600; font-size: 14px; color: var(--navy-700);">AI自動評価</div>
+                            <div style="font-size: 14px; color: var(--navy-500);">Gemini AIが手動チェック項目を自動評価します</div>
                         </div>
-                        <button id="aiEvaluateBtn" onclick="runAIEvaluation()" style="background: white; color: #667eea; border: none; padding: 10px 20px; font-size: 14px; font-weight: 600; cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 8px;">
+                        <button id="aiEvaluateBtn" onclick="runAIEvaluation()" style="background: var(--navy-700); color: white; border: none; padding: 10px 20px; font-size: 14px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 8px;">
                             <span class="ai-btn-text">AI評価を実行</span>
-                            <span class="ai-spinner" style="display: none; width: 14px; height: 14px; border: 2px solid rgba(102,126,234,0.3); border-top-color: #667eea; border-radius: 50%; animation: spin 0.8s linear infinite;"></span>
+                            <span class="ai-spinner" style="display: none; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite;"></span>
                         </button>
                     </div>
-                    <div id="aiStatus" style="margin-top: 12px; font-size: 14px; color: white; display: none;"></div>
+                    <div id="aiStatus" style="margin-top: 12px; font-size: 14px; color: var(--navy-500); display: none;"></div>
                 </div>
                 <div class="section" id="manualSection"></div>
                 <div class="progress-bar">
@@ -863,7 +867,7 @@
             const wcagRef = extractWcagRef(v.tags);
             const jaName = getJaRuleName(v.id);
             const jaDesc = getJaRuleDesc(v.id, v.description || v.help);
-            return `<div class="violation-item" data-level="${wcagLevel.toLowerCase()}" onclick="this.classList.toggle('expanded')">
+            return `<div class="violation-item" data-level="${wcagLevel.toLowerCase()}" data-impact="${v.impact || ''}" onclick="this.classList.toggle('expanded')">
                 <div class="violation-header">
                     <div class="badges"><span class="badge ${v.impact}">${impactLabel}</span><span class="badge">${wcagLevel}</span></div>
                     <div class="violation-info">
@@ -910,7 +914,31 @@
             
             $('passList').innerHTML = results.passes.length === 0
                 ? '<div class="empty-state">合格した項目はありません</div>'
-                : results.passes.map(p => `<div class="wcag-list-item"><span class="wcag-ref">${extractWcagRef(p.tags) || ''}</span><span class="badge">${getWcagLevel(p.tags) || 'A'}</span><span>${getJaRuleName(p.id)}</span><span class="wcag-ref" style="margin-left:auto;">${p.id}</span></div>`).join('');
+                : results.passes.map(p => {
+                    const wcagLevel = getWcagLevel(p.tags);
+                    const wcagRef = extractWcagRef(p.tags);
+                    const jaName = getJaRuleName(p.id);
+                    const els = (p.nodes || []).slice(0, 3);
+                    const more = (p.nodes || []).length - 3;
+                    const detail = els.length > 0 ? `
+                        <div class="violation-details">
+                            <div class="element-list">
+                                ${els.map(n => `<div class="element-item"><div class="element-target">${escapeHtml(Array.isArray(n.target) ? n.target.join(' > ') : (n.target || ''))}</div>${n.html ? `<div class="element-html">${escapeHtml((n.html || '').substring(0, 200))}${(n.html || '').length > 200 ? '...' : ''}</div>` : ''}</div>`).join('')}
+                                ${more > 0 ? `<div class="element-item" style="text-align:center;color:var(--navy-400);">他${more}件</div>` : ''}
+                            </div>
+                        </div>` : '';
+                    return `<div class="violation-item" data-level="${wcagLevel.toLowerCase()}" style="border-left-color:#059669;" onclick="this.classList.toggle('expanded')">
+                        <div class="violation-header">
+                            <div class="badges"><span class="badge" style="background:#059669;color:white;">合格</span><span class="badge">${wcagLevel}</span></div>
+                            <div class="violation-info">
+                                <div class="violation-title">${jaName} <span class="wcag-ref">${p.id}</span> ${wcagRef ? `<span class="wcag-ref">${wcagRef}</span>` : ''}</div>
+                                <div class="violation-meta"><span>${(p.nodes || []).length}件</span> ${p.helpUrl ? `<a href="${p.helpUrl}" target="_blank" onclick="event.stopPropagation()">詳細</a>` : ''}</div>
+                            </div>
+                            <svg class="expand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                        </div>
+                        ${detail}
+                    </div>`;
+                }).join('');
             
             $('incompleteList').innerHTML = !results.incomplete || results.incomplete.length === 0
                 ? '<div class="empty-state">要確認項目はありません</div>'
@@ -1324,9 +1352,13 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                     $('batchReportBtn').style.display = '';
                 }
                 // ヘッダーステータス更新
-                if (data.configured) $('statusSheets').classList.add('ok');
-                if (data.folderId) $('statusDrive').classList.add('ok');
-                if (data.geminiConfigured) $('statusGemini').classList.add('ok');
+                const setStatus = (id, stId, ok) => {
+                    $('status' + id).classList.add(ok ? 'ok' : 'ng');
+                    $(stId).textContent = ok ? 'OK' : 'NG';
+                };
+                setStatus('Gemini', 'stGemini', data.geminiConfigured);
+                setStatus('Sheets', 'stSheets', data.configured);
+                setStatus('Drive', 'stDrive', !!data.folderId);
             } catch (e) { /* ignore */ }
         }
         checkSheetsStatusFn();
