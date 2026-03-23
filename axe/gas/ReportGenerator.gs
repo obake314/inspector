@@ -66,20 +66,14 @@ function showReportDialog() {
     'var N=new Date();',
     'document.getElementById("v_date").value=N.getFullYear()+"-"+P(N.getMonth()+1)+"-"+P(N.getDate());',
 
-    'google.script.run',
-    '  .withSuccessHandler(function(list){',
-    '    var el=document.getElementById("chips");el.innerHTML="";',
-    '    if(!list||!list.length){el.innerHTML="<span style=color:#d32f2f>対象タブなし（検査結果のシートがありません）</span>";return}',
-    '    list.forEach(function(t){',
-    '      var c=document.createElement("span");c.className="chip on";c.textContent=t;c.dataset.n=t;',
-    '      c.onclick=function(){this.classList.toggle("on")};el.appendChild(c);',
-    '    });',
-    '  })',
-    '  .withFailureHandler(function(e){',
-    '    var el=document.getElementById("chips");',
-    '    el.innerHTML="<span style=color:#d32f2f>読み込みエラー: "+e.message+"<br>スコープの再承認が必要な場合があります。Apps ScriptエディタからonOpenを手動実行してください。</span>";',
-    '  })',
-    '  .getReportTabs();',
+    'google.script.run.withSuccessHandler(function(list){',
+    '  var el=document.getElementById("chips");el.innerHTML="";',
+    '  if(!list.length){el.innerHTML="<span style=color:#d32f2f>対象タブなし</span>";return}',
+    '  list.forEach(function(t){',
+    '    var c=document.createElement("span");c.className="chip on";c.textContent=t;c.dataset.n=t;',
+    '    c.onclick=function(){this.classList.toggle("on")};el.appendChild(c);',
+    '  });',
+    '}).getReportTabs();',
 
     'function go(){',
     '  var b=document.getElementById("go"),m=document.getElementById("msg");',
@@ -103,23 +97,10 @@ function showReportDialog() {
    ============================================================ */
 function getReportTabs() {
   var out = [];
-  var sheets = SpreadsheetApp.getActiveSpreadsheet().getSheets();
-  for (var i = 0; i < sheets.length; i++) {
-    var name = sheets[i].getName();
-    // 表紙シート・デフォルトシートは除外
-    if (/^表紙/.test(name) || name === 'シート1' || name === 'Sheet1') continue;
-    try {
-      var v = sheets[i].getDataRange().getValues();
-      if (!v || v.length < 2) continue;
-      // 新形式: 1行目がヘッダー
-      if (String(v[0][0]).trim() === '検査項目番号') { out.push(name); continue; }
-      // 旧形式: 5行目がヘッダー
-      if (v.length >= 6 && String(v[4][0]).trim() === '検査項目番号') { out.push(name); continue; }
-    } catch (e) {
-      // 個別シートのエラーはスキップ
-      continue;
-    }
-  }
+  SpreadsheetApp.getActiveSpreadsheet().getSheets().forEach(function(s) {
+    var v = s.getDataRange().getValues();
+    if (v.length >= 6 && String(v[4][0]).trim() === '検査項目番号') out.push(s.getName());
+  });
   return out;
 }
 
@@ -352,64 +333,25 @@ function generateReport(info) {
    ============================================================ */
 function readPages_(ss, selectedTabs) {
   var pages = [];
-
-  // 表紙シートからメタ情報を取得（新形式）
-  var coverInfo = {};
-  ss.getSheets().forEach(function(sheet) {
-    if (/^表紙/.test(sheet.getName())) {
-      var cv = sheet.getDataRange().getValues();
-      // 6行目以降にURL一覧がある: No., URL, 検査日時, シート名
-      for (var ci = 6; ci < cv.length; ci++) {
-        if (cv[ci][1] && cv[ci][3]) {
-          coverInfo[String(cv[ci][3]).trim()] = {
-            url: String(cv[ci][1]),
-            time: String(cv[ci][2] || '')
-          };
-        }
-      }
-    }
-  });
-
   ss.getSheets().forEach(function(sheet) {
     var name = sheet.getName();
-    if (/^表紙/.test(name)) return; // 表紙はスキップ
     if (selectedTabs.length && selectedTabs.indexOf(name) === -1) return;
     var v = sheet.getDataRange().getValues();
-    if (!v || v.length < 2) return;
+    if (v.length < 6 || String(v[4][0]).trim() !== '検査項目番号') return;
 
-    var headerRowIdx = -1;
-    var url = name;
-    var time = '';
+    var url  = String(v[1][1] || name);
+    var time = String(v[2][1] || '');
 
-    // 新形式: 1行目がヘッダー（表紙にメタ情報）
-    if (String(v[0][0]).trim() === '検査項目番号') {
-      headerRowIdx = 0;
-      // 表紙からURL/検査日時を取得
-      if (coverInfo[name]) {
-        url = coverInfo[name].url;
-        time = coverInfo[name].time;
-      }
-    }
-    // 旧形式: 5行目がヘッダー（メタ情報が各シートの上部にある）
-    else if (v.length >= 6 && String(v[4][0]).trim() === '検査項目番号') {
-      headerRowIdx = 4;
-      url = String(v[1][1] || name);
-      time = String(v[2][1] || '');
-    }
-
-    if (headerRowIdx < 0) return;
-
-    // ヘッダー行から列構成を判定
-    var headerRow = v[headerRowIdx];
-    var hasLevelCol = (String(headerRow[2]).trim() === '適合レベル');
-    var dataStartRow = headerRowIdx + 1;
+    // ヘッダー行から列構成を判定（8列: 適合レベルあり / 7列: 旧形式）
+    var hasLevelCol = (String(v[4][2]).trim() === '適合レベル');
 
     var rows = [];
-    for (var i = dataStartRow; i < v.length; i++) {
+    for (var i = 5; i < v.length; i++) {
       var r = v[i];
       if (!r[0] && !r[1]) continue;
 
       if (hasLevelCol) {
+        // 新8列形式: No, 検査項目, 適合レベル, 結果, 場所, 検出数, 詳細, 改善案
         rows.push({
           no: String(r[0]||''), item: String(r[1]||''), level: String(r[2]||''),
           result: String(r[3]||'').trim(),
@@ -417,6 +359,8 @@ function readPages_(ss, selectedTabs) {
           detail: String(r[6]||''), suggestion: String(r[7]||'')
         });
       } else {
+        // 旧7列形式: No, 検査項目, 結果, 場所, 検出数, 詳細, 改善案
+        // 検査項目からレベルを抽出
         var itemText = String(r[1]||'');
         var level = '';
         var levelMatch = itemText.match(/\[WCAG\s[\d.]+\s+(A{1,3})\]/);
