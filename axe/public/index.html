@@ -258,6 +258,16 @@
             display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--navy-500); font-size: 16px;
         }
         .settings-gear:hover { border-color: var(--navy-500); color: var(--navy-700); }
+        .config-status { display: flex; gap: 12px; margin-top: 6px; flex-wrap: wrap; }
+        .config-status-item { font-size: 12px; font-family: 'IBM Plex Mono', monospace; display: flex; align-items: center; gap: 4px; color: var(--navy-400); }
+        .config-status-item .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--navy-300); flex-shrink: 0; }
+        .config-status-item.ok .dot { background: #059669; }
+        .config-status-item.ok { color: var(--navy-500); }
+        .achievement-banner { background: white; border: 1px solid var(--navy-200); padding: 24px 28px; margin-bottom: 24px; display: flex; align-items: center; gap: 32px; }
+        .achievement-rate { font-size: 48px; font-weight: 600; font-family: 'IBM Plex Mono', monospace; color: var(--navy-700); line-height: 1; }
+        .achievement-detail { flex: 1; }
+        .achievement-label { font-size: 13px; font-weight: 500; color: var(--navy-500); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+        .achievement-note { font-size: 12px; color: var(--navy-400); margin-top: 6px; }
         @media (max-width: 768px) {
             .url-form { flex-direction: column; }
             .summary { grid-template-columns: repeat(3, 1fr); }
@@ -317,6 +327,11 @@
             <div>
                 <h1>WCAG 2.2 アクセシビリティチェッカー</h1>
                 <p class="subtitle">ウェブコンテンツ・アクセシビリティ・ガイドライン 2.2</p>
+                <div class="config-status" id="configStatus">
+                    <span class="config-status-item" id="statusGemini"><span class="dot"></span>Gemini</span>
+                    <span class="config-status-item" id="statusSheets"><span class="dot"></span>Sheets</span>
+                    <span class="config-status-item" id="statusDrive"><span class="dot"></span>Drive</span>
+                </div>
             </div>
             <button type="button" class="settings-gear" id="settingsGear" onclick="openSettings()" title="設定">&#9881;</button>
         </header>
@@ -411,6 +426,14 @@
                 <div class="summary-item"><div class="count" id="minorCount">0</div><div class="label">軽微</div></div>
                 <div class="summary-item"><div class="count" id="passCount">0</div><div class="label">合格</div></div>
                 <div class="summary-item"><div class="count" id="totalCount">0</div><div class="label">合計</div></div>
+            </div>
+            <div class="achievement-banner" id="achievementBanner" style="display:none;">
+                <div class="achievement-rate" id="achievementRate">--%</div>
+                <div class="achievement-detail">
+                    <div class="achievement-label">自動検査 達成率</div>
+                    <div id="achievementDesc" style="font-size: 14px; color: var(--navy-600); margin-top: 2px;"></div>
+                    <div class="achievement-note">手動チェック項目の結果により変動する可能性があります</div>
+                </div>
             </div>
             <div class="scan-time" id="scanTime"></div>
             <div class="scan-debug" id="scanDebug" style="font-size: 14px; color: var(--navy-400); margin-bottom: 16px; font-family: 'IBM Plex Mono', monospace;"></div>
@@ -896,6 +919,15 @@
             renderManualChecklist();
             $('results').classList.add('visible');
             $('csvBtn').style.display = '';
+
+            // 達成率バナー
+            const total = results.violations.length + results.passes.length;
+            if (total > 0) {
+                const rate = Math.round((results.passes.length / total) * 100);
+                $('achievementRate').textContent = rate + '%';
+                $('achievementDesc').textContent = `合格 ${results.passes.length} / ${total} 項目（自動検査）`;
+                $('achievementBanner').style.display = '';
+            }
         }
         
         // WCAGタグからレベルを取得
@@ -1069,10 +1101,10 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 renderManualChecklist();
                 updateProgress();
                 
-                status.innerHTML = `✅ 評価完了！ <span style="background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 10px; margin-left: 8px;">✅合格: ${passCount} / ❌不合格: ${failCount} / 🔧要手動: ${manualCount} / ➖該当なし: ${naCount}</span>`;
+                status.innerHTML = `評価完了 <span style="background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 10px; margin-left: 8px;">合格: ${passCount} / 不合格: ${failCount} / 要手動: ${manualCount} / 該当なし: ${naCount}</span>`;
                 
             } catch (error) {
-                status.textContent = `❌ エラー: ${error.message}`;
+                status.textContent = `エラー: ${error.message}`;
                 console.error('AI評価エラー:', error);
             } finally {
                 btn.disabled = false;
@@ -1103,29 +1135,29 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                         if (ai) {
                             switch (ai.status) {
                                 case 'pass':
-                                    aiIcon = '✅'; bgColor = '#ecfdf5'; textColor = '#059669'; statusLabel = '合格';
+                                    aiIcon = ''; bgColor = '#ecfdf5'; textColor = '#059669'; statusLabel = '合格';
                                     break;
                                 case 'fail':
-                                    aiIcon = '❌'; bgColor = '#fef2f2'; textColor = '#dc2626'; statusLabel = '不合格';
+                                    aiIcon = ''; bgColor = '#fef2f2'; textColor = '#dc2626'; statusLabel = '不合格';
                                     break;
                                 case 'manual_required':
-                                    aiIcon = '🔧'; bgColor = '#fef3c7'; textColor = '#d97706'; statusLabel = '要手動確認';
+                                    aiIcon = ''; bgColor = '#fef3c7'; textColor = '#d97706'; statusLabel = '要手動確認';
                                     break;
                                 case 'not_applicable':
-                                    aiIcon = '➖'; bgColor = '#f3f4f6'; textColor = '#6b7280'; statusLabel = '該当なし';
+                                    aiIcon = ''; bgColor = '#f3f4f6'; textColor = '#6b7280'; statusLabel = '該当なし';
                                     break;
                                 default:
-                                    aiIcon = '❓'; bgColor = '#fffbeb'; textColor = '#d97706'; statusLabel = '不明';
+                                    aiIcon = ''; bgColor = '#fffbeb'; textColor = '#d97706'; statusLabel = '不明';
                             }
                         }
                         
                         return `<div class="manual-item ${aiStatusClass}">
                             <div class="manual-checkbox ${checkedItems.has(item.index) ? 'checked' : ''}" data-index="${item.index}" onclick="toggleCheck(${item.index}, this)"></div>
                             <div class="manual-content">
-                                <div class="manual-text">${aiIcon} ${item.text}</div>
+                                <div class="manual-text">${item.text}</div>
                                 ${ai ? `<div class="ai-reason" style="font-size: 14px; color: ${textColor}; margin-top: 4px; padding: 6px 8px; background: ${bgColor}; border-radius: 4px;">
                                     <strong>AI判定: ${statusLabel}</strong> - ${escapeHtml(ai.reason || '')}
-                                    ${ai.suggestion ? `<br><strong>💡 改善案:</strong> ${escapeHtml(ai.suggestion)}` : ''}
+                                    ${ai.suggestion ? `<br><strong>改善案:</strong> ${escapeHtml(ai.suggestion)}` : ''}
                                     <span style="opacity: 0.6; margin-left: 8px;">(確信度: ${Math.round((ai.confidence || 0) * 100)}%)</span>
                                 </div>` : ''}
                                 <div class="manual-info">
@@ -1291,6 +1323,10 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                     $('reportBtn').style.display = '';
                     $('batchReportBtn').style.display = '';
                 }
+                // ヘッダーステータス更新
+                if (data.configured) $('statusSheets').classList.add('ok');
+                if (data.folderId) $('statusDrive').classList.add('ok');
+                if (data.geminiConfigured) $('statusGemini').classList.add('ok');
             } catch (e) { /* ignore */ }
         }
         checkSheetsStatusFn();

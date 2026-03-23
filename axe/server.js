@@ -883,11 +883,14 @@ app.post('/api/export-report', async (req, res) => {
  */
 app.get('/api/sheets-status', (req, res) => {
   const saKey = loadServiceAccountKey();
+  const saved = loadSettings();
+  const geminiKey = saved.geminiApiKey || GEMINI_API_KEY;
   res.json({
     configured: !!saKey,
     spreadsheetId: cachedSpreadsheetId || null,
     folderId: GOOGLE_DRIVE_FOLDER_ID || null,
-    serviceAccount: saKey ? saKey.client_email : null
+    serviceAccount: saKey ? saKey.client_email : null,
+    geminiConfigured: !!geminiKey
   });
 });
 
