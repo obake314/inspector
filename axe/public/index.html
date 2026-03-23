@@ -28,12 +28,12 @@
         .container { max-width: 1000px; margin: 0 auto; padding: 48px 24px; }
         header { margin-bottom: 40px; }
         h1 { font-size: 20px; font-weight: 600; letter-spacing: 0.02em; margin-bottom: 4px; }
-        .subtitle { color: var(--navy-500); font-size: 14px; }
+        .subtitle { color: var(--navy-500); font-size: 13px; }
         .input-section { background: white; border: 1px solid var(--navy-200); padding: 24px; margin-bottom: 24px; }
         .level-select { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--navy-200); }
-        .level-select-label { font-size: 14px; font-weight: 500; color: var(--navy-500); text-transform: uppercase; letter-spacing: 0.05em; }
+        .level-select-label { font-size: 12px; font-weight: 500; color: var(--navy-500); text-transform: uppercase; letter-spacing: 0.05em; }
         .level-select-btns { display: flex; gap: 0; }
-        .level-select-btn { background: var(--navy-100); border: 1px solid var(--navy-300); padding: 8px 20px; font-size: 14px; font-weight: 500; cursor: pointer; color: var(--navy-500); }
+        .level-select-btn { background: var(--navy-100); border: 1px solid var(--navy-300); padding: 8px 20px; font-size: 13px; font-weight: 500; cursor: pointer; color: var(--navy-500); }
         .level-select-btn:first-child { border-right: none; }
         .level-select-btn:last-child { border-left: none; }
         .level-select-btn:hover { background: var(--navy-200); }
@@ -47,7 +47,7 @@
         .url-input::placeholder { color: var(--navy-400); }
         .check-btn {
             background: var(--navy-700); color: white; border: none;
-            padding: 12px 24px; font-size: 14px; font-weight: 500; cursor: pointer;
+            padding: 12px 24px; font-size: 13px; font-weight: 500; cursor: pointer;
             display: flex; align-items: center; gap: 8px;
         }
         .check-btn:hover { background: var(--navy-800); }
@@ -59,8 +59,8 @@
         .check-btn.loading .spinner { display: inline-block; }
         .check-btn.loading .btn-text { display: none; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .note { margin-top: 16px; font-size: 14px; color: var(--navy-500); border-left: 2px solid var(--navy-300); padding-left: 12px; }
-        .skip-rules-section { margin-top: 16px; font-size: 14px; color: var(--navy-500); }
+        .note { margin-top: 16px; font-size: 12px; color: var(--navy-500); border-left: 2px solid var(--navy-300); padding-left: 12px; }
+        .skip-rules-section { margin-top: 16px; font-size: 12px; color: var(--navy-500); }
         .skip-rules-section summary { cursor: pointer; padding: 8px 0; font-weight: 500; }
         .skip-rules-section summary:hover { color: var(--navy-700); }
         .skip-rules-list { padding: 12px; background: var(--navy-100); margin-top: 8px; }
@@ -75,10 +75,10 @@
         .summary { display: grid; grid-template-columns: repeat(6, 1fr); gap: 1px; background: var(--navy-200); border: 1px solid var(--navy-200); margin-bottom: 24px; }
         .summary-item { background: white; padding: 16px; text-align: center; }
         .summary-item .count { font-size: 24px; font-weight: 600; color: var(--navy-700); }
-        .summary-item .label { font-size: 14px; color: var(--navy-500); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+        .summary-item .label { font-size: 11px; color: var(--navy-500); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
         .tabs { display: flex; border-bottom: 1px solid var(--navy-200); margin-bottom: 24px; }
         .tab {
-            background: none; border: none; padding: 12px 20px; font-size: 14px;
+            background: none; border: none; padding: 12px 20px; font-size: 13px;
             color: var(--navy-500); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
         }
         .tab:hover { color: var(--navy-700); }
@@ -88,11 +88,11 @@
         .section { background: white; border: 1px solid var(--navy-200); margin-bottom: 24px; }
         .section-header { padding: 16px 20px; border-bottom: 1px solid var(--navy-200); display: flex; align-items: center; justify-content: space-between; }
         .section-title { font-size: 14px; font-weight: 600; }
-        .section-badge { font-size: 14px; color: var(--navy-500); }
+        .section-badge { font-size: 12px; color: var(--navy-500); }
         .level-filter { display: flex; gap: 4px; }
         .level-btn {
             background: var(--navy-100); border: 1px solid var(--navy-200);
-            padding: 4px 10px; font-size: 14px; font-weight: 500; cursor: pointer; color: var(--navy-500);
+            padding: 4px 10px; font-size: 11px; font-weight: 500; cursor: pointer; color: var(--navy-500);
         }
         .level-btn:hover { border-color: var(--navy-400); }
         .level-btn.active { background: var(--navy-700); border-color: var(--navy-700); color: white; }
@@ -103,7 +103,7 @@
         .violation-header:hover { background: var(--navy-100); }
         .badges { display: flex; gap: 6px; flex-shrink: 0; }
         .badge {
-            padding: 2px 8px; font-size: 14px; font-weight: 500; text-transform: uppercase;
+            padding: 2px 8px; font-size: 10px; font-weight: 500; text-transform: uppercase;
             letter-spacing: 0.03em; background: var(--navy-200); color: var(--navy-600);
         }
         .badge.critical { background: var(--navy-700); color: white; }
@@ -111,28 +111,28 @@
         .badge.moderate { background: var(--navy-400); color: white; }
         .badge.minor { background: var(--navy-300); color: var(--navy-700); }
         .violation-info { flex: 1; min-width: 0; }
-        .violation-title { font-size: 14px; font-weight: 500; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-        .wcag-ref { font-family: 'IBM Plex Mono', monospace; font-size: 14px; color: var(--navy-500); }
-        .violation-desc { font-size: 14px; color: var(--navy-500); line-height: 1.5; }
-        .violation-meta { margin-top: 8px; font-size: 14px; color: var(--navy-400); }
+        .violation-title { font-size: 13px; font-weight: 500; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .wcag-ref { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--navy-500); }
+        .violation-desc { font-size: 12px; color: var(--navy-500); line-height: 1.5; }
+        .violation-meta { margin-top: 8px; font-size: 11px; color: var(--navy-400); }
         .violation-meta a { color: var(--navy-600); text-decoration: none; }
         .violation-meta a:hover { text-decoration: underline; }
         .expand-icon { width: 16px; height: 16px; color: var(--navy-400); transition: transform 0.2s; flex-shrink: 0; }
         .violation-item.expanded .expand-icon { transform: rotate(180deg); }
         .violation-details { display: none; padding: 0 20px 16px 20px; margin-left: 100px; }
         .violation-item.expanded .violation-details { display: block; }
-        .element-list { background: var(--navy-100); padding: 12px; font-size: 14px; }
+        .element-list { background: var(--navy-100); padding: 12px; font-size: 12px; }
         .element-item { padding: 8px 0; border-bottom: 1px solid var(--navy-200); }
         .element-item:last-child { border-bottom: none; }
-        .element-target { font-family: 'IBM Plex Mono', monospace; font-size: 14px; color: var(--navy-600); margin-bottom: 4px; word-break: break-all; }
-        .element-html { font-family: 'IBM Plex Mono', monospace; font-size: 14px; color: var(--navy-500); background: white; padding: 8px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+        .element-target { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--navy-600); margin-bottom: 4px; word-break: break-all; }
+        .element-html { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--navy-500); background: white; padding: 8px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
         .fix-suggestion { margin-top: 12px; padding: 12px; background: white; border-left: 2px solid var(--navy-400); }
-        .fix-suggestion-title { font-size: 14px; font-weight: 500; color: var(--navy-600); margin-bottom: 4px; }
-        .fix-suggestion-text { font-size: 14px; color: var(--navy-500); white-space: pre-wrap; }
+        .fix-suggestion-title { font-size: 11px; font-weight: 500; color: var(--navy-600); margin-bottom: 4px; }
+        .fix-suggestion-text { font-size: 12px; color: var(--navy-500); white-space: pre-wrap; }
         .manual-category { border-bottom: 1px solid var(--navy-200); }
         .manual-category:last-child { border-bottom: none; }
-        .manual-category-header { padding: 14px 20px; background: var(--navy-100); display: flex; align-items: center; justify-content: space-between; font-size: 14px; font-weight: 500; }
-        .manual-category-count { font-size: 14px; color: var(--navy-500); font-weight: 400; }
+        .manual-category-header { padding: 14px 20px; background: var(--navy-100); display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 500; }
+        .manual-category-count { font-size: 11px; color: var(--navy-500); font-weight: 400; }
         .manual-items { padding: 8px 20px; }
         .manual-item { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--navy-200); }
         .manual-item:last-child { border-bottom: none; }
@@ -141,29 +141,29 @@
         .manual-checkbox.checked { background: var(--navy-700); border-color: var(--navy-700); }
         .manual-checkbox.checked::after { content: ''; width: 10px; height: 6px; border-left: 2px solid white; border-bottom: 2px solid white; transform: rotate(-45deg) translateY(-1px); }
         .manual-content { flex: 1; }
-        .manual-text { font-size: 14px; margin-bottom: 4px; }
-        .manual-info { display: flex; gap: 12px; font-size: 14px; color: var(--navy-400); }
+        .manual-text { font-size: 13px; margin-bottom: 4px; }
+        .manual-info { display: flex; gap: 12px; font-size: 11px; color: var(--navy-400); }
         .manual-info a { color: var(--navy-500); text-decoration: none; }
         .manual-info a:hover { text-decoration: underline; }
         .progress-bar { margin-top: 24px; background: white; border: 1px solid var(--navy-200); padding: 16px 20px; }
-        .progress-label { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; color: var(--navy-500); }
+        .progress-label { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px; color: var(--navy-500); }
         .progress-track { height: 4px; background: var(--navy-200); }
         .progress-fill { height: 100%; background: var(--navy-600); transition: width 0.3s; }
-        .empty-state { text-align: center; padding: 48px 24px; color: var(--navy-400); font-size: 14px; }
+        .empty-state { text-align: center; padding: 48px 24px; color: var(--navy-400); font-size: 13px; }
         .error-message { background: white; border: 1px solid var(--navy-300); border-left: 3px solid var(--navy-700); padding: 16px 20px; margin-bottom: 24px; display: none; }
         .error-message.visible { display: block; }
-        .error-message h4 { font-size: 14px; font-weight: 500; margin-bottom: 8px; }
-        .error-message p { font-size: 14px; color: var(--navy-500); }
-        .export-btn { background: none; color: var(--navy-600); border: 1px solid var(--navy-300); padding: 6px 14px; font-size: 14px; cursor: pointer; }
+        .error-message h4 { font-size: 13px; font-weight: 500; margin-bottom: 8px; }
+        .error-message p { font-size: 12px; color: var(--navy-500); }
+        .export-btn { background: none; color: var(--navy-600); border: 1px solid var(--navy-300); padding: 6px 14px; font-size: 12px; cursor: pointer; }
         .export-btn:hover { border-color: var(--navy-500); }
-        .wcag-list-item { padding: 10px 20px; border-bottom: 1px solid var(--navy-200); display: flex; align-items: center; gap: 12px; font-size: 14px; }
+        .wcag-list-item { padding: 10px 20px; border-bottom: 1px solid var(--navy-200); display: flex; align-items: center; gap: 12px; font-size: 13px; }
         .wcag-list-item:last-child { border-bottom: none; }
-        .wcag-principle { padding: 12px 20px; background: var(--navy-100); font-weight: 500; font-size: 14px; border-bottom: 1px solid var(--navy-200); }
-        .auto-indicator { font-size: 14px; color: var(--navy-400); margin-left: auto; }
-        .scan-time { margin-top: 12px; font-size: 14px; color: var(--navy-400); }
+        .wcag-principle { padding: 12px 20px; background: var(--navy-100); font-weight: 500; font-size: 13px; border-bottom: 1px solid var(--navy-200); }
+        .auto-indicator { font-size: 11px; color: var(--navy-400); margin-left: auto; }
+        .scan-time { margin-top: 12px; font-size: 11px; color: var(--navy-400); }
         /* Mode toggle */
         .mode-toggle { display: flex; gap: 0; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--navy-200); }
-        .mode-btn { background: var(--navy-100); border: 1px solid var(--navy-300); padding: 8px 20px; font-size: 14px; font-weight: 500; cursor: pointer; color: var(--navy-500); }
+        .mode-btn { background: var(--navy-100); border: 1px solid var(--navy-300); padding: 8px 20px; font-size: 13px; font-weight: 500; cursor: pointer; color: var(--navy-500); }
         .mode-btn:first-child { border-right: none; }
         .mode-btn:last-child { border-left: none; }
         .mode-btn:hover { background: var(--navy-200); }
@@ -171,31 +171,31 @@
         /* Batch */
         .batch-input { display: none; }
         .batch-input.visible { display: block; }
-        .batch-textarea { width: 100%; min-height: 200px; background: var(--navy-100); border: 1px solid var(--navy-300); padding: 12px 16px; font-size: 14px; font-family: 'IBM Plex Mono', monospace; color: var(--navy-800); resize: vertical; line-height: 1.8; }
+        .batch-textarea { width: 100%; min-height: 200px; background: var(--navy-100); border: 1px solid var(--navy-300); padding: 12px 16px; font-size: 13px; font-family: 'IBM Plex Mono', monospace; color: var(--navy-800); resize: vertical; line-height: 1.8; }
         .batch-textarea:focus { outline: none; border-color: var(--navy-600); }
         .batch-textarea::placeholder { color: var(--navy-400); }
         .batch-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
-        .batch-count { font-size: 14px; color: var(--navy-500); font-family: 'IBM Plex Mono', monospace; }
+        .batch-count { font-size: 12px; color: var(--navy-500); font-family: 'IBM Plex Mono', monospace; }
         .batch-progress { margin-top: 16px; display: none; }
         .batch-progress.visible { display: block; }
-        .batch-progress-label { font-size: 14px; color: var(--navy-500); margin-bottom: 8px; }
+        .batch-progress-label { font-size: 12px; color: var(--navy-500); margin-bottom: 8px; }
         .batch-progress-track { height: 6px; background: var(--navy-200); }
         .batch-progress-fill { height: 100%; background: var(--navy-600); transition: width 0.3s; width: 0%; }
         .batch-results-nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
-        .batch-page-btn { background: white; border: 1px solid var(--navy-200); padding: 6px 14px; font-size: 14px; cursor: pointer; color: var(--navy-600); font-family: 'IBM Plex Mono', monospace; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .batch-page-btn { background: white; border: 1px solid var(--navy-200); padding: 6px 14px; font-size: 12px; cursor: pointer; color: var(--navy-600); font-family: 'IBM Plex Mono', monospace; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .batch-page-btn:hover { border-color: var(--navy-500); }
         .batch-page-btn.active { background: var(--navy-700); border-color: var(--navy-700); color: white; }
         .batch-page-btn.error { border-color: #dc2626; color: #dc2626; }
         .batch-page-btn .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
         .batch-page-btn .status-dot.ok { background: #059669; }
         .batch-page-btn .status-dot.ng { background: #dc2626; }
-        .batch-summary-table { width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 24px; }
+        .batch-summary-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 24px; }
         .batch-summary-table th, .batch-summary-table td { border: 1px solid var(--navy-200); padding: 8px 12px; text-align: center; }
-        .batch-summary-table th { background: var(--navy-100); font-weight: 500; color: var(--navy-600); font-size: 14px; text-transform: uppercase; letter-spacing: 0.03em; }
+        .batch-summary-table th { background: var(--navy-100); font-weight: 500; color: var(--navy-600); font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; }
         .batch-summary-table td { background: white; font-family: 'IBM Plex Mono', monospace; }
         .batch-summary-table td:first-child { text-align: left; font-family: 'IBM Plex Sans JP', sans-serif; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .batch-summary-table tr.has-violations td:first-child { border-left: 3px solid var(--navy-700); }
-        footer { text-align: center; padding: 32px 24px; color: var(--navy-400); font-size: 14px; }
+        footer { text-align: center; padding: 32px 24px; color: var(--navy-400); font-size: 12px; }
         footer a { color: var(--navy-500); text-decoration: none; }
         footer a:hover { text-decoration: underline; }
         /* Login overlay */
@@ -210,7 +210,7 @@
             width: 100%; max-width: 380px; text-align: center;
         }
         .login-box h2 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
-        .login-box p { font-size: 14px; color: var(--navy-500); margin-bottom: 24px; }
+        .login-box p { font-size: 12px; color: var(--navy-500); margin-bottom: 24px; }
         .login-box input {
             width: 100%; background: var(--navy-100); border: 1px solid var(--navy-300);
             padding: 12px 16px; font-size: 14px; text-align: center; margin-bottom: 12px;
@@ -218,10 +218,10 @@
         .login-box input:focus { outline: none; border-color: var(--navy-600); }
         .login-box button {
             width: 100%; background: var(--navy-700); color: white; border: none;
-            padding: 12px; font-size: 14px; font-weight: 500; cursor: pointer;
+            padding: 12px; font-size: 13px; font-weight: 500; cursor: pointer;
         }
         .login-box button:hover { background: var(--navy-800); }
-        .login-error { color: #dc2626; font-size: 14px; margin-bottom: 12px; display: none; }
+        .login-error { color: #dc2626; font-size: 12px; margin-bottom: 12px; display: none; }
         /* Settings modal */
         .settings-overlay {
             position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -236,21 +236,21 @@
         .settings-box h2 { font-size: 16px; font-weight: 600; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; }
         .settings-box h2 button { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--navy-500); }
         .settings-group { margin-bottom: 20px; }
-        .settings-group label { display: block; font-size: 14px; font-weight: 500; color: var(--navy-600); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.03em; }
+        .settings-group label { display: block; font-size: 12px; font-weight: 500; color: var(--navy-600); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.03em; }
         .settings-group input, .settings-group textarea {
             width: 100%; background: var(--navy-100); border: 1px solid var(--navy-300);
-            padding: 10px 14px; font-size: 14px; font-family: 'IBM Plex Mono', monospace;
+            padding: 10px 14px; font-size: 13px; font-family: 'IBM Plex Mono', monospace;
         }
         .settings-group input:focus, .settings-group textarea:focus { outline: none; border-color: var(--navy-600); }
         .settings-group textarea { min-height: 80px; resize: vertical; }
-        .settings-group .hint { font-size: 14px; color: var(--navy-400); margin-top: 4px; }
+        .settings-group .hint { font-size: 11px; color: var(--navy-400); margin-top: 4px; }
         .settings-save-btn {
             width: 100%; background: var(--navy-700); color: white; border: none;
-            padding: 12px; font-size: 14px; font-weight: 500; cursor: pointer; margin-top: 8px;
+            padding: 12px; font-size: 13px; font-weight: 500; cursor: pointer; margin-top: 8px;
         }
         .settings-save-btn:hover { background: var(--navy-800); }
         .settings-save-btn:disabled { background: var(--navy-400); cursor: not-allowed; }
-        .settings-msg { font-size: 14px; margin-top: 12px; text-align: center; }
+        .settings-msg { font-size: 12px; margin-top: 12px; text-align: center; }
         .settings-msg.ok { color: #059669; }
         .settings-msg.ng { color: #dc2626; }
         .settings-gear {
@@ -357,7 +357,7 @@
                 </div>
             </div>
             <details class="basic-auth-section" style="margin-top: 12px;">
-                <summary style="cursor: pointer; font-size: 14px; color: var(--navy-500);">Basic認証（必要な場合）</summary>
+                <summary style="cursor: pointer; font-size: 12px; color: var(--navy-500);">Basic認証（必要な場合）</summary>
                 <div style="display: flex; gap: 12px; margin-top: 8px;">
                     <input type="text" id="basicUser" class="url-input" placeholder="ユーザー名" style="flex: 1;">
                     <input type="password" id="basicPass" class="url-input" placeholder="パスワード" style="flex: 1;">
@@ -413,7 +413,7 @@
                 <div class="summary-item"><div class="count" id="totalCount">0</div><div class="label">合計</div></div>
             </div>
             <div class="scan-time" id="scanTime"></div>
-            <div class="scan-debug" id="scanDebug" style="font-size: 14px; color: var(--navy-400); margin-bottom: 16px; font-family: 'IBM Plex Mono', monospace;"></div>
+            <div class="scan-debug" id="scanDebug" style="font-size: 11px; color: var(--navy-400); margin-bottom: 16px; font-family: 'IBM Plex Mono', monospace;"></div>
             <div style="display:flex;gap:8px;margin-bottom:16px;">
                 <button class="export-btn" id="reportBtn" onclick="exportToSheets()" style="display:none;background:#1a73e8;color:#fff;padding:10px 24px;font-size:14px;font-weight:600;border:none;border-radius:4px;cursor:pointer;">レポート出力（Sheets）</button>
                 <button class="export-btn" id="csvBtn" onclick="exportCSV()" style="display:none;padding:10px 16px;font-size:13px;">CSV出力</button>
@@ -453,14 +453,14 @@
                     <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
                         <div style="color: white;">
                             <div style="font-weight: 600; font-size: 14px;">🤖 AI自動評価</div>
-                            <div style="font-size: 14px; opacity: 0.9;">Gemini AIが手動チェック項目を自動評価します</div>
+                            <div style="font-size: 12px; opacity: 0.9;">Gemini AIが手動チェック項目を自動評価します</div>
                         </div>
-                        <button id="aiEvaluateBtn" onclick="runAIEvaluation()" style="background: white; color: #667eea; border: none; padding: 10px 20px; font-size: 14px; font-weight: 600; cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 8px;">
+                        <button id="aiEvaluateBtn" onclick="runAIEvaluation()" style="background: white; color: #667eea; border: none; padding: 10px 20px; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 8px;">
                             <span class="ai-btn-text">AI評価を実行</span>
                             <span class="ai-spinner" style="display: none; width: 14px; height: 14px; border: 2px solid rgba(102,126,234,0.3); border-top-color: #667eea; border-radius: 50%; animation: spin 0.8s linear infinite;"></span>
                         </button>
                     </div>
-                    <div id="aiStatus" style="margin-top: 12px; font-size: 14px; color: white; display: none;"></div>
+                    <div id="aiStatus" style="margin-top: 12px; font-size: 12px; color: white; display: none;"></div>
                 </div>
                 <div class="section" id="manualSection"></div>
                 <div class="progress-bar">
@@ -1123,7 +1123,7 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                             <div class="manual-checkbox ${checkedItems.has(item.index) ? 'checked' : ''}" data-index="${item.index}" onclick="toggleCheck(${item.index}, this)"></div>
                             <div class="manual-content">
                                 <div class="manual-text">${aiIcon} ${item.text}</div>
-                                ${ai ? `<div class="ai-reason" style="font-size: 14px; color: ${textColor}; margin-top: 4px; padding: 6px 8px; background: ${bgColor}; border-radius: 4px;">
+                                ${ai ? `<div class="ai-reason" style="font-size: 11px; color: ${textColor}; margin-top: 4px; padding: 6px 8px; background: ${bgColor}; border-radius: 4px;">
                                     <strong>AI判定: ${statusLabel}</strong> - ${ai.reason || ''}
                                     ${ai.suggestion ? `<br><strong>💡 改善案:</strong> ${ai.suggestion}` : ''}
                                     <span style="opacity: 0.6; margin-left: 8px;">(確信度: ${Math.round((ai.confidence || 0) * 100)}%)</span>
@@ -1311,15 +1311,6 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 .replace(/<\s*([a-zA-Z][a-zA-Z0-9]*)(\s[^>]*)?\s*\/?>/g, '$1タグ');
         }
 
-        // axe-coreのtagsからWCAGレベルを抽出
-        function getWcagLevelFromTags(tags) {
-            if (!tags) return '';
-            for (const t of tags) { if (/wcag\d*aaa$/.test(t)) return 'AAA'; }
-            for (const t of tags) { if (/wcag\d*aa$/.test(t)) return 'AA'; }
-            for (const t of tags) { if (/wcag\d+a$/.test(t)) return 'A'; }
-            return '';
-        }
-
         function buildReportRows(results, url) {
             const impactJa = { critical: '緊急', serious: '重大', moderate: '中程度', minor: '軽微' };
             const rows = [];
@@ -1334,7 +1325,6 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 rows.push([
                     String(itemNo++),
                     `[自動] ${getJaRuleName(v.id)}（${v.id}）`,
-                    getWcagLevelFromTags(v.tags),
                     '不合格',
                     locationStr,
                     String(v.nodes.length),
@@ -1352,7 +1342,6 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 rows.push([
                     String(itemNo++),
                     `[自動] ${getJaRuleName(v.id)}（${v.id}）`,
-                    getWcagLevelFromTags(v.tags),
                     '判定不能',
                     locationStr,
                     String(v.nodes.length),
@@ -1366,7 +1355,6 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 rows.push([
                     String(itemNo++),
                     `[自動] ${getJaRuleName(v.id)}（${v.id}）`,
-                    getWcagLevelFromTags(v.tags),
                     '合格',
                     '',
                     '',
@@ -1392,6 +1380,7 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                     result = statusMap[ai.status] || '未検証';
                     detail = ai.reason || '';
                     suggestion = ai.suggestion || '';
+                    // 不合格・判定不能のときのみ場所を表示（AIには場所情報なし→理由で代替）
                     if (ai.status === 'fail' || ai.status === 'manual_required') {
                         location = '（AI評価による検出）';
                         count = '—';
@@ -1400,8 +1389,7 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
 
                 rows.push([
                     String(itemNo++),
-                    `[WCAG ${item.ref}] ${item.text}`,
-                    item.level,
+                    `[WCAG ${item.ref} ${item.level}] ${item.text}`,
                     result,
                     location,
                     count,

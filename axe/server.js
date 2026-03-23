@@ -644,7 +644,7 @@ app.post('/api/export-sheets', async (req, res) => {
  * レポート出力 API
  * body: { pages: [{ url, rows, timestamp }] }
  * 1URLあたり1シート。レポート用スプレッドシートを自動検索/作成。
- * 列: 検査項目番号, 検査項目, 適合レベル, 結果, 場所, 検出数, 詳細, 改善案
+ * 列: 検査項目番号, 検査項目, 結果, 場所, 検出数, 詳細, 改善案
  */
 app.post('/api/export-report', async (req, res) => {
   const { pages } = req.body;
@@ -688,68 +688,37 @@ app.post('/api/export-report', async (req, res) => {
     const dateStr = now.toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
     const timeStr = now.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }).replace(/:/g, '');
 
-    // --- 表紙シートを作成 ---
-    const coverTitle = `表紙_${dateStr}_${timeStr}`;
-    console.log(`[Report] 表紙タブ追加: "${coverTitle}"`);
-    const coverRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
-      method: 'POST', headers,
-      body: JSON.stringify({
-        requests: [{ addSheet: { properties: { title: coverTitle } } }]
-      })
-    });
-    const coverResult = await coverRes.json();
-    if (!coverRes.ok) {
-      throw new Error(`表紙タブの追加に失敗: ${coverResult.error?.message || JSON.stringify(coverResult)}`);
-    }
-    const coverSheetId = coverResult.replies[0].addSheet.properties.sheetId;
+    const createdTabs = [];
 
-    // 表紙データ: タイトル + 各URLの情報
-    const coverRows = [
-      ['アクセシビリティ検査レポート', '', '', ''],
-      ['', '', '', ''],
-      ['作成日時', now.toLocaleString('ja-JP'), '', ''],
-      ['検査対象ページ数', String(pages.length), '', ''],
-      ['', '', '', ''],
-      ['No.', '検査対象URL', '検査日時', 'シート名'],
-    ];
-    const createdTabs = [coverTitle];
-
-    // --- 各URLのデータシートを作成 ---
-    for (let idx = 0; idx < pages.length; idx++) {
-      const page = pages[idx];
-
-      // タブ名: URLをそのままシート名に（スプレッドシートの制限に合わせてサニタイズ）
-      let tabName;
+    for (const page of pages) {
+      // タブ名: URLのホスト＋パスから生成
+      let tabLabel;
       try {
         const u = new URL(page.url);
-        tabName = (u.hostname + u.pathname).replace(/\/$/,'');
-      } catch { tabName = page.url; }
-      // シート名の制限: 100文字以内、禁止文字を置換
-      tabName = tabName.replace(/[\\/?*\[\]:]/g, '_').substring(0, 95);
-      // 同名タブ回避のためインデックス付加
-      if (pages.length > 1) {
-        tabName = `${idx + 1}_${tabName}`;
-      }
+        tabLabel = (u.hostname + u.pathname).replace(/[\/\\?*\[\]]/g, '_').substring(0, 60);
+      } catch { tabLabel = page.url.substring(0, 60); }
+      const sheetTitle = `${tabLabel}_${dateStr}_${timeStr}`;
 
+      // ヘッダー行（見出し用の情報行 + カラムヘッダー）
       const inspectionTime = page.timestamp
         ? new Date(page.timestamp).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
         : now.toLocaleString('ja-JP');
 
-      // 表紙にURL情報を追加
-      coverRows.push([String(idx + 1), page.url, inspectionTime, tabName]);
-
-      // データシート: ヘッダー行 + データ行のみ
       const sheetRows = [
-        ['検査項目番号', '検査項目', '適合レベル', '結果', '場所', '検出数', '詳細', '改善案'],
+        ['アクセシビリティ検査レポート', '', '', '', '', '', ''],
+        ['検査対象URL', page.url, '', '', '', '', ''],
+        ['検査日時', inspectionTime, '', '', '', '', ''],
+        ['', '', '', '', '', '', ''],
+        ['検査項目番号', '検査項目', '結果', '場所', '検出数', '詳細', '改善案'],
         ...page.rows
       ];
 
       // タブ追加
-      console.log(`[Report] データタブ追加: "${tabName}"`);
+      console.log(`[Report] タブ追加: "${sheetTitle}" → ${spreadsheetId}`);
       const addSheetRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
         method: 'POST', headers,
         body: JSON.stringify({
-          requests: [{ addSheet: { properties: { title: tabName } } }]
+          requests: [{ addSheet: { properties: { title: sheetTitle } } }]
         })
       });
       const addSheetResult = await addSheetRes.json();
@@ -759,7 +728,7 @@ app.post('/api/export-report', async (req, res) => {
       const newSheetId = addSheetResult.replies[0].addSheet.properties.sheetId;
 
       // データ書き込み
-      const range = `'${tabName}'!A1`;
+      const range = `'${sheetTitle}'!A1`;
       const writeRes = await fetch(
         `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
         { method: 'PUT', headers, body: JSON.stringify({ values: sheetRows }) }
@@ -769,11 +738,27 @@ app.post('/api/export-report', async (req, res) => {
         throw new Error(`データ書き込み失敗: ${writeResult.error.message}`);
       }
 
-      // データシートの書式設定
+      // 見出しの書式設定（太字、背景色など）
       const formatRequests = [
-        // 1行目: カラムヘッダー（太字、背景色）
+        // 1行目: レポートタイトル（太字、大きめフォント、背景色）
         { repeatCell: {
-          range: { sheetId: newSheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 8 },
+          range: { sheetId: newSheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 7 },
+          cell: { userEnteredFormat: {
+            textFormat: { bold: true, fontSize: 14 },
+            backgroundColor: { red: 0.102, green: 0.451, blue: 0.91 },
+            textFormat: { bold: true, fontSize: 14, foregroundColor: { red: 1, green: 1, blue: 1 } }
+          }},
+          fields: 'userEnteredFormat(textFormat,backgroundColor)'
+        }},
+        // 2-3行目: メタ情報（太字ラベル）
+        { repeatCell: {
+          range: { sheetId: newSheetId, startRowIndex: 1, endRowIndex: 3, startColumnIndex: 0, endColumnIndex: 1 },
+          cell: { userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.91, green: 0.92, blue: 0.96 } }},
+          fields: 'userEnteredFormat(textFormat,backgroundColor)'
+        }},
+        // 5行目: カラムヘッダー（太字、背景色）
+        { repeatCell: {
+          range: { sheetId: newSheetId, startRowIndex: 4, endRowIndex: 5, startColumnIndex: 0, endColumnIndex: 7 },
           cell: { userEnteredFormat: {
             textFormat: { bold: true, fontSize: 10, foregroundColor: { red: 1, green: 1, blue: 1 } },
             backgroundColor: { red: 0.2, green: 0.2, blue: 0.2 },
@@ -781,14 +766,14 @@ app.post('/api/export-report', async (req, res) => {
           }},
           fields: 'userEnteredFormat(textFormat,backgroundColor,horizontalAlignment)'
         }},
-        // 列幅設定（8列）
+        // 列幅設定
         { updateDimensionProperties: {
           range: { sheetId: newSheetId, dimension: 'COLUMNS', startIndex: 0, endIndex: 1 },
           properties: { pixelSize: 60 }, fields: 'pixelSize'
         }},
         { updateDimensionProperties: {
           range: { sheetId: newSheetId, dimension: 'COLUMNS', startIndex: 1, endIndex: 2 },
-          properties: { pixelSize: 280 }, fields: 'pixelSize'
+          properties: { pixelSize: 300 }, fields: 'pixelSize'
         }},
         { updateDimensionProperties: {
           range: { sheetId: newSheetId, dimension: 'COLUMNS', startIndex: 2, endIndex: 3 },
@@ -796,55 +781,78 @@ app.post('/api/export-report', async (req, res) => {
         }},
         { updateDimensionProperties: {
           range: { sheetId: newSheetId, dimension: 'COLUMNS', startIndex: 3, endIndex: 4 },
-          properties: { pixelSize: 80 }, fields: 'pixelSize'
-        }},
-        { updateDimensionProperties: {
-          range: { sheetId: newSheetId, dimension: 'COLUMNS', startIndex: 4, endIndex: 5 },
           properties: { pixelSize: 250 }, fields: 'pixelSize'
         }},
         { updateDimensionProperties: {
-          range: { sheetId: newSheetId, dimension: 'COLUMNS', startIndex: 5, endIndex: 6 },
+          range: { sheetId: newSheetId, dimension: 'COLUMNS', startIndex: 4, endIndex: 5 },
           properties: { pixelSize: 60 }, fields: 'pixelSize'
         }},
         { updateDimensionProperties: {
-          range: { sheetId: newSheetId, dimension: 'COLUMNS', startIndex: 6, endIndex: 7 },
+          range: { sheetId: newSheetId, dimension: 'COLUMNS', startIndex: 5, endIndex: 6 },
           properties: { pixelSize: 350 }, fields: 'pixelSize'
         }},
         { updateDimensionProperties: {
-          range: { sheetId: newSheetId, dimension: 'COLUMNS', startIndex: 7, endIndex: 8 },
+          range: { sheetId: newSheetId, dimension: 'COLUMNS', startIndex: 6, endIndex: 7 },
           properties: { pixelSize: 300 }, fields: 'pixelSize'
         }},
-        // 結果列（col 3）の条件付き書式
-        { addConditionalFormatRule: { rule: {
-          ranges: [{ sheetId: newSheetId, startRowIndex: 1, startColumnIndex: 3, endColumnIndex: 4 }],
-          booleanRule: { condition: { type: 'TEXT_EQ', values: [{ userEnteredValue: '不合格' }] },
-            format: { backgroundColor: { red: 0.96, green: 0.8, blue: 0.8 }, textFormat: { foregroundColor: { red: 0.7, green: 0, blue: 0 }, bold: true } } }
-        }, index: 0 }},
-        { addConditionalFormatRule: { rule: {
-          ranges: [{ sheetId: newSheetId, startRowIndex: 1, startColumnIndex: 3, endColumnIndex: 4 }],
-          booleanRule: { condition: { type: 'TEXT_EQ', values: [{ userEnteredValue: '合格' }] },
-            format: { backgroundColor: { red: 0.8, green: 0.94, blue: 0.8 }, textFormat: { foregroundColor: { red: 0, green: 0.4, blue: 0 }, bold: true } } }
-        }, index: 1 }},
-        { addConditionalFormatRule: { rule: {
-          ranges: [{ sheetId: newSheetId, startRowIndex: 1, startColumnIndex: 3, endColumnIndex: 4 }],
-          booleanRule: { condition: { type: 'TEXT_EQ', values: [{ userEnteredValue: '判定不能' }] },
-            format: { backgroundColor: { red: 1, green: 0.95, blue: 0.8 }, textFormat: { foregroundColor: { red: 0.6, green: 0.4, blue: 0 }, bold: true } } }
-        }, index: 2 }},
-        { addConditionalFormatRule: { rule: {
-          ranges: [{ sheetId: newSheetId, startRowIndex: 1, startColumnIndex: 3, endColumnIndex: 4 }],
-          booleanRule: { condition: { type: 'TEXT_EQ', values: [{ userEnteredValue: '未検証' }] },
-            format: { backgroundColor: { red: 0.93, green: 0.93, blue: 0.93 }, textFormat: { foregroundColor: { red: 0.4, green: 0.4, blue: 0.4 } } }
-          }
-        }, index: 3 }},
-        { addConditionalFormatRule: { rule: {
-          ranges: [{ sheetId: newSheetId, startRowIndex: 1, startColumnIndex: 3, endColumnIndex: 4 }],
-          booleanRule: { condition: { type: 'TEXT_EQ', values: [{ userEnteredValue: '該当なし' }] },
-            format: { backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 }, textFormat: { foregroundColor: { red: 0.6, green: 0.6, blue: 0.6 } } }
-          }
-        }, index: 4 }},
-        // フリーズ（ヘッダー行を固定）
+        // 結果列の条件付き書式：不合格=赤背景
+        { addConditionalFormatRule: {
+          rule: {
+            ranges: [{ sheetId: newSheetId, startRowIndex: 5, startColumnIndex: 2, endColumnIndex: 3 }],
+            booleanRule: {
+              condition: { type: 'TEXT_EQ', values: [{ userEnteredValue: '不合格' }] },
+              format: { backgroundColor: { red: 0.96, green: 0.8, blue: 0.8 }, textFormat: { foregroundColor: { red: 0.7, green: 0, blue: 0 }, bold: true } }
+            }
+          }, index: 0
+        }},
+        // 結果列の条件付き書式：合格=緑背景
+        { addConditionalFormatRule: {
+          rule: {
+            ranges: [{ sheetId: newSheetId, startRowIndex: 5, startColumnIndex: 2, endColumnIndex: 3 }],
+            booleanRule: {
+              condition: { type: 'TEXT_EQ', values: [{ userEnteredValue: '合格' }] },
+              format: { backgroundColor: { red: 0.8, green: 0.94, blue: 0.8 }, textFormat: { foregroundColor: { red: 0, green: 0.4, blue: 0 }, bold: true } }
+            }
+          }, index: 1
+        }},
+        // 結果列の条件付き書式：判定不能=黄背景
+        { addConditionalFormatRule: {
+          rule: {
+            ranges: [{ sheetId: newSheetId, startRowIndex: 5, startColumnIndex: 2, endColumnIndex: 3 }],
+            booleanRule: {
+              condition: { type: 'TEXT_EQ', values: [{ userEnteredValue: '判定不能' }] },
+              format: { backgroundColor: { red: 1, green: 0.95, blue: 0.8 }, textFormat: { foregroundColor: { red: 0.6, green: 0.4, blue: 0 }, bold: true } }
+            }
+          }, index: 2
+        }},
+        // 結果列の条件付き書式：未検証=グレー背景
+        { addConditionalFormatRule: {
+          rule: {
+            ranges: [{ sheetId: newSheetId, startRowIndex: 5, startColumnIndex: 2, endColumnIndex: 3 }],
+            booleanRule: {
+              condition: { type: 'TEXT_EQ', values: [{ userEnteredValue: '未検証' }] },
+              format: { backgroundColor: { red: 0.93, green: 0.93, blue: 0.93 }, textFormat: { foregroundColor: { red: 0.4, green: 0.4, blue: 0.4 } } }
+            }
+          }, index: 3
+        }},
+        // 該当なし=薄いグレー
+        { addConditionalFormatRule: {
+          rule: {
+            ranges: [{ sheetId: newSheetId, startRowIndex: 5, startColumnIndex: 2, endColumnIndex: 3 }],
+            booleanRule: {
+              condition: { type: 'TEXT_EQ', values: [{ userEnteredValue: '該当なし' }] },
+              format: { backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 }, textFormat: { foregroundColor: { red: 0.6, green: 0.6, blue: 0.6 } } }
+            }
+          }, index: 4
+        }},
+        // タイトル行をマージ
+        { mergeCells: {
+          range: { sheetId: newSheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 7 },
+          mergeType: 'MERGE_ALL'
+        }},
+        // フリーズ（ヘッダー行まで固定）
         { updateSheetProperties: {
-          properties: { sheetId: newSheetId, gridProperties: { frozenRowCount: 1 } },
+          properties: { sheetId: newSheetId, gridProperties: { frozenRowCount: 5 } },
           fields: 'gridProperties.frozenRowCount'
         }}
       ];
@@ -854,70 +862,8 @@ app.post('/api/export-report', async (req, res) => {
         body: JSON.stringify({ requests: formatRequests })
       });
 
-      createdTabs.push(tabName);
+      createdTabs.push(sheetTitle);
     }
-
-    // --- 表紙にデータ書き込み ---
-    const coverRange = `'${coverTitle}'!A1`;
-    await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(coverRange)}?valueInputOption=USER_ENTERED`,
-      { method: 'PUT', headers, body: JSON.stringify({ values: coverRows }) }
-    );
-
-    // 表紙の書式設定
-    const coverFormatReqs = [
-      // タイトル行
-      { repeatCell: {
-        range: { sheetId: coverSheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 4 },
-        cell: { userEnteredFormat: {
-          textFormat: { bold: true, fontSize: 16, foregroundColor: { red: 1, green: 1, blue: 1 } },
-          backgroundColor: { red: 0.102, green: 0.451, blue: 0.91 }
-        }},
-        fields: 'userEnteredFormat(textFormat,backgroundColor)'
-      }},
-      // タイトル行マージ
-      { mergeCells: {
-        range: { sheetId: coverSheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 4 },
-        mergeType: 'MERGE_ALL'
-      }},
-      // メタ情報ラベル（3-4行目）
-      { repeatCell: {
-        range: { sheetId: coverSheetId, startRowIndex: 2, endRowIndex: 4, startColumnIndex: 0, endColumnIndex: 1 },
-        cell: { userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.91, green: 0.92, blue: 0.96 } }},
-        fields: 'userEnteredFormat(textFormat,backgroundColor)'
-      }},
-      // URL一覧ヘッダー（6行目）
-      { repeatCell: {
-        range: { sheetId: coverSheetId, startRowIndex: 5, endRowIndex: 6, startColumnIndex: 0, endColumnIndex: 4 },
-        cell: { userEnteredFormat: {
-          textFormat: { bold: true, fontSize: 10, foregroundColor: { red: 1, green: 1, blue: 1 } },
-          backgroundColor: { red: 0.2, green: 0.2, blue: 0.2 },
-          horizontalAlignment: 'CENTER'
-        }},
-        fields: 'userEnteredFormat(textFormat,backgroundColor,horizontalAlignment)'
-      }},
-      // 列幅
-      { updateDimensionProperties: {
-        range: { sheetId: coverSheetId, dimension: 'COLUMNS', startIndex: 0, endIndex: 1 },
-        properties: { pixelSize: 50 }, fields: 'pixelSize'
-      }},
-      { updateDimensionProperties: {
-        range: { sheetId: coverSheetId, dimension: 'COLUMNS', startIndex: 1, endIndex: 2 },
-        properties: { pixelSize: 400 }, fields: 'pixelSize'
-      }},
-      { updateDimensionProperties: {
-        range: { sheetId: coverSheetId, dimension: 'COLUMNS', startIndex: 2, endIndex: 3 },
-        properties: { pixelSize: 180 }, fields: 'pixelSize'
-      }},
-      { updateDimensionProperties: {
-        range: { sheetId: coverSheetId, dimension: 'COLUMNS', startIndex: 3, endIndex: 4 },
-        properties: { pixelSize: 250 }, fields: 'pixelSize'
-      }}
-    ];
-    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
-      method: 'POST', headers,
-      body: JSON.stringify({ requests: coverFormatReqs })
-    });
 
     const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
     console.log(`[Report] レポート出力完了: ${url} (${createdTabs.length}タブ)`);

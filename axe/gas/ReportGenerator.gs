@@ -1,21 +1,41 @@
 /**
- * アクセシビリティ検査レポート → Google Docs「達成基準リスト」生成 GAS
+ * アクセシビリティ検査レポート → Google Docs 報告書 生成 GAS
  *
  * ■ 設定手順
  *   1. レポートのスプレッドシートを開く
  *   2. 拡張機能 → Apps Script
- *   3. コード.gs の中身を全削除してこのファイルを貼り付け保存
- *   4. プロジェクトの設定（歯車）→「エディタで appsscript.json を表示」にチェック
- *   5. appsscript.json を開き中身を差し替えて保存
+ *   3. エディタ左のファイル一覧で「コード.gs」を選択し、中身を全て削除してこのファイルを貼り付け
+ *   4. 左のファイル一覧に appsscript.json が表示されていなければ
+ *      プロジェクトの設定（歯車アイコン）→「エディタで appsscript.json マニフェスト ファイルを表示する」にチェック
+ *   5. appsscript.json を開き、中身を以下に差し替えて保存:
+ *      {
+ *        "timeZone": "Asia/Tokyo",
+ *        "dependencies": {},
+ *        "exceptionLogging": "STACKDRIVER",
+ *        "runtimeVersion": "V8",
+ *        "oauthScopes": [
+ *          "https://www.googleapis.com/auth/spreadsheets.readonly",
+ *          "https://www.googleapis.com/auth/documents",
+ *          "https://www.googleapis.com/auth/script.container.ui"
+ *        ]
+ *      }
  *   6. スプレッドシートをリロード → メニュー「報告書」が表示される
+ *   7. 「報告書 ▸ Google Docs 報告書を生成」をクリック
+ *   8. 初回は承認ダイアログが出るので「許可」
  *
- * ■ スプレッドシート構成（8列）
+ * ■ スプレッドシートの想定構成（検査ツールが自動生成）
+ *   各タブ = 1URL分の検査結果
  *   行1: アクセシビリティ検査レポート（タイトル、セル結合）
- *   行2: 検査対象URL | URL
- *   行3: 検査日時     | 日時
+ *   行2: 検査対象URL | https://example.com
+ *   行3: 検査日時     | 2026/3/13 15:30:00
  *   行4: （空行）
- *   行5: 検査項目番号 | 検査項目 | 適合レベル | 結果 | 場所 | 検出数 | 詳細 | 改善案
+ *   行5: 検査項目番号 | 検査項目 | 結果 | 場所 | 検出数 | 詳細 | 改善案
  *   行6～: データ行
+ *
+ * ■ 必要な権限（最小限）
+ *   - spreadsheets.readonly : シートデータの読み取り
+ *   - documents             : Docs の作成・書き込み
+ *   - script.container.ui   : ダイアログ表示
  */
 
 /* ============================================================
@@ -35,15 +55,15 @@ function showReportDialog() {
   var html = HtmlService.createHtmlOutput([
     '<style>',
     'body{font-family:"Noto Sans JP","Hiragino Sans",sans-serif;padding:16px;color:#333}',
-    'label{display:block;margin-top:14px;font-weight:600;font-size:14px}',
+    'label{display:block;margin-top:14px;font-weight:600;font-size:13px}',
     'input{width:100%;padding:7px 10px;margin-top:4px;border:1px solid #ccc;border-radius:4px;font-size:14px;box-sizing:border-box}',
     '.chips{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}',
-    '.chip{padding:5px 12px;border:1px solid #1a73e8;border-radius:20px;font-size:14px;cursor:pointer;background:#fff;color:#1a73e8;user-select:none;transition:.15s}',
+    '.chip{padding:5px 12px;border:1px solid #1a73e8;border-radius:20px;font-size:12px;cursor:pointer;background:#fff;color:#1a73e8;user-select:none;transition:.15s}',
     '.chip.on{background:#1a73e8;color:#fff}',
     '.foot{margin-top:22px;display:flex;align-items:center;gap:12px;justify-content:flex-end}',
     '.btn{padding:9px 28px;border:none;border-radius:4px;cursor:pointer;font-size:14px;font-weight:600}',
     '.btn-p{background:#1a73e8;color:#fff}.btn-p:hover{background:#1557b0}.btn-p:disabled{background:#94bef8;cursor:wait}',
-    '#msg{font-size:14px;color:#666;margin-top:10px;min-height:18px}',
+    '#msg{font-size:13px;color:#666;margin-top:10px;min-height:18px}',
     '</style>',
 
     '<label>社名 / 組織名</label>',
@@ -56,7 +76,7 @@ function showReportDialog() {
     '<input id="v_date" type="date">',
 
     '<label>出力対象タブ（クリックで切替）</label>',
-    '<div id="chips" class="chips"><span style="color:#999;font-size:14px">読込中...</span></div>',
+    '<div id="chips" class="chips"><span style="color:#999;font-size:12px">読込中...</span></div>',
 
     '<div class="foot"><button id="go" class="btn btn-p" onclick="go()">報告書を生成</button></div>',
     '<div id="msg"></div>',
@@ -66,20 +86,14 @@ function showReportDialog() {
     'var N=new Date();',
     'document.getElementById("v_date").value=N.getFullYear()+"-"+P(N.getMonth()+1)+"-"+P(N.getDate());',
 
-    'google.script.run',
-    '  .withSuccessHandler(function(list){',
-    '    var el=document.getElementById("chips");el.innerHTML="";',
-    '    if(!list||!list.length){el.innerHTML="<span style=color:#d32f2f>対象タブなし（検査結果のシートがありません）</span>";return}',
-    '    list.forEach(function(t){',
-    '      var c=document.createElement("span");c.className="chip on";c.textContent=t;c.dataset.n=t;',
-    '      c.onclick=function(){this.classList.toggle("on")};el.appendChild(c);',
-    '    });',
-    '  })',
-    '  .withFailureHandler(function(e){',
-    '    var el=document.getElementById("chips");',
-    '    el.innerHTML="<span style=color:#d32f2f>読み込みエラー: "+e.message+"<br>スコープの再承認が必要な場合があります。Apps ScriptエディタからonOpenを手動実行してください。</span>";',
-    '  })',
-    '  .getReportTabs();',
+    'google.script.run.withSuccessHandler(function(list){',
+    '  var el=document.getElementById("chips");el.innerHTML="";',
+    '  if(!list.length){el.innerHTML="<span style=color:#d32f2f>対象タブなし</span>";return}',
+    '  list.forEach(function(t){',
+    '    var c=document.createElement("span");c.className="chip on";c.textContent=t;c.dataset.n=t;',
+    '    c.onclick=function(){this.classList.toggle("on")};el.appendChild(c);',
+    '  });',
+    '}).getReportTabs();',
 
     'function go(){',
     '  var b=document.getElementById("go"),m=document.getElementById("msg");',
@@ -99,248 +113,136 @@ function showReportDialog() {
 }
 
 /* ============================================================
-   対象タブ一覧
+   対象タブ一覧（ダイアログから呼ばれる）
    ============================================================ */
 function getReportTabs() {
   var out = [];
-  var sheets = SpreadsheetApp.getActiveSpreadsheet().getSheets();
-  for (var i = 0; i < sheets.length; i++) {
-    var name = sheets[i].getName();
-    // 表紙シート・デフォルトシートは除外
-    if (/^表紙/.test(name) || name === 'シート1' || name === 'Sheet1') continue;
-    try {
-      var v = sheets[i].getDataRange().getValues();
-      if (!v || v.length < 2) continue;
-      // 新形式: 1行目がヘッダー
-      if (String(v[0][0]).trim() === '検査項目番号') { out.push(name); continue; }
-      // 旧形式: 5行目がヘッダー
-      if (v.length >= 6 && String(v[4][0]).trim() === '検査項目番号') { out.push(name); continue; }
-    } catch (e) {
-      // 個別シートのエラーはスキップ
-      continue;
-    }
-  }
+  SpreadsheetApp.getActiveSpreadsheet().getSheets().forEach(function(s) {
+    var v = s.getDataRange().getValues();
+    if (v.length >= 6 && String(v[4][0]).trim() === '検査項目番号') out.push(s.getName());
+  });
   return out;
 }
 
 /* ============================================================
-   メイン: 報告書生成（達成基準リスト形式）
+   メイン : 報告書生成
    ============================================================ */
 function generateReport(info) {
   var ss    = SpreadsheetApp.getActiveSpreadsheet();
   var pages = readPages_(ss, info.tabs || []);
   if (!pages.length) throw new Error('対象タブが見つかりません');
 
+  /* --- Docs 作成 --- */
   var dateLabel = info.createdDate || Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
-  var docTitle  = '達成基準リスト' +
+  var docTitle  = 'アクセシビリティ検査報告書' +
                   (info.company ? ' - ' + info.company : '') +
                   '（' + dateLabel + '）';
   var doc  = DocumentApp.create(docTitle);
   var body = doc.getBody();
   body.clear();
 
-  // デフォルトスタイル
-  var defaultStyle = {};
-  defaultStyle[DocumentApp.Attribute.FONT_SIZE] = 10;
-  defaultStyle[DocumentApp.Attribute.FONT_FAMILY] = 'Arial';
-  body.setAttributes(defaultStyle);
+  /* ======================== 表紙 ======================== */
+  body.appendParagraph('アクセシビリティ検査報告書')
+    .setHeading(DocumentApp.ParagraphHeading.HEADING1)
+    .setAlignment(DocumentApp.HorizontalAlignment.CENTER)
+    .editAsText().setBold(true).setFontSize(22).setForegroundColor('#1a73e8');
 
-  // ページごとに達成基準リストを生成
-  pages.forEach(function(pg, pageIdx) {
-    if (pageIdx > 0) body.appendPageBreak();
+  body.appendParagraph('').setSpacingAfter(4);
 
-    /* ======================== タイトル ======================== */
-    body.appendParagraph('達成基準リスト')
-      .setHeading(DocumentApp.ParagraphHeading.HEADING1)
-      .setAlignment(DocumentApp.HorizontalAlignment.CENTER)
-      .editAsText().setBold(true).setFontSize(18).setForegroundColor('#000');
+  var meta = body.appendTable([
+    ['社名 / 組織名', info.company  || ''],
+    ['作成者',         info.author   || ''],
+    ['作成日',         fmtDate_(info.createdDate)],
+    ['検査対象ページ', String(pages.length) + ' ページ']
+  ]);
+  styleMeta_(meta);
 
-    body.appendParagraph('').setSpacingAfter(2);
+  /* ===================== 総合サマリー ===================== */
+  body.appendParagraph('').setSpacingAfter(2);
+  heading_(body, '総合サマリー');
 
-    /* ======================== 説明文 ======================== */
-    body.appendParagraph('「結果」の欄は、検証の結果、適合している達成基準を「○」、適合していない達成基準を「×」としています。')
-      .editAsText().setFontSize(9).setForegroundColor('#333');
-    body.appendParagraph('「△」はAI評価の確信度が低い項目（要目視確認）、「ー」は未検証の項目です。')
-      .editAsText().setFontSize(9).setForegroundColor('#333');
+  var ts = totalSummary_(pages);
+  var sm = body.appendTable([
+    ['合格',                                  String(ts.pass)],
+    ['不合格',                                String(ts.fail)],
+    ['判定不能（要ヒューマンチェック）',      String(ts.unknown)],
+    ['該当なし',                              String(ts.na)],
+    ['未検証（要ヒューマンチェック）',        String(ts.unverified)],
+    ['検査項目 合計',                         String(ts.total)]
+  ]);
+  styleMeta_(sm);
 
-    /* ======================== 右上: 日付・社名 ======================== */
-    var metaLines = [];
-    metaLines.push('検査日時: ' + pg.time);
-    metaLines.push(fmtDate_(info.createdDate));
-    if (info.company) metaLines.push(info.company);
-    if (info.author)  metaLines.push('作成者: ' + info.author);
+  // サマリーの値セルに色を付ける
+  colorCell_(sm, 0, 1, '#2e7d32'); // 合格=緑
+  colorCell_(sm, 1, 1, '#d32f2f'); // 不合格=赤
+  colorCell_(sm, 2, 1, '#e65100'); // 判定不能=橙
+  colorCell_(sm, 4, 1, '#757575'); // 未検証=灰
 
-    var metaPara = body.appendParagraph(metaLines.join('\n'));
-    metaPara.setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
-    metaPara.editAsText().setFontSize(9).setForegroundColor('#333');
-
-    /* ======================== 検査対象URL ======================== */
-    body.appendParagraph('検査対象: ' + pg.url)
-      .editAsText().setFontSize(9).setForegroundColor('#1a73e8').setUnderline(true);
-
-    body.appendParagraph('').setSpacingAfter(2);
-
-    /* ======================== スコア表示 ======================== */
-    var score = calcScore_(pg);
-    var scoreText = '項目達成率: ' + score.rate + '%（' +
-                    score.pass + ' / ' + score.applicable + ' 項目適合）';
-    var scorePara = body.appendParagraph(scoreText);
-    scorePara.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
-    var scoreStyle = scorePara.editAsText();
-    scoreStyle.setBold(true).setFontSize(14);
-    if (score.rate >= 90) {
-      scoreStyle.setForegroundColor('#2e7d32');
-    } else if (score.rate >= 70) {
-      scoreStyle.setForegroundColor('#e65100');
-    } else {
-      scoreStyle.setForegroundColor('#d32f2f');
-    }
-
-    /* サマリー行 */
-    body.appendParagraph(
-      '合格: ' + score.pass + '  不合格: ' + score.fail +
-      '  判定不能: ' + score.unknown + '  該当なし: ' + score.na +
-      '  未検証: ' + score.unverified + '  合計: ' + score.total
-    ).editAsText().setFontSize(9).setBold(true).setForegroundColor('#555');
-
-    body.appendParagraph('').setSpacingAfter(4);
-
-    /* ======================== 達成基準テーブル ======================== */
-    var headerRow = ['No.', '達成基準', '適合レベル', '適用', '結果', '注記'];
-    var tableData = [headerRow];
-
-    pg.rows.forEach(function(r) {
-      var applicable = mapApplicable_(r.result);
-      var resultMark = mapResult_(r.result);
-      var note = buildNote_(r);
-      tableData.push([r.no, r.item, r.level, applicable, resultMark, note]);
-    });
-
-    var table = body.appendTable(tableData);
-
-    // ヘッダー行スタイル
-    var hdr = table.getRow(0);
-    for (var h = 0; h < hdr.getNumCells(); h++) {
-      hdr.getCell(h).setBackgroundColor('#333366');
-      hdr.getCell(h).editAsText().setBold(true).setFontSize(9).setForegroundColor('#fff');
-    }
-
-    // 列幅
-    table.getRow(0).getCell(0).setWidth(40);   // No.
-    table.getRow(0).getCell(1).setWidth(200);  // 達成基準
-    table.getRow(0).getCell(2).setWidth(60);   // 適合レベル
-    table.getRow(0).getCell(3).setWidth(40);   // 適用
-    table.getRow(0).getCell(4).setWidth(40);   // 結果
-    table.getRow(0).getCell(5).setWidth(150);  // 注記
-
-    // データ行スタイル
-    for (var i = 1; i < table.getNumRows(); i++) {
-      var row = table.getRow(i);
-      for (var c = 0; c < row.getNumCells(); c++) {
-        row.getCell(c).editAsText().setFontSize(9);
-      }
-
-      // 適用列・結果列のセンタリング
-      row.getCell(2).setAttributes(centerAttr_());
-      row.getCell(3).setAttributes(centerAttr_());
-      row.getCell(4).setAttributes(centerAttr_());
-
-      // 結果セルの色付け
-      var resultText = row.getCell(4).getText().trim();
-      if (resultText === '×') {
-        row.getCell(4).setBackgroundColor('#fff2cc'); // 黄色背景（不合格）
-        row.getCell(4).editAsText().setForegroundColor('#d32f2f').setBold(true);
-      } else if (resultText === '△') {
-        row.getCell(4).setBackgroundColor('#fce4ec'); // 薄ピンク（判定不能）
-        row.getCell(4).editAsText().setForegroundColor('#e65100').setBold(true);
-      } else if (resultText === '○') {
-        row.getCell(4).editAsText().setForegroundColor('#333');
-      }
-
-      // 交互背景色（結果セル以外）
-      if (i % 2 === 0) {
-        for (var c2 = 0; c2 < row.getNumCells(); c2++) {
-          if (c2 !== 4 || (resultText !== '×' && resultText !== '△')) {
-            row.getCell(c2).setBackgroundColor('#f8f8f8');
-          }
-        }
-      }
-    }
-
-    table.setBorderWidth(1).setBorderColor('#999');
-  });
-
-  /* ======================== 全ページ総合スコア ======================== */
-  if (pages.length > 1) {
+  /* ============== ページごとの結果 ============== */
+  pages.forEach(function(pg, idx) {
+    body.appendParagraph('');
     body.appendPageBreak();
-    body.appendParagraph('総合達成基準スコア')
-      .setHeading(DocumentApp.ParagraphHeading.HEADING1)
-      .setAlignment(DocumentApp.HorizontalAlignment.CENTER)
-      .editAsText().setBold(true).setFontSize(16).setForegroundColor('#333366');
 
-    body.appendParagraph('').setSpacingAfter(4);
+    heading_(body, (idx + 1) + '. ' + pg.url);
+    body.appendParagraph('検査日時 : ' + pg.time)
+      .editAsText().setFontSize(10).setForegroundColor('#666').setItalic(true);
 
-    var totalScore = {pass:0,fail:0,unknown:0,na:0,unverified:0,total:0,applicable:0};
-    pages.forEach(function(pg) {
-      var s = calcScore_(pg);
-      totalScore.pass += s.pass;
-      totalScore.fail += s.fail;
-      totalScore.unknown += s.unknown;
-      totalScore.na += s.na;
-      totalScore.unverified += s.unverified;
-      totalScore.total += s.total;
-      totalScore.applicable += s.applicable;
-    });
-    var totalRate = totalScore.applicable > 0 ? Math.round(totalScore.pass / totalScore.applicable * 100) : 0;
+    /* ページ小計 */
+    var ps = pg.summary;
+    body.appendParagraph(
+      '合格 ' + ps.pass + ' ／ 不合格 ' + ps.fail +
+      ' ／ 判定不能 ' + ps.unknown + ' ／ 該当なし ' + ps.na +
+      ' ／ 未検証 ' + ps.unverified
+    ).editAsText().setFontSize(10).setBold(true);
 
-    var totalScorePara = body.appendParagraph(totalRate + '%');
-    totalScorePara.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
-    var tsStyle = totalScorePara.editAsText();
-    tsStyle.setBold(true).setFontSize(36);
-    if (totalRate >= 90) { tsStyle.setForegroundColor('#2e7d32'); }
-    else if (totalRate >= 70) { tsStyle.setForegroundColor('#e65100'); }
-    else { tsStyle.setForegroundColor('#d32f2f'); }
-
-    body.appendParagraph(totalScore.pass + ' / ' + totalScore.applicable + ' 項目適合')
-      .setAlignment(DocumentApp.HorizontalAlignment.CENTER)
-      .editAsText().setFontSize(12).setForegroundColor('#555');
-
-    body.appendParagraph('').setSpacingAfter(4);
-
-    // ページ別サマリーテーブル
-    var sumData = [['ページ', '達成率', '合格', '不合格', '判定不能', '該当なし', '未検証']];
-    pages.forEach(function(pg, idx) {
-      var s = calcScore_(pg);
-      sumData.push([
-        cut_(pg.url, 50),
-        s.rate + '%',
-        String(s.pass),
-        String(s.fail),
-        String(s.unknown),
-        String(s.na),
-        String(s.unverified)
-      ]);
-    });
-    var sumTable = body.appendTable(sumData);
-    var sumHdr = sumTable.getRow(0);
-    for (var sh = 0; sh < sumHdr.getNumCells(); sh++) {
-      sumHdr.getCell(sh).setBackgroundColor('#333366');
-      sumHdr.getCell(sh).editAsText().setBold(true).setFontSize(9).setForegroundColor('#fff');
+    /* ---- 不合格 ---- */
+    var fails = pg.rows.filter(function(r){return r.result==='不合格'});
+    if (fails.length) {
+      subHeading_(body, '不合格（' + fails.length + '件）', '#d32f2f');
+      var t = [['No', '検査項目', '検出数', '場所', '詳細', '改善案']];
+      fails.forEach(function(r){ t.push([r.no, cut_(r.item,80), r.count, cut_(r.location,100), cut_(r.detail,120), cut_(r.suggestion,120)]); });
+      styleData_(body.appendTable(t), '#d32f2f');
     }
-    for (var si = 1; si < sumTable.getNumRows(); si++) {
-      for (var sc = 0; sc < sumTable.getRow(si).getNumCells(); sc++) {
-        sumTable.getRow(si).getCell(sc).editAsText().setFontSize(9);
-      }
+
+    /* ---- 判定不能 ---- */
+    var unk = pg.rows.filter(function(r){return r.result==='判定不能'});
+    if (unk.length) {
+      subHeading_(body, '判定不能 ― 要ヒューマンチェック（' + unk.length + '件）', '#e65100');
+      var t2 = [['No', '検査項目', '場所', '詳細']];
+      unk.forEach(function(r){ t2.push([r.no, cut_(r.item,80), cut_(r.location,100), cut_(r.detail,120)]); });
+      styleData_(body.appendTable(t2), '#e65100');
     }
-    sumTable.setBorderWidth(1).setBorderColor('#999');
-  }
+
+    /* ---- 未検証 ---- */
+    var unv = pg.rows.filter(function(r){return r.result==='未検証'});
+    if (unv.length) {
+      subHeading_(body, '未検証 ― 要ヒューマンチェック（' + unv.length + '件）', '#757575');
+      var t3 = [['No', '検査項目']];
+      unv.forEach(function(r){ t3.push([r.no, r.item]); });
+      styleData_(body.appendTable(t3), '#9e9e9e');
+    }
+
+    /* ---- 該当なし ---- */
+    var naItems = pg.rows.filter(function(r){return r.result==='該当なし'});
+    if (naItems.length) {
+      body.appendParagraph('該当なし : ' + naItems.length + ' 件')
+        .editAsText().setFontSize(10).setForegroundColor('#999');
+    }
+
+    /* ---- 合格 ---- */
+    var pass = pg.rows.filter(function(r){return r.result==='合格'});
+    if (pass.length) {
+      body.appendParagraph('合格 : ' + pass.length + ' 件')
+        .editAsText().setFontSize(10).setForegroundColor('#2e7d32').setBold(true);
+    }
+  });
 
   /* ======================== フッター ======================== */
   body.appendParagraph('');
   body.appendHorizontalRule();
   body.appendParagraph('本報告書は axe-core 自動検査 および AI 評価エンジンにより生成されました。')
     .editAsText().setFontSize(8).setForegroundColor('#aaa');
-  body.appendParagraph('△（判定不能）= AIが評価したが確信度が低い項目、ー（未検証）= 自動検査では検出できない項目です。いずれも目視によるヒューマンチェックが必要です。')
+  body.appendParagraph('判定不能 / 未検証の項目は目視によるヒューマンチェックが必要です。')
     .editAsText().setFontSize(8).setForegroundColor('#aaa');
 
   doc.saveAndClose();
@@ -348,153 +250,103 @@ function generateReport(info) {
 }
 
 /* ============================================================
-   シートデータ読み取り（8列対応）
+   シートデータ読み取り
    ============================================================ */
 function readPages_(ss, selectedTabs) {
   var pages = [];
-
-  // 表紙シートからメタ情報を取得（新形式）
-  var coverInfo = {};
-  ss.getSheets().forEach(function(sheet) {
-    if (/^表紙/.test(sheet.getName())) {
-      var cv = sheet.getDataRange().getValues();
-      // 6行目以降にURL一覧がある: No., URL, 検査日時, シート名
-      for (var ci = 6; ci < cv.length; ci++) {
-        if (cv[ci][1] && cv[ci][3]) {
-          coverInfo[String(cv[ci][3]).trim()] = {
-            url: String(cv[ci][1]),
-            time: String(cv[ci][2] || '')
-          };
-        }
-      }
-    }
-  });
-
   ss.getSheets().forEach(function(sheet) {
     var name = sheet.getName();
-    if (/^表紙/.test(name)) return; // 表紙はスキップ
     if (selectedTabs.length && selectedTabs.indexOf(name) === -1) return;
     var v = sheet.getDataRange().getValues();
-    if (!v || v.length < 2) return;
+    if (v.length < 6 || String(v[4][0]).trim() !== '検査項目番号') return;
 
-    var headerRowIdx = -1;
-    var url = name;
-    var time = '';
+    var url  = String(v[1][1] || name);
+    var time = String(v[2][1] || '');
+    var rows = [], sm = {pass:0,fail:0,unknown:0,na:0,unverified:0};
 
-    // 新形式: 1行目がヘッダー（表紙にメタ情報）
-    if (String(v[0][0]).trim() === '検査項目番号') {
-      headerRowIdx = 0;
-      // 表紙からURL/検査日時を取得
-      if (coverInfo[name]) {
-        url = coverInfo[name].url;
-        time = coverInfo[name].time;
-      }
-    }
-    // 旧形式: 5行目がヘッダー（メタ情報が各シートの上部にある）
-    else if (v.length >= 6 && String(v[4][0]).trim() === '検査項目番号') {
-      headerRowIdx = 4;
-      url = String(v[1][1] || name);
-      time = String(v[2][1] || '');
-    }
-
-    if (headerRowIdx < 0) return;
-
-    // ヘッダー行から列構成を判定
-    var headerRow = v[headerRowIdx];
-    var hasLevelCol = (String(headerRow[2]).trim() === '適合レベル');
-    var dataStartRow = headerRowIdx + 1;
-
-    var rows = [];
-    for (var i = dataStartRow; i < v.length; i++) {
+    for (var i = 5; i < v.length; i++) {
       var r = v[i];
       if (!r[0] && !r[1]) continue;
-
-      if (hasLevelCol) {
-        rows.push({
-          no: String(r[0]||''), item: String(r[1]||''), level: String(r[2]||''),
-          result: String(r[3]||'').trim(),
-          location: String(r[4]||''), count: String(r[5]||''),
-          detail: String(r[6]||''), suggestion: String(r[7]||'')
-        });
-      } else {
-        var itemText = String(r[1]||'');
-        var level = '';
-        var levelMatch = itemText.match(/\[WCAG\s[\d.]+\s+(A{1,3})\]/);
-        if (levelMatch) level = levelMatch[1];
-        rows.push({
-          no: String(r[0]||''), item: itemText, level: level,
-          result: String(r[2]||'').trim(),
-          location: String(r[3]||''), count: String(r[4]||''),
-          detail: String(r[5]||''), suggestion: String(r[6]||'')
-        });
-      }
+      var res = String(r[2]||'').trim();
+      rows.push({no:String(r[0]||''), item:String(r[1]||''), result:res,
+                 location:String(r[3]||''), count:String(r[4]||''),
+                 detail:String(r[5]||''), suggestion:String(r[6]||'')});
+      if      (res==='合格')     sm.pass++;
+      else if (res==='不合格')   sm.fail++;
+      else if (res==='判定不能') sm.unknown++;
+      else if (res==='該当なし') sm.na++;
+      else                       sm.unverified++;
     }
-    pages.push({url: url, time: time, rows: rows});
+    pages.push({url:url, time:time, rows:rows, summary:sm});
   });
   return pages;
 }
 
 /* ============================================================
-   スコア計算
+   集計
    ============================================================ */
-function calcScore_(pg) {
-  var s = {pass:0, fail:0, unknown:0, na:0, unverified:0, total:0, applicable:0, rate:0};
-  pg.rows.forEach(function(r) {
-    s.total++;
-    switch (r.result) {
-      case '合格':     s.pass++; break;
-      case '不合格':   s.fail++; break;
-      case '判定不能': s.unknown++; break;
-      case '該当なし': s.na++; break;
-      default:         s.unverified++; break;
-    }
+function totalSummary_(pages) {
+  var t = {pass:0,fail:0,unknown:0,na:0,unverified:0,total:0};
+  pages.forEach(function(p){
+    t.pass+=p.summary.pass; t.fail+=p.summary.fail;
+    t.unknown+=p.summary.unknown; t.na+=p.summary.na;
+    t.unverified+=p.summary.unverified;
   });
-  s.applicable = s.pass + s.fail + s.unknown;
-  s.rate = s.applicable > 0 ? Math.round(s.pass / s.applicable * 100) : 0;
-  return s;
+  t.total = t.pass+t.fail+t.unknown+t.na+t.unverified;
+  return t;
 }
 
 /* ============================================================
-   結果マッピング（達成基準リスト形式）
+   見出しヘルパー
    ============================================================ */
-function mapResult_(result) {
-  switch (result) {
-    case '合格':     return '○';
-    case '不合格':   return '×';
-    case '判定不能': return '△';
-    case '該当なし': return '○';
-    case '未検証':   return 'ー';
-    default:         return 'ー';
-  }
+function heading_(body, text) {
+  body.appendParagraph(text)
+    .setHeading(DocumentApp.ParagraphHeading.HEADING1)
+    .editAsText().setForegroundColor('#1a73e8').setFontSize(15).setBold(true);
 }
-
-function mapApplicable_(result) {
-  return result === '該当なし' ? 'ー' : '○';
-}
-
-function buildNote_(r) {
-  if (r.result === '該当なし') return '該当箇所なし';
-  if (r.result === '未検証')   return '要目視確認';
-  if (r.result === '判定不能') return 'AI判定: 確信度低' + (r.detail ? ' / ' + cut_(r.detail, 60) : '');
-  if (r.result === '不合格') {
-    var parts = [];
-    if (r.count && r.count !== '—') parts.push(r.count + '件検出');
-    if (r.suggestion) parts.push(cut_(r.suggestion, 80));
-    else if (r.detail) parts.push(cut_(r.detail, 80));
-    return parts.join(' / ') || '';
-  }
-  return '';
+function subHeading_(body, text, color) {
+  body.appendParagraph(text)
+    .setHeading(DocumentApp.ParagraphHeading.HEADING2)
+    .editAsText().setForegroundColor(color || '#333').setFontSize(12);
 }
 
 /* ============================================================
-   ヘルパー
+   テーブルスタイル
    ============================================================ */
-function centerAttr_() {
-  var a = {};
-  a[DocumentApp.Attribute.HORIZONTAL_ALIGNMENT] = DocumentApp.HorizontalAlignment.CENTER;
-  return a;
+function styleMeta_(table) {
+  for (var i = 0; i < table.getNumRows(); i++) {
+    var lc = table.getRow(i).getCell(0);
+    lc.editAsText().setBold(true).setFontSize(10);
+    lc.setBackgroundColor('#e8eaf6');
+    lc.setWidth(200);
+    table.getRow(i).getCell(1).editAsText().setFontSize(10);
+  }
+  table.setBorderWidth(1).setBorderColor('#bdbdbd');
 }
 
+function styleData_(table, hdrColor) {
+  var hr = table.getRow(0);
+  for (var c = 0; c < hr.getNumCells(); c++) {
+    hr.getCell(c).setBackgroundColor(hdrColor || '#333');
+    hr.getCell(c).editAsText().setBold(true).setFontSize(9).setForegroundColor('#fff');
+  }
+  for (var i = 1; i < table.getNumRows(); i++) {
+    var bg = (i % 2 === 0) ? '#f5f5f5' : '#fff';
+    for (var c2 = 0; c2 < table.getRow(i).getNumCells(); c2++) {
+      table.getRow(i).getCell(c2).setBackgroundColor(bg);
+      table.getRow(i).getCell(c2).editAsText().setFontSize(9);
+    }
+  }
+  table.setBorderWidth(1).setBorderColor('#ccc');
+}
+
+function colorCell_(table, row, col, color) {
+  try { table.getRow(row).getCell(col).editAsText().setForegroundColor(color).setBold(true); } catch(e){}
+}
+
+/* ============================================================
+   ユーティリティ
+   ============================================================ */
 function cut_(s, n) { return (!s||s.length<=n) ? (s||'') : s.substring(0,n)+'…'; }
 
 function fmtDate_(s) {
