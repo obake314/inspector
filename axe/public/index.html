@@ -450,6 +450,7 @@
                 <button class="tab" data-tab="passes">合格項目</button>
                 <button class="tab" data-tab="incomplete">要確認</button>
                 <button class="tab" data-tab="manual">手動チェック</button>
+                <button class="tab" data-tab="enhanced">高精度検査</button>
             </div>
             <div class="tab-content active" id="tab-auto">
                 <div class="section">
@@ -494,6 +495,22 @@
                     <div class="progress-label"><span>手動チェック進捗</span><span id="progressPercent">0%</span></div>
                     <div class="progress-track"><div class="progress-fill" id="progressFill" style="width: 0%"></div></div>
                 </div>
+            </div>
+            <div class="tab-content" id="tab-enhanced">
+                <div style="margin-bottom: 16px; padding: 16px; background: white; border: 1px solid var(--navy-200); border-left: 3px solid #0d7a5f;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+                        <div>
+                            <div style="font-weight: 600; font-size: 14px; color: var(--navy-700);">高精度自動検査 Phase 1-3</div>
+                            <div style="font-size: 14px; color: var(--navy-500);">Puppeteerのキーボード操作・ビューポート変更・CSS注入等により23基準を自動検査（Phase1: 90-95% / Phase2: 80-90% / Phase3: 65-80%）</div>
+                        </div>
+                        <button id="enhancedCheckBtn" onclick="runEnhancedCheck()" style="background: #0d7a5f; color: white; border: none; padding: 10px 20px; font-size: 14px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                            <span id="enhancedBtnText">高精度検査を実行</span>
+                            <span id="enhancedSpinner" style="display: none; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite;"></span>
+                        </button>
+                    </div>
+                    <div id="enhancedStatus" style="margin-top: 12px; font-size: 14px; color: var(--navy-500); display: none;"></div>
+                </div>
+                <div id="enhancedResults"></div>
             </div>
         </div>
         <footer>
@@ -1551,6 +1568,146 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 btn.disabled = false;
                 btn.textContent = 'レポート出力（Sheets）';
             }
+        }
+
+        // ============================================================
+        // Phase 1 高精度検査
+        // ============================================================
+        async function runEnhancedCheck() {
+            const url = document.getElementById('urlInput').value.trim();
+            if (!url) { alert('URLを入力してください'); return; }
+
+            const btn = document.getElementById('enhancedCheckBtn');
+            const spinner = document.getElementById('enhancedSpinner');
+            const btnText = document.getElementById('enhancedBtnText');
+            const status = document.getElementById('enhancedStatus');
+            const resultsEl = document.getElementById('enhancedResults');
+
+            btn.disabled = true;
+            spinner.style.display = 'inline-block';
+            btnText.textContent = '検査中...';
+            status.style.display = 'block';
+            status.textContent = 'Puppeteerで9基準を検査しています（30〜90秒かかります）...';
+            resultsEl.innerHTML = '';
+
+            // 高精度検査タブに切り替え
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelector('[data-tab="enhanced"]').classList.add('active');
+            document.getElementById('tab-enhanced').classList.add('active');
+            document.getElementById('results').style.display = 'block';
+
+            try {
+                const basicUser = document.getElementById('basicUser').value.trim();
+                const basicPass = document.getElementById('basicPass').value.trim();
+                const body = { url };
+                if (basicUser && basicPass) body.basicAuth = { user: basicUser, pass: basicPass };
+
+                const res = await fetch('/api/enhanced-check', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '検査失敗');
+
+                status.textContent = `検査完了: ${data.results.length}基準を検査しました`;
+                renderEnhancedResults(data.results);
+            } catch (e) {
+                status.textContent = 'エラー: ' + e.message;
+                resultsEl.innerHTML = `<div style="color:#dc2626;padding:16px;">${e.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                spinner.style.display = 'none';
+                btnText.textContent = '高精度検査を実行';
+            }
+        }
+
+        function renderEnhancedResults(results) {
+            const el = document.getElementById('enhancedResults');
+            const statusColors = { pass: '#059669', fail: '#dc2626', error: '#d97706', not_applicable: '#6b7280', manual_required: '#7c3aed' };
+            const statusLabels = { pass: '合格', fail: '不合格', error: 'エラー', not_applicable: '対象外', manual_required: '要手動確認' };
+
+            // Phase別のSC分類
+            const phase1SCs = ['1.4.10','2.5.8','2.1.2','2.4.1','2.3.3','1.4.12','2.4.11','2.4.12','3.2.1/3.2.2','3.3.1'];
+            const phase2SCs = ['2.1.1','2.4.7','2.4.13','2.4.3','1.4.4','1.2.x','2.2.2','3.3.8','2.3.1'];
+            const phase3SCs = ['1.4.13','1.4.1','1.4.5','2.2.1','3.3.3','2.5.1/2.5.7'];
+
+            const getPhase = sc => {
+                if (phase1SCs.includes(sc)) return 1;
+                if (phase2SCs.includes(sc)) return 2;
+                if (phase3SCs.includes(sc)) return 3;
+                return 0;
+            };
+
+            let passCount = 0, failCount = 0, naCount = 0, errCount = 0, manualCount = 0;
+            for (const r of results) {
+                if (r.status === 'pass') passCount++;
+                else if (r.status === 'fail') failCount++;
+                else if (r.status === 'not_applicable') naCount++;
+                else if (r.status === 'manual_required') manualCount++;
+                else errCount++;
+            }
+
+            let html = `<div style="display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap;">
+                <div style="background:#f0fdf4;border:1px solid #bbf7d0;padding:12px 20px;border-radius:6px;text-align:center;">
+                    <div style="font-size:24px;font-weight:700;color:#059669;">${passCount}</div>
+                    <div style="font-size:13px;color:#059669;">合格</div>
+                </div>
+                <div style="background:#fef2f2;border:1px solid #fecaca;padding:12px 20px;border-radius:6px;text-align:center;">
+                    <div style="font-size:24px;font-weight:700;color:#dc2626;">${failCount}</div>
+                    <div style="font-size:13px;color:#dc2626;">不合格</div>
+                </div>
+                <div style="background:#f9fafb;border:1px solid #e5e7eb;padding:12px 20px;border-radius:6px;text-align:center;">
+                    <div style="font-size:24px;font-weight:700;color:#6b7280;">${naCount}</div>
+                    <div style="font-size:13px;color:#6b7280;">対象外</div>
+                </div>
+                ${manualCount > 0 ? `<div style="background:#f5f3ff;border:1px solid #ddd6fe;padding:12px 20px;border-radius:6px;text-align:center;">
+                    <div style="font-size:24px;font-weight:700;color:#7c3aed;">${manualCount}</div>
+                    <div style="font-size:13px;color:#7c3aed;">要手動確認</div>
+                </div>` : ''}
+                ${errCount > 0 ? `<div style="background:#fffbeb;border:1px solid #fde68a;padding:12px 20px;border-radius:6px;text-align:center;">
+                    <div style="font-size:24px;font-weight:700;color:#d97706;">${errCount}</div>
+                    <div style="font-size:13px;color:#d97706;">エラー</div>
+                </div>` : ''}
+            </div>`;
+
+            const phaseLabels = {
+                1: { label: 'Phase 1 — 完全自動化・高精度（90-95%）', color: '#0d7a5f' },
+                2: { label: 'Phase 2 — 高自動化・中〜高精度（80-90%）', color: '#1a56db' },
+                3: { label: 'Phase 3 — ハイブリッド・Puppeteer+自動解析（65-80%）', color: '#7c3aed' }
+            };
+
+            let lastPhase = 0;
+            for (const r of results) {
+                const phase = getPhase(r.sc);
+                if (phase !== lastPhase && phaseLabels[phase]) {
+                    const ph = phaseLabels[phase];
+                    html += `<div style="margin:20px 0 10px;padding:8px 12px;background:${ph.color}15;border-left:4px solid ${ph.color};font-weight:600;font-size:13px;color:${ph.color};">${ph.label}</div>`;
+                    lastPhase = phase;
+                }
+                const color = statusColors[r.status] || '#6b7280';
+                const label = statusLabels[r.status] || r.status;
+                const violations = r.violations || [];
+                html += `<div style="background:white;border:1px solid var(--navy-200);border-left:4px solid ${color};margin-bottom:10px;padding:14px 16px;border-radius:0 4px 4px 0;">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+                        <span style="background:${color};color:white;font-size:12px;font-weight:600;padding:2px 10px;border-radius:12px;">${label}</span>
+                        <span style="font-weight:600;font-size:14px;color:var(--navy-700);">SC ${r.sc} ${r.name}</span>
+                    </div>
+                    <div style="font-size:14px;color:var(--navy-600);margin-bottom:${violations.length > 0 ? '8px' : '0'};">${r.message || ''}</div>
+                    ${violations.length > 0 ? `<details style="margin-top:4px;">
+                        <summary style="font-size:13px;color:${color};cursor:pointer;font-weight:500;">詳細 (${violations.length}件)</summary>
+                        <ul style="margin:8px 0 0 0;padding-left:18px;">
+                            ${violations.map(v => `<li style="font-size:13px;color:var(--navy-600);font-family:monospace;margin-bottom:4px;">${escapeHtml(v)}</li>`).join('')}
+                        </ul>
+                    </details>` : ''}
+                </div>`;
+            }
+            el.innerHTML = html;
+        }
+
+        function escapeHtml(str) {
+            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
         }
     </script>
 </body>
