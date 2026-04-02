@@ -2693,7 +2693,8 @@ app.get('/api/sheets-status', (req, res) => {
     spreadsheetId: cachedSpreadsheetId || null,
     folderId: folderId || null,
     serviceAccount: saKey ? saKey.client_email : null,
-    geminiConfigured: !!geminiKey
+    geminiConfigured: !!geminiKey,
+    aaaBeta: saved.aaaBeta || false
   });
 });
 

@@ -356,7 +356,7 @@
                 <div class="level-select-btns">
                     <button type="button" class="level-select-btn" data-level="A">A</button>
                     <button type="button" class="level-select-btn active" data-level="AA">AA</button>
-                    <button type="button" class="level-select-btn" data-level="AAA" id="levelBtnAAA" style="display:none;">AAA <span style="font-size:10px;background:#7c3aed;color:white;padding:1px 5px;border-radius:8px;vertical-align:middle;">β</span></button>
+                    <button type="button" class="level-select-btn" data-level="AAA" id="levelBtnAAA" style="display:none;">AAA</button>
                 </div>
             </div>
             <div id="singleInput">
@@ -1398,16 +1398,11 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 };
                 setStatus('Gemini', 'stGemini', data.geminiConfigured);
                 setStatus('Sheets', 'stSheets', data.configured);
-            } catch (e) { /* ignore */ }
 
-            // AAA ベータ設定を読んで AAA ボタン表示制御
-            try {
-                const sRes = await fetch('/api/settings-get', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: sessionPassword }) });
-                const sData = await sRes.json();
-                sessionAAABeta = !!sData.aaaBeta;
+                // AAA ボタン表示制御（sheets-status に aaaBeta を含めたため認証不要）
+                sessionAAABeta = !!data.aaaBeta;
                 const btn = $('levelBtnAAA');
                 if (btn) btn.style.display = sessionAAABeta ? '' : 'none';
-                // AAAが非表示かつ現在AAAが選択中なら AA に戻す
                 if (!sessionAAABeta && targetLevel === 'AAA') {
                     targetLevel = 'AA';
                     document.querySelectorAll('.level-select-btn').forEach(b => b.classList.toggle('active', b.dataset.level === 'AA'));
