@@ -388,17 +388,98 @@ app.post('/api/batch-check', async (req, res) => {
         const builder = new AxePuppeteer(page);
         builder.withTags(tags);
         const results = await builder.analyze();
-        return { url, success: true, results };
+
+        // SC 3.2.3/3.2.4 用にナビ構造を抽出
+        const navStructure = await page.evaluate(() => {
+          const navEls = Array.from(document.querySelectorAll('nav, [role="navigation"]'));
+          return navEls.map(nav => {
+            const label = nav.getAttribute('aria-label') || nav.getAttribute('aria-labelledby') || '';
+            const links = Array.from(nav.querySelectorAll('a')).map(a => ({
+              text: a.textContent.trim().replace(/\s+/g, ' '),
+              href: a.getAttribute('href') || ''
+            }));
+            return { label, links };
+          });
+        });
+
+        return { url, success: true, results, navStructure };
       } catch (error) {
         console.error(`[Batch] Error for ${url}:`, error.message);
-        return { url, success: false, error: error.message };
+        return { url, success: false, error: error.message, navStructure: [] };
       } finally {
         if (page) try { await page.close(); } catch (e) {}
       }
     };
 
     const results = await Promise.all(urls.map(checkOne));
-    res.json({ success: true, results });
+
+    // SC 3.2.3/3.2.4 一貫したナビゲーション・識別の横断比較
+    let navConsistency = null;
+    const successResults = results.filter(r => r.success && r.navStructure && r.navStructure.length > 0);
+    if (successResults.length >= 2) {
+      const issues = [];
+      const baseUrl = successResults[0].url;
+      const baseNavs = successResults[0].navStructure;
+
+      for (let i = 1; i < successResults.length; i++) {
+        const targetUrl = successResults[i].url;
+        const targetNavs = successResults[i].navStructure;
+
+        // nav要素の数が異なる
+        if (baseNavs.length !== targetNavs.length) {
+          issues.push({
+            type: 'nav_count_mismatch',
+            message: `ナビゲーション要素数が異なります（${baseUrl}: ${baseNavs.length}個, ${targetUrl}: ${targetNavs.length}個）`,
+            urls: [baseUrl, targetUrl]
+          });
+          continue;
+        }
+
+        // 各navの順序・リンクテキストを比較
+        baseNavs.forEach((baseNav, idx) => {
+          const targetNav = targetNavs[idx];
+          if (!targetNav) return;
+
+          const baseLinks = baseNav.links.map(l => l.text).join('|');
+          const targetLinks = targetNav.links.map(l => l.text).join('|');
+
+          if (baseLinks !== targetLinks) {
+            // 順序の違いを検出
+            const baseSet = new Set(baseNav.links.map(l => l.text));
+            const targetSet = new Set(targetNav.links.map(l => l.text));
+            const missing = [...baseSet].filter(t => !targetSet.has(t));
+            const added = [...targetSet].filter(t => !baseSet.has(t));
+
+            if (missing.length > 0 || added.length > 0) {
+              issues.push({
+                type: 'nav_links_differ',
+                message: `ナビゲーション${idx + 1}のリンク構成が異なります`,
+                urls: [baseUrl, targetUrl],
+                missing: missing.slice(0, 5),
+                added: added.slice(0, 5)
+              });
+            } else {
+              // リンクは同じだが順序が違う
+              issues.push({
+                type: 'nav_order_differ',
+                message: `ナビゲーション${idx + 1}のリンク順序が異なります`,
+                urls: [baseUrl, targetUrl]
+              });
+            }
+          }
+        });
+      }
+
+      navConsistency = {
+        sc: '3.2.3 / 3.2.4',
+        title: '一貫したナビゲーション・識別',
+        result: issues.length === 0 ? 'pass' : 'fail',
+        comparedUrls: successResults.map(r => r.url),
+        issues
+      };
+    }
+
+    res.json({ success: true, results, navConsistency });
 
   } catch (error) {
     console.error('Batch Scan Error:', error);
