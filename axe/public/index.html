@@ -298,17 +298,17 @@
             <h2>設定 <button type="button" onclick="closeSettings()">&times;</button></h2>
             <div class="settings-group">
                 <label>Gemini API Key</label>
-                <input type="password" id="settGeminiKey" placeholder="AIza...">
+                <input type="password" id="settGeminiKey" placeholder="Gemini APIキーを入力してください">
                 <div class="hint">Gemini AI評価に使用</div>
             </div>
             <div class="settings-group">
                 <label>Google Service Account Key (JSON)</label>
-                <textarea id="settServiceAccount" placeholder='{"type":"service_account","project_id":...}'></textarea>
+                <textarea id="settServiceAccount" placeholder="Service Account JSONを貼り付けてください"></textarea>
                 <div class="hint">Google Sheets連携に必要なサービスアカウントの鍵</div>
             </div>
             <div class="settings-group">
                 <label>Google Drive Folder ID（検査データ保存先）</label>
-                <input type="text" id="settFolderId" placeholder="1aBcDeFgHiJkLmNoPqRsTuVwXyZ">
+                <input type="text" id="settFolderId" placeholder="Google DriveフォルダIDを入力してください">
                 <div class="hint">検査結果のスプレッドシートを保存するフォルダのID</div>
             </div>
             <div class="settings-group">
@@ -799,9 +799,9 @@
                 $('settNewPassword').value = '';
                 $('settAAABeta').checked = !!data.aaaBeta;
                 // 環境変数フォールバックの表示
-                $('settGeminiKey').placeholder = data.envGemini ? '環境変数で設定済み' : 'AIza...';
-                $('settServiceAccount').placeholder = data.envServiceAccount ? '環境変数で設定済み' : '{"type":"service_account",...}';
-                $('settFolderId').placeholder = data.envFolder ? '環境変数で設定済み' : 'フォルダIDを入力';
+                $('settGeminiKey').placeholder = data.envGemini ? '設定済み（変更する場合のみ入力）' : 'Gemini APIキーを入力してください';
+                $('settServiceAccount').placeholder = data.envServiceAccount ? '設定済み（変更する場合のみ入力）' : 'Service Account JSONを貼り付けてください';
+                $('settFolderId').placeholder = data.envFolder ? '設定済み（変更する場合のみ入力）' : 'Google DriveフォルダIDを入力してください';
             }).catch(() => {});
         }
 
