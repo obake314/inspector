@@ -2068,8 +2068,8 @@ app.post('/api/enhanced-check', async (req, res) => {
     // 1-4
     results.push(await withTimeout(() => check_2_4_1_skip_link(page)));
 
-    // 1-5
-    results.push(await withTimeout(() => check_2_3_3_animation(page)));
+    // 1-5 SC 2.3.3 は AAA のみ → aaaBeta オフ時はスキップ
+    if (includeAAA) results.push(await withTimeout(() => check_2_3_3_animation(page)));
 
     // 1-6
     results.push(await withTimeout(() => check_1_4_12_text_spacing(page)));
