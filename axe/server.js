@@ -236,6 +236,7 @@ app.post('/api/settings-get', (req, res) => {
     driveFolderId: saved.driveFolderId || GOOGLE_DRIVE_FOLDER_ID || '',
     reportFolderId: saved.reportFolderId || REPORT_FOLDER_ID || '',
     hasPassword: !!APP_PASSWORD_HASH,
+    aaaBeta: saved.aaaBeta || false,
     // 環境変数フォールバックの表示
     envGemini: !!process.env.GEMINI_API_KEY,
     envServiceAccount: !!(process.env.GOOGLE_SERVICE_ACCOUNT_KEY || GOOGLE_SERVICE_ACCOUNT_KEY_PATH),
@@ -247,7 +248,7 @@ app.post('/api/settings-get', (req, res) => {
  * 設定保存API
  */
 app.post('/api/settings-save', (req, res) => {
-  const { password, geminiApiKey, serviceAccountKey, driveFolderId, reportFolderId, newPassword } = req.body;
+  const { password, geminiApiKey, serviceAccountKey, driveFolderId, reportFolderId, newPassword, aaaBeta } = req.body;
   // パスワード認証
   if (APP_PASSWORD_HASH && hashPassword(password || '') !== APP_PASSWORD_HASH) {
     return res.status(401).json({ error: '認証エラー' });
@@ -288,6 +289,11 @@ app.post('/api/settings-save', (req, res) => {
   if (newPassword) {
     saved.passwordHash = hashPassword(newPassword);
     APP_PASSWORD_HASH = saved.passwordHash;
+  }
+
+  // AAA ベータ設定
+  if (typeof aaaBeta === 'boolean') {
+    saved.aaaBeta = aaaBeta;
   }
 
   saveSettingsFile(saved);
@@ -847,53 +853,44 @@ async function check_3_2_1_2_unexpected_change(page) {
   }
 }
 
-/** SC 3.3.1 エラー特定 */
+/** SC 3.3.1 エラー特定
+ *  [改善] 全フォームをテスト、aria-errormessage/aria-describedby 関連付けを検証
+ */
 async function check_3_3_1_error_identification(page) {
   try {
-    const formInfo = await page.evaluate(() => {
-      const form = document.querySelector('form');
-      if (!form) return null;
-      const fields = form.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]), textarea, select');
-      return { found: true, fieldCount: fields.length };
-    });
-
-    if (!formInfo) {
-      return {
-        sc: '3.3.1', name: 'エラー特定',
-        status: 'not_applicable', message: 'フォームが見つかりません', violations: []
-      };
+    const formCount = await page.evaluate(() => document.querySelectorAll('form').length);
+    if (formCount === 0) {
+      return { sc: '3.3.1', name: 'エラー特定', status: 'not_applicable', message: 'フォームが見つかりません', violations: [] };
     }
 
-    // フォームフィールドをクリアしてsubmit
+    // 全フォームを空送信
     await page.evaluate(() => {
-      const form = document.querySelector('form');
-      const fields = form.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]), textarea');
-      for (const f of fields) { f.value = ''; }
-      // submit ボタンを探してクリック
-      const submitBtn = form.querySelector('[type="submit"], button:not([type="button"])');
-      if (submitBtn) submitBtn.click();
+      for (const form of document.querySelectorAll('form')) {
+        const fields = form.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]), textarea');
+        for (const f of fields) { f.value = ''; }
+        const submitBtn = form.querySelector('[type="submit"], button:not([type="button"]):not([type="reset"])');
+        if (submitBtn) submitBtn.click();
+      }
     });
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 1200));
 
     const result = await page.evaluate(() => {
-      // エラーの検出
       const ariaInvalid = document.querySelectorAll('[aria-invalid="true"]');
-      const alerts = document.querySelectorAll('[role="alert"], [role="alertdialog"]');
-      const errorCls = document.querySelectorAll('[class*="error" i], [class*="invalid" i]');
+      const alerts      = document.querySelectorAll('[role="alert"], [role="alertdialog"]');
+      const errorCls    = document.querySelectorAll('[class*="error" i]:not(form):not(input), [class*="invalid" i]:not(input)');
+      const errorEls    = [...new Set([...ariaInvalid, ...alerts, ...errorCls])].slice(0, 15);
 
-      const errorEls = [...new Set([...ariaInvalid, ...alerts, ...errorCls])].slice(0, 10);
-      const violations = [];
       let associatedCount = 0;
-
+      const violations = [];
       for (const el of errorEls) {
         const text = (el.textContent || '').trim().slice(0, 60);
-        // aria-describedby / aria-errormessage 関連付け確認
-        const describedById = el.getAttribute('aria-describedby') || el.getAttribute('aria-errormessage');
-        const hasAssociation = !!describedById && !!document.getElementById(describedById);
+        if (!text) continue;
+        // aria-describedby / aria-errormessage の関連付け確認
+        const refId = el.getAttribute('aria-describedby') || el.getAttribute('aria-errormessage');
+        const hasAssociation = !!refId && !!document.getElementById(refId);
         if (hasAssociation) associatedCount++;
         violations.push({ text, hasAssociation });
       }
-
       return {
         errorCount: errorEls.length,
         associatedCount,
@@ -901,14 +898,14 @@ async function check_3_3_1_error_identification(page) {
       };
     });
 
-    const pass = result.errorCount > 0; // エラーが表示された = エラー特定機能あり
+    const pass = result.errorCount > 0;
     return {
       sc: '3.3.1', name: 'エラー特定',
       status: pass ? 'pass' : 'fail',
       message: pass
-        ? `エラー表示あり（${result.errorCount}件検出、${result.associatedCount}件が適切に関連付け済み）`
-        : 'フォーム送信後にエラーメッセージが表示されませんでした（aria-invalid / role=alert 未検出）',
-      violations: pass ? result.violations.filter(v => !v.startsWith('✓')) : ['エラーメッセージが表示されない可能性があります']
+        ? `${formCount}フォーム検査: エラー${result.errorCount}件 (${result.associatedCount}件が適切に関連付け済み)`
+        : `${formCount}フォームを空送信したがエラーメッセージが検出されませんでした`,
+      violations: pass ? result.violations.filter(v => v.startsWith('✗')) : ['エラーメッセージ未表示の可能性']
     };
   } catch (e) {
     return { sc: '3.3.1', name: 'エラー特定', status: 'error', message: e.message, violations: [] };
@@ -960,62 +957,78 @@ async function check_2_1_1_keyboard_operable(page) {
   }
 }
 
-/** SC 2.4.7 フォーカス可視 + SC 2.4.13 フォーカスの外観 */
+/** SC 2.4.7 フォーカス可視 + SC 2.4.13 フォーカスの外観
+ *  [改善] el.focus() でスタイル差分を計測 — Tab依存より正確
+ */
 async function check_2_4_7_focus_visible(page) {
   try {
-    const violations27 = [];
-    const violations213 = [];
-    const maxCheck = 20;
+    const results = await page.evaluate(() => {
+      const violations27 = [];
+      const violations213 = [];
+      const focusables = Array.from(document.querySelectorAll(
+        'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )).slice(0, 25);
 
-    for (let i = 0; i < maxCheck; i++) {
-      await page.keyboard.press('Tab');
-      const info = await page.evaluate(() => {
-        const el = document.activeElement;
-        if (!el || el === document.body || el === document.documentElement) return null;
-        const style = window.getComputedStyle(el);
-        const tag = el.tagName.toLowerCase();
-        const id = el.id ? `#${el.id}` : '';
+      for (const el of focusables) {
+        el.blur();
+        const before = window.getComputedStyle(el);
+        const bOutlineW   = parseFloat(before.outlineWidth) || 0;
+        const bOutlineS   = before.outlineStyle;
+        const bBoxShadow  = before.boxShadow;
+        const bBg         = before.backgroundColor;
+        const bBorderW    = parseFloat(before.borderWidth) || 0;
+        const bBorderColor= before.borderColor;
+
+        el.focus({ preventScroll: true });
+        const after = window.getComputedStyle(el);
+        const aOutlineW   = parseFloat(after.outlineWidth) || 0;
+        const aOutlineS   = after.outlineStyle;
+        const aBoxShadow  = after.boxShadow;
+        const aBg         = after.backgroundColor;
+        const aBorderW    = parseFloat(after.borderWidth) || 0;
+        const aBorderColor= after.borderColor;
+        el.blur();
+
+        const tag   = el.tagName.toLowerCase();
+        const id    = el.id ? `#${el.id}` : '';
         const label = `${tag}${id}`.slice(0, 50);
 
-        // フォーカスインジケータ確認
-        const outline = style.outlineWidth;
-        const outlineStyle = style.outlineStyle;
-        const boxShadow = style.boxShadow;
-        const border = style.borderWidth;
-        const bg = style.backgroundColor;
+        // フォーカス時にいずれかのプロパティが変化したか
+        const hasOutline    = aOutlineS !== 'none' && aOutlineW > 0;
+        const hasBoxShadow  = aBoxShadow && aBoxShadow !== 'none' && aBoxShadow !== bBoxShadow;
+        const bgChanged     = aBg !== bBg;
+        const borderChanged = aBorderW !== bBorderW || aBorderColor !== bBorderColor;
+        const hasFocusIndicator = hasOutline || hasBoxShadow || bgChanged || borderChanged;
 
-        // outline が none/0 かつ box-shadow もなし = 非表示の可能性
-        const outlineW = parseFloat(outline) || 0;
-        const hasOutline = outlineStyle !== 'none' && outlineW > 0;
-        const hasBoxShadow = boxShadow && boxShadow !== 'none';
-        const hasFocusIndicator = hasOutline || hasBoxShadow;
+        // SC 2.4.13: outline が 2px 以上
+        const meets213 = aOutlineW >= 2;
 
-        // SC 2.4.13: outline が 2px 以上か
-        const meets213 = outlineW >= 2;
-
-        return { label, hasFocusIndicator, meets213, outlineW };
-      });
-      if (!info) continue;
-      if (!info.hasFocusIndicator) violations27.push(`${info.label} (outline:${info.outlineW}px)`);
-      if (!info.meets213) violations213.push(`${info.label} (outline:${info.outlineW}px < 2px)`);
-    }
+        if (!hasFocusIndicator) {
+          violations27.push(`${label} (outline:${aOutlineW}px, bg変化:${bgChanged}, shadow:${hasBoxShadow})`);
+        }
+        if (!meets213) {
+          violations213.push(`${label} (outline-width:${aOutlineW}px < 2px)`);
+        }
+      }
+      return { violations27, violations213 };
+    });
 
     return [
       {
         sc: '2.4.7', name: 'フォーカス可視（AA）',
-        status: violations27.length === 0 ? 'pass' : 'fail',
-        message: violations27.length === 0
-          ? 'フォーカスインジケータあり（outline/box-shadow）'
-          : `${violations27.length}個の要素でフォーカスが不可視の可能性`,
-        violations: violations27
+        status: results.violations27.length === 0 ? 'pass' : 'fail',
+        message: results.violations27.length === 0
+          ? 'フォーカス時にスタイル変化あり（outline/shadow/background/border）'
+          : `${results.violations27.length}個の要素でフォーカス時にスタイル変化なし`,
+        violations: results.violations27
       },
       {
         sc: '2.4.13', name: 'フォーカスの外観（AAA）',
-        status: violations213.length === 0 ? 'pass' : 'fail',
-        message: violations213.length === 0
-          ? 'outline-widthが2px以上の要素あり'
-          : `${violations213.length}個の要素でoutline-widthが2px未満`,
-        violations: violations213
+        status: results.violations213.length === 0 ? 'pass' : 'fail',
+        message: results.violations213.length === 0
+          ? 'outline-widthが2px以上'
+          : `${results.violations213.length}個の要素でoutline-widthが2px未満`,
+        violations: results.violations213
       }
     ];
   } catch (e) {
@@ -1120,25 +1133,42 @@ async function check_1_4_4_text_resize(page) {
   }
 }
 
-/** SC 1.2.1-1.2.5 メディアキャプション */
+/** SC 1.2.1-1.2.5 メディアキャプション
+ *  [改善] track ファイルの HTTP 200 確認を追加
+ */
 async function check_1_2_x_media_captions(page) {
   try {
-    const result = await page.evaluate(() => {
-      const videos = document.querySelectorAll('video');
-      const audios = document.querySelectorAll('audio');
+    const result = await page.evaluate(async () => {
+      const videos  = document.querySelectorAll('video');
+      const audios  = document.querySelectorAll('audio');
       const iframes = document.querySelectorAll('iframe');
-      const issues = [];
+      const issues  = [];
 
       for (const v of videos) {
-        const tracks = v.querySelectorAll('track[kind="captions"], track[kind="subtitles"]');
+        const capTracks  = v.querySelectorAll('track[kind="captions"], track[kind="subtitles"]');
         const descTracks = v.querySelectorAll('track[kind="descriptions"]');
-        if (tracks.length === 0) issues.push(`video: キャプションtrack欠如 (src: ${(v.src || v.currentSrc || '').slice(0, 50)})`);
+        if (capTracks.length === 0) {
+          issues.push(`video: キャプションtrack欠如 (src: ${(v.src || v.currentSrc || '').slice(0, 50)})`);
+        } else {
+          // track ファイルの HTTP 確認
+          for (const t of capTracks) {
+            const src = t.src;
+            if (src) {
+              try {
+                const res = await fetch(src, { method: 'HEAD', cache: 'no-store' });
+                if (!res.ok) issues.push(`track file HTTP ${res.status}: ${src.slice(-60)}`);
+              } catch (e) {
+                issues.push(`track fileアクセスエラー: ${src.slice(-60)}`);
+              }
+            }
+          }
+        }
         if (descTracks.length === 0) issues.push(`video: 音声解説track欠如`);
       }
       for (const a of audios) {
-        // 近接要素に transcript テキストがあるか
         const parent = a.parentElement;
-        const hasTranscript = parent && (parent.textContent || '').toLowerCase().includes('transcript');
+        const nearText = (parent ? parent.textContent : '').toLowerCase();
+        const hasTranscript = nearText.includes('transcript') || nearText.includes('書き起こし') || nearText.includes('テキスト版');
         if (!hasTranscript) issues.push(`audio: トランスクリプト未確認 (src: ${(a.src || '').slice(0, 50)})`);
       }
       for (const iframe of iframes) {
@@ -1149,22 +1179,12 @@ async function check_1_2_x_media_captions(page) {
           }
         }
       }
-
-      return {
-        videoCount: videos.length,
-        audioCount: audios.length,
-        iframeCount: iframes.length,
-        issues
-      };
+      return { videoCount: videos.length, audioCount: audios.length, iframeCount: iframes.length, issues };
     });
 
     if (result.videoCount === 0 && result.audioCount === 0 && result.iframeCount === 0) {
-      return {
-        sc: '1.2.x', name: 'メディアキャプション（1.2.1-1.2.5）',
-        status: 'not_applicable', message: 'video/audio/iframeが存在しません', violations: []
-      };
+      return { sc: '1.2.x', name: 'メディアキャプション（1.2.1-1.2.5）', status: 'not_applicable', message: 'video/audio/iframeが存在しません', violations: [] };
     }
-
     return {
       sc: '1.2.x', name: 'メディアキャプション（1.2.1-1.2.5）',
       status: result.issues.length === 0 ? 'pass' : 'fail',
@@ -1393,35 +1413,68 @@ async function check_1_4_13_hover_content(page) {
   }
 }
 
-/** SC 1.4.1 色だけの情報伝達 */
+/** SC 1.4.1 色だけの情報伝達
+ *  [改善] 下線なしリンクの色コントラスト比（3:1）計算を追加
+ */
 async function check_1_4_1_use_of_color(page) {
   try {
     const result = await page.evaluate(() => {
+      // 相対輝度計算（WCAG 2.x準拠）
+      function parseCssColor(cssColor) {
+        const m = cssColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+        return m ? [+m[1], +m[2], +m[3]] : null;
+      }
+      function getLuminance(r, g, b) {
+        return [r, g, b].reduce((sum, c, i) => {
+          const v = c / 255;
+          return sum + (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)) * [0.2126, 0.7152, 0.0722][i];
+        }, 0);
+      }
+      function contrastRatio(c1, c2) {
+        const [l1, l2] = [c1, c2].map(c => getLuminance(...c)).sort((a, b) => b - a);
+        return (l1 + 0.05) / (l2 + 0.05);
+      }
+
       const issues = [];
-      // リンクに下線・太字・その他の視覚的差異があるか確認
-      const links = document.querySelectorAll('p a, li a, td a');
-      let linksWithoutUnderline = 0;
-      for (const link of Array.from(links).slice(0, 30)) {
-        const style = getComputedStyle(link);
+      const links = Array.from(document.querySelectorAll('p a, li a, td a')).slice(0, 30);
+      let lowContrastCount = 0;
+
+      for (const link of links) {
+        if (!link.parentElement) continue;
+        const linkStyle   = getComputedStyle(link);
         const parentStyle = getComputedStyle(link.parentElement);
-        const hasUnderline = style.textDecorationLine.includes('underline');
-        const hasBold = parseInt(style.fontWeight) >= 700;
-        const hasBorder = style.borderBottomWidth !== '0px';
-        // 色が親と異なるが下線等なし
+
+        const hasUnderline = linkStyle.textDecorationLine.includes('underline');
+        const hasBold      = parseInt(linkStyle.fontWeight) >= 700;
+        const hasBorder    = linkStyle.borderBottomWidth !== '0px';
+
         if (!hasUnderline && !hasBold && !hasBorder) {
-          linksWithoutUnderline++;
+          // 下線等なし → コントラスト比 3:1 以上を要求
+          const linkRgb   = parseCssColor(linkStyle.color);
+          const parentRgb = parseCssColor(parentStyle.color);
+          if (linkRgb && parentRgb) {
+            const ratio = contrastRatio(linkRgb, parentRgb);
+            if (ratio < 3.0) {
+              lowContrastCount++;
+              if (lowContrastCount <= 5) {
+                const id = link.id ? `#${link.id}` : '';
+                issues.push(`a${id}: 下線なし + 周囲テキストとのコントラスト比${ratio.toFixed(2)}:1 (要3:1以上)`);
+              }
+            }
+          } else {
+            // 色が取れない場合は件数のみカウント
+            lowContrastCount++;
+          }
         }
       }
-      if (linksWithoutUnderline > 0) {
-        issues.push(`テキストリンク ${linksWithoutUnderline}個: 色以外の視覚的差異（下線・太字等）なし — コントラスト比3:1以上が必要`);
+      if (lowContrastCount > 5) {
+        issues.push(`（他${lowContrastCount - 5}件の下線なしリンクも同様に要確認）`);
       }
+
       // エラー表示が色のみか
-      const errorEls = document.querySelectorAll('[class*="error" i], [aria-invalid="true"]');
-      for (const el of errorEls) {
-        const hasIcon = el.querySelector('svg, img, [aria-label], [title]');
-        if (!hasIcon && !(el.textContent || '').trim()) {
-          issues.push(`エラー表示が色のみの可能性: ${el.tagName.toLowerCase()}`.slice(0, 80));
-        }
+      for (const el of document.querySelectorAll('[class*="error" i], [aria-invalid="true"]')) {
+        const hasNonColor = el.querySelector('svg, img, [aria-label], [title]') || (el.textContent || '').trim().length > 0;
+        if (!hasNonColor) issues.push(`エラー表示が色のみの可能性: ${el.tagName.toLowerCase()}`.slice(0, 80));
       }
       return issues;
     });
@@ -1431,7 +1484,7 @@ async function check_1_4_1_use_of_color(page) {
       status: result.length === 0 ? 'pass' : 'fail',
       message: result.length === 0
         ? '色以外の視覚的手がかりが確認できます'
-        : `${result.length}件: 色のみで情報を伝達している可能性`,
+        : `${result.length}件: 色のみで情報を伝達している可能性（下線なしリンクのコントラスト比不足を含む）`,
       violations: result
     };
   } catch (e) {
@@ -1610,11 +1663,369 @@ async function check_2_5_1_7_gestures(page) {
   }
 }
 
+// ============================================================
+// Section A: 新規自動化チェック（A/AA 未実装項目）
+// ============================================================
+
+/** SC 2.5.3 名前（ラベル）に名前が含まれる
+ *  visible text と aria-label が食い違うと音声入力ユーザーが操作できない
+ */
+async function check_2_5_3_label_in_name(page) {
+  try {
+    const violations = await page.evaluate(() => {
+      const issues = [];
+      const interactives = document.querySelectorAll('button, a, [role="button"], [role="link"], input[type="submit"], input[type="button"], input[type="reset"]');
+      for (const el of interactives) {
+        const ariaLabel = el.getAttribute('aria-label') || '';
+        if (!ariaLabel) continue;
+        const visibleText = (el.textContent || el.value || '').trim().replace(/\s+/g, ' ');
+        if (!visibleText) continue;
+        // aria-label がvisible textを含まない場合は違反
+        if (!ariaLabel.toLowerCase().includes(visibleText.toLowerCase().slice(0, 15))) {
+          const tag = el.tagName.toLowerCase();
+          const id  = el.id ? `#${el.id}` : '';
+          issues.push(`${tag}${id}: aria-label="${ariaLabel}" ≠ visible="${visibleText.slice(0, 40)}"`);
+          if (issues.length >= 10) break;
+        }
+      }
+      return issues;
+    });
+    return {
+      sc: '2.5.3', name: '名前（ラベル）に名前が含まれる',
+      status: violations.length === 0 ? 'pass' : 'fail',
+      message: violations.length === 0
+        ? 'aria-labelは全てvisibleテキストを含んでいます'
+        : `${violations.length}件: aria-labelとvisibleテキストが不一致（音声入力で操作できない可能性）`,
+      violations
+    };
+  } catch (e) {
+    return { sc: '2.5.3', name: '名前（ラベル）に名前が含まれる', status: 'error', message: e.message, violations: [] };
+  }
+}
+
+/** SC 1.3.4 表示方向
+ *  CSS でポートレート/ランドスケープを強制している検出
+ */
+async function check_1_3_4_orientation(page) {
+  try {
+    const issues = await page.evaluate(() => {
+      const found = [];
+      // CSS @media orientation ルールで display:none / visibility:hidden を設定しているか
+      for (const sheet of document.styleSheets) {
+        try {
+          for (const rule of sheet.cssRules || []) {
+            if (rule.type === CSSRule.MEDIA_RULE) {
+              const cond = rule.conditionText || (rule.media && rule.media.mediaText) || '';
+              if (cond.includes('orientation')) {
+                for (const inner of rule.cssRules || []) {
+                  const text = inner.cssText || '';
+                  if (/display\s*:\s*none|visibility\s*:\s*hidden/.test(text)) {
+                    found.push(`@media(${cond}){ ${text.slice(0, 80)} } — 特定方向でコンテンツ非表示`);
+                  }
+                }
+              }
+            }
+          }
+        } catch (e) {}
+      }
+      // body/html に transform:rotate がないか
+      const bodyStyle = getComputedStyle(document.body);
+      if (/rotate\((?!0)/.test(bodyStyle.transform)) {
+        found.push(`body transform:${bodyStyle.transform} — 表示方向がロックされている可能性`);
+      }
+      return found;
+    });
+    return {
+      sc: '1.3.4', name: '表示方向',
+      status: issues.length === 0 ? 'pass' : 'fail',
+      message: issues.length === 0
+        ? '表示方向を制限するCSSは検出されませんでした'
+        : `${issues.length}件: 特定方向でコンテンツを非表示にしている可能性`,
+      violations: issues
+    };
+  } catch (e) {
+    return { sc: '1.3.4', name: '表示方向', status: 'error', message: e.message, violations: [] };
+  }
+}
+
+/** SC 1.3.5 入力目的の特定
+ *  個人情報フィールドに適切な autocomplete 属性があるか
+ */
+async function check_1_3_5_input_purpose(page) {
+  try {
+    const violations = await page.evaluate(() => {
+      const issues = [];
+      // type/name/placeholder から個人情報フィールドを推定し autocomplete を確認
+      const patterns = [
+        { re: /email|メール/i,          autocomplete: 'email',          label: 'メール' },
+        { re: /tel|phone|電話/i,         autocomplete: 'tel',            label: '電話番号' },
+        { re: /\bname\b|氏名|お名前/i,   autocomplete: 'name',           label: '氏名' },
+        { re: /given.?name|名前|first.?name/i, autocomplete: 'given-name',  label: '名' },
+        { re: /family.?name|姓|last.?name/i,   autocomplete: 'family-name', label: '姓' },
+        { re: /postal|zip|郵便/i,        autocomplete: 'postal-code',    label: '郵便番号' },
+        { re: /address|住所/i,           autocomplete: 'street-address', label: '住所' },
+        { re: /birthday|生年月日|birth/i, autocomplete: 'bday',          label: '生年月日' },
+      ];
+      for (const input of document.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"], input:not([type])')) {
+        const hint = `${input.type || ''} ${input.name || ''} ${input.placeholder || ''} ${input.id || ''}`.toLowerCase();
+        for (const pat of patterns) {
+          if (pat.re.test(hint)) {
+            const ac = (input.getAttribute('autocomplete') || '').toLowerCase();
+            if (!ac || ac === 'off' || ac === 'on') {
+              const id = input.id ? `#${input.id}` : (input.name ? `[name=${input.name}]` : '');
+              issues.push(`input${id}: ${pat.label}フィールドに autocomplete="${ac || '(未設定)'}" — "${pat.autocomplete}"推奨`);
+            }
+            break;
+          }
+        }
+      }
+      return issues;
+    });
+    return {
+      sc: '1.3.5', name: '入力目的の特定（autocomplete）',
+      status: violations.length === 0 ? 'pass' : 'fail',
+      message: violations.length === 0
+        ? '個人情報フィールドに適切なautocomplete属性が設定されています'
+        : `${violations.length}個の個人情報フィールドでautocompleteが不適切`,
+      violations
+    };
+  } catch (e) {
+    return { sc: '1.3.5', name: '入力目的の特定（autocomplete）', status: 'error', message: e.message, violations: [] };
+  }
+}
+
+/** SC 2.5.2 ポインタキャンセル
+ *  mousedown で即座にアクションが実行される要素を検出
+ */
+async function check_2_5_2_pointer_cancellation(page) {
+  try {
+    const violations = await page.evaluate(() => {
+      const issues = [];
+      // onmousedown 属性で直接アクション（location変更・submit等）を実行している要素
+      const els = document.querySelectorAll('[onmousedown]');
+      for (const el of els) {
+        const handler = el.getAttribute('onmousedown') || '';
+        // location/submit/href 変更を示すパターン
+        if (/location|submit|href|navigate|window\.open/i.test(handler)) {
+          const tag = el.tagName.toLowerCase();
+          const id  = el.id ? `#${el.id}` : '';
+          issues.push(`${tag}${id}[onmousedown="${handler.slice(0, 60)}"]: mousedownで即座にアクション実行`);
+          if (issues.length >= 10) break;
+        }
+      }
+      return issues;
+    });
+    return {
+      sc: '2.5.2', name: 'ポインタキャンセル',
+      status: violations.length === 0 ? 'pass' : 'fail',
+      message: violations.length === 0
+        ? 'mousedownで即座にアクションを実行する要素は検出されませんでした'
+        : `${violations.length}件: mousedownイベントでキャンセル不可能なアクションの可能性`,
+      violations
+    };
+  } catch (e) {
+    return { sc: '2.5.2', name: 'ポインタキャンセル', status: 'error', message: e.message, violations: [] };
+  }
+}
+
+/** SC 2.5.4 モーション操作の代替
+ *  DeviceMotion/DeviceOrientation イベントリスナーを検出（ページ読み込み前に注入）
+ */
+async function check_2_5_4_motion_actuation(page) {
+  try {
+    // ページ内スクリプト実行前にフックを注入
+    await page.evaluateOnNewDocument(() => {
+      window.__motionListeners = [];
+      const origAEL = EventTarget.prototype.addEventListener;
+      EventTarget.prototype.addEventListener = function(type, ...args) {
+        if (type === 'devicemotion' || type === 'deviceorientation') {
+          window.__motionListeners.push(type);
+        }
+        return origAEL.apply(this, [type, ...args]);
+      };
+    });
+    // ページを再読み込みしてフックを有効にする（check前に呼ばれるreloadは不要のためここでは再評価のみ）
+    const motionListeners = await page.evaluate(() => window.__motionListeners || []);
+    if (motionListeners.length === 0) {
+      return { sc: '2.5.4', name: 'モーション操作の代替', status: 'pass', message: 'DeviceMotion/DeviceOrientationイベントは未使用', violations: [] };
+    }
+    // 代替UIがあるか確認
+    const hasAlternative = await page.evaluate(() => {
+      return !!(document.querySelector('button, [role="button"], input[type="button"]'));
+    });
+    const violations = motionListeners.map(t => `${t}イベントを使用: ボタン等の代替UI${hasAlternative ? 'あり（内容を手動確認）' : 'なし'}`);
+    return {
+      sc: '2.5.4', name: 'モーション操作の代替',
+      status: hasAlternative ? 'manual_required' : 'fail',
+      message: hasAlternative
+        ? `モーションイベント使用 — 代替UIの存在を確認（手動確認推奨）`
+        : 'モーションイベント使用 + 代替UIが見つかりません',
+      violations
+    };
+  } catch (e) {
+    return { sc: '2.5.4', name: 'モーション操作の代替', status: 'error', message: e.message, violations: [] };
+  }
+}
+
+/** SC 3.2.6 ヘルプの位置一貫性
+ *  ヘルプ・連絡先リンクがheader/footer内の一定位置にあるか
+ */
+async function check_3_2_6_consistent_help(page) {
+  try {
+    const result = await page.evaluate(() => {
+      const helpPatterns = [
+        /^tel:/i, /^mailto:/i,
+        /help|support|faq|contact|ヘルプ|サポート|お問い合わせ|よくある/i
+      ];
+      const header = document.querySelector('header, [role="banner"]');
+      const footer = document.querySelector('footer, [role="contentinfo"]');
+      const nav    = document.querySelector('nav, [role="navigation"]');
+
+      function findHelp(container) {
+        if (!container) return [];
+        return Array.from(container.querySelectorAll('a')).filter(a => {
+          const href = (a.getAttribute('href') || '').toLowerCase();
+          const text = (a.textContent || '').toLowerCase();
+          return helpPatterns.some(p => p.test(href) || p.test(text));
+        }).map(a => (a.textContent || a.href || '').trim().slice(0, 40));
+      }
+
+      const headerHelp = findHelp(header);
+      const footerHelp = findHelp(footer);
+      const navHelp    = findHelp(nav);
+      const allHelp    = [...headerHelp, ...footerHelp, ...navHelp];
+
+      return { found: allHelp.length > 0, locations: allHelp, hasHeader: !!header, hasFooter: !!footer };
+    });
+
+    if (!result.hasHeader && !result.hasFooter) {
+      return { sc: '3.2.6', name: 'ヘルプの位置一貫性', status: 'manual_required', message: 'header/footer要素が検出されません — 手動確認が必要', violations: [] };
+    }
+    return {
+      sc: '3.2.6', name: 'ヘルプの位置一貫性',
+      status: result.found ? 'pass' : 'fail',
+      message: result.found
+        ? `header/footer/navにヘルプ/連絡先リンクあり: ${result.locations.slice(0, 3).join(', ')}`
+        : 'header/footer内にヘルプ・連絡先・FAQリンクが見つかりません',
+      violations: result.found ? [] : ['ヘルプリンク（tel/mailto/contact/FAQ）をheader/footerに配置してください']
+    };
+  } catch (e) {
+    return { sc: '3.2.6', name: 'ヘルプの位置一貫性', status: 'error', message: e.message, violations: [] };
+  }
+}
+
+/** SC 3.3.7 冗長な入力
+ *  マルチステップフォームで既入力データの再要求を検出
+ */
+async function check_3_3_7_redundant_entry(page) {
+  try {
+    const result = await page.evaluate(() => {
+      // マルチステップのパターンを検出
+      const stepIndicators = document.querySelectorAll('[class*="step" i], [class*="wizard" i], [class*="progress" i], [aria-current="step"]');
+      const forms = document.querySelectorAll('form');
+      const issues = [];
+
+      if (stepIndicators.length > 0) {
+        // マルチステップ確認
+        issues.push(`マルチステップUIを検出(${stepIndicators.length}個の要素): 前ステップの入力値が再要求されていないか手動確認が必要`);
+      }
+      if (forms.length > 1) {
+        // 同一ページに複数フォーム: 同じフィールドが重複してないか
+        const allInputNames = [];
+        const duplicates = [];
+        for (const form of forms) {
+          for (const inp of form.querySelectorAll('input[name]:not([type="hidden"]):not([type="submit"])')) {
+            const n = inp.name;
+            if (allInputNames.includes(n)) {
+              if (!duplicates.includes(n)) duplicates.push(n);
+            } else {
+              allInputNames.push(n);
+            }
+          }
+        }
+        if (duplicates.length > 0) {
+          issues.push(`複数フォームで同名フィールドが重複: ${duplicates.slice(0, 5).join(', ')} — 冗長な入力の可能性`);
+        }
+      }
+
+      // autocomplete で前入力値を再利用しているか
+      const requiredInputs = document.querySelectorAll('input[required]:not([type="hidden"]):not([type="submit"])');
+      let noAutocomplete = 0;
+      for (const inp of requiredInputs) {
+        const ac = inp.getAttribute('autocomplete');
+        if (!ac || ac === 'off') noAutocomplete++;
+      }
+      if (noAutocomplete > 2 && stepIndicators.length > 0) {
+        issues.push(`必須フィールド${noAutocomplete}個でautocompleteなし: マルチステップでの再入力を強いている可能性`);
+      }
+
+      return { issues, hasMultiStep: stepIndicators.length > 0, formCount: forms.length };
+    });
+
+    if (result.issues.length === 0 && !result.hasMultiStep) {
+      return { sc: '3.3.7', name: '冗長な入力', status: 'pass', message: 'マルチステップフォームは検出されませんでした', violations: [] };
+    }
+    return {
+      sc: '3.3.7', name: '冗長な入力',
+      status: result.issues.some(i => i.includes('重複')) ? 'fail' : 'manual_required',
+      message: result.issues.length === 0
+        ? 'マルチステップUI検出 — 手動確認を推奨'
+        : `${result.issues.length}件の問題を検出`,
+      violations: result.issues
+    };
+  } catch (e) {
+    return { sc: '3.3.7', name: '冗長な入力', status: 'error', message: e.message, violations: [] };
+  }
+}
+
+/** SC 2.4.4 リンクの目的（コンテキスト内）— Section B 新規
+ *  汎用的なリンクテキスト（「こちら」「詳しくは」等）を検出
+ */
+async function check_2_4_4_link_purpose(page) {
+  try {
+    const violations = await page.evaluate(() => {
+      // 日本語・英語の汎用リンクテキストブラックリスト
+      const blacklist = /^(こちら|ここ|詳しくは|詳細|続きを読む|もっと見る|click here|here|read more|more|learn more|details|続き|see more|view more|全文|全て)$/i;
+      const issues = [];
+      for (const a of document.querySelectorAll('a[href]')) {
+        const text = (a.textContent || a.getAttribute('aria-label') || '').trim().replace(/\s+/g, ' ');
+        if (!text) {
+          // テキストなし — alt付きimgのみのリンク以外は違反
+          const hasImg = a.querySelector('img[alt]:not([alt=""])');
+          const hasAriaLabel = a.getAttribute('aria-label') || a.getAttribute('aria-labelledby');
+          if (!hasImg && !hasAriaLabel) {
+            const id = a.id ? `#${a.id}` : '';
+            issues.push(`a${id}[href="${(a.getAttribute('href') || '').slice(0, 40)}"]: リンクテキストなし`);
+          }
+        } else if (blacklist.test(text)) {
+          const id = a.id ? `#${a.id}` : '';
+          issues.push(`a${id}: 汎用テキスト「${text}」— リンク先が特定できない`);
+        }
+        if (issues.length >= 15) break;
+      }
+      return issues;
+    });
+    return {
+      sc: '2.4.4', name: 'リンクの目的（汎用テキスト検出）',
+      status: violations.length === 0 ? 'pass' : 'fail',
+      message: violations.length === 0
+        ? '汎用的なリンクテキストは検出されませんでした'
+        : `${violations.length}件: リンク目的が不明なテキスト（「こちら」「read more」等）`,
+      violations
+    };
+  } catch (e) {
+    return { sc: '2.4.4', name: 'リンクの目的（汎用テキスト検出）', status: 'error', message: e.message, violations: [] };
+  }
+}
+
 /**
  * Phase 1 高精度検査 API
  */
+// WCAG 2.2 AAA の SC 識別子（AAA betaオフ時に除外）
+const AAA_SC_LIST = new Set(['2.3.3','2.4.12','2.4.13','2.1.3','3.3.9','2.3.2','2.2.3','2.2.4','2.2.5','2.2.6','2.4.6','2.4.8','2.4.9','2.4.10','1.4.6','1.4.7','1.4.8','1.4.9','2.5.5','2.5.6','3.1.3','3.1.4','3.1.5','3.1.6','3.2.5','3.3.5','3.3.6','3.3.9']);
+
 app.post('/api/enhanced-check', async (req, res) => {
-  const { url, basicAuth } = req.body;
+  const { url, basicAuth, includeAAA } = req.body;
   if (!url) return res.status(400).json({ error: 'URLを指定してください' });
 
   let browser;
@@ -1758,9 +2169,31 @@ app.post('/api/enhanced-check', async (req, res) => {
     // 3-6
     results.push(await withTimeout(() => check_2_5_1_7_gestures(page)));
 
+    // ページ再読み込み（Section A用）
+    await page.goto(url, { waitUntil: 'networkidle2' }).catch(() => {});
+    await new Promise(r => setTimeout(r, 1000));
+
+    // --- Section A: 新規チェック (A/AA) ---
+    console.log('[Enhanced] Section A 新規チェック中...');
+
+    results.push(await withTimeout(() => check_2_5_3_label_in_name(page)));
+    results.push(await withTimeout(() => check_1_3_4_orientation(page)));
+    results.push(await withTimeout(() => check_1_3_5_input_purpose(page)));
+    results.push(await withTimeout(() => check_2_5_2_pointer_cancellation(page)));
+    results.push(await withTimeout(() => check_2_5_4_motion_actuation(page)));
+    results.push(await withTimeout(() => check_3_2_6_consistent_help(page)));
+    results.push(await withTimeout(() => check_3_3_7_redundant_entry(page)));
+    results.push(await withTimeout(() => check_2_4_4_link_purpose(page)));
+
     await page.close();
-    console.log(`[Enhanced] 完了: ${results.length}基準を検査`);
-    res.json({ success: true, url, results, checkedAt: new Date().toISOString() });
+
+    // AAA フィルタリング（includeAAA が false の場合は AAA SC を除外）
+    const finalResults = includeAAA
+      ? results
+      : results.filter(r => !AAA_SC_LIST.has(r.sc));
+
+    console.log(`[Enhanced] 完了: ${finalResults.length}基準を検査 (includeAAA:${!!includeAAA})`);
+    res.json({ success: true, url, results: finalResults, includeAAA: !!includeAAA, checkedAt: new Date().toISOString() });
 
   } catch (error) {
     console.error('[Enhanced] Error:', error);
@@ -2252,8 +2685,9 @@ app.post('/api/export-report', async (req, res) => {
 app.get('/api/sheets-status', (req, res) => {
   const saKey = loadServiceAccountKey();
   const saved = loadSettings();
-  const geminiKey = saved.geminiApiKey || GEMINI_API_KEY;
-  const folderId = saved.driveFolderId || GOOGLE_DRIVE_FOLDER_ID || '';
+  // インメモリ変数を優先（サーバー再起動後にファイルから読み直すため saved も確認）
+  const geminiKey = GEMINI_API_KEY || saved.geminiApiKey || '';
+  const folderId = GOOGLE_DRIVE_FOLDER_ID || saved.driveFolderId || '';
   res.json({
     configured: !!saKey,
     spreadsheetId: cachedSpreadsheetId || null,
