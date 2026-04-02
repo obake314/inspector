@@ -355,8 +355,8 @@
                 <span class="level-select-label">対象レベル</span>
                 <div class="level-select-btns">
                     <button type="button" class="level-select-btn" data-level="A">A</button>
-                    <button type="button" class="level-select-btn" data-level="AA">AA</button>
-                    <button type="button" class="level-select-btn active" data-level="AAA">AAA</button>
+                    <button type="button" class="level-select-btn active" data-level="AA">AA</button>
+                    <button type="button" class="level-select-btn" data-level="AAA" id="levelBtnAAA" style="display:none;">AAA <span style="font-size:10px;background:#7c3aed;color:white;padding:1px 5px;border-radius:8px;vertical-align:middle;">β</span></button>
                 </div>
             </div>
             <div id="singleInput">
@@ -389,7 +389,7 @@
                     <input type="password" id="basicPass" class="url-input" placeholder="パスワード" style="flex: 1;">
                 </div>
             </details>
-            <div class="note" id="levelNote">Level AAA: A + AA + AAA の全基準をチェック（最高水準）</div>
+            <div class="note" id="levelNote">Level AA: A + AA の基準をチェック（推奨水準）</div>
             <details class="skip-rules-section">
                 <summary>除外ルール設定</summary>
                 <div class="skip-rules-list">
@@ -739,7 +739,7 @@
         ];
 
         let lastResults = null, checkedItems = new Set();
-        let targetLevel = 'AAA';
+        let targetLevel = 'AA';
         const $ = id => document.getElementById(id);
 
         // --- ログイン・設定 ---
@@ -1390,20 +1390,28 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                     $('batchReportBtn').style.display = '';
                 }
                 // ヘッダーステータス更新
-                // 未設定 → "--"（中立）、設定済み → "OK"
-                // "NG" は表示しない（未設定と設定エラーを区別できないため）
                 const setStatus = (id, stId, configured) => {
                     const el = $('status' + id);
                     el.classList.remove('ok', 'ng');
-                    if (configured) {
-                        el.classList.add('ok');
-                        $(stId).textContent = 'OK';
-                    } else {
-                        $(stId).textContent = '--';
-                    }
+                    if (configured) { el.classList.add('ok'); $(stId).textContent = 'OK'; }
+                    else { $(stId).textContent = '--'; }
                 };
                 setStatus('Gemini', 'stGemini', data.geminiConfigured);
                 setStatus('Sheets', 'stSheets', data.configured);
+            } catch (e) { /* ignore */ }
+
+            // AAA ベータ設定を読んで AAA ボタン表示制御
+            try {
+                const sRes = await fetch('/api/settings-get', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: sessionPassword }) });
+                const sData = await sRes.json();
+                sessionAAABeta = !!sData.aaaBeta;
+                const btn = $('levelBtnAAA');
+                if (btn) btn.style.display = sessionAAABeta ? '' : 'none';
+                // AAAが非表示かつ現在AAAが選択中なら AA に戻す
+                if (!sessionAAABeta && targetLevel === 'AAA') {
+                    targetLevel = 'AA';
+                    document.querySelectorAll('.level-select-btn').forEach(b => b.classList.toggle('active', b.dataset.level === 'AA'));
+                }
             } catch (e) { /* ignore */ }
         }
         checkSheetsStatusFn();
