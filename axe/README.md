@@ -1,4 +1,4 @@
-# WCAG 2.2 アクセシビリティチェッカー
+# AXE INSPECTOR
 
 axe-core + Puppeteer + **Gemini AI** を使用したアクセシビリティチェッカー。
 

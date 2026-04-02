@@ -1,7 +1,7 @@
 {
   "name": "wcag-accessibility-checker",
   "version": "2.0.0",
-  "description": "WCAG 2.2 アクセシビリティチェッカー（axe-core + Gemini AI）",
+  "description": "AXE INSPECTOR",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
