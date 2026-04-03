@@ -97,6 +97,16 @@ h1 {
   display: flex;
   gap: 12px;
 }
+
+.basic-auth-inputs{
+  display: flex;
+  gap: 12px;
+}
+
+.basic-auth-input {
+  flex: 1;
+}
+
 .url-input {
   flex: 1;
   background: var(--navy-100);
@@ -149,6 +159,11 @@ h1 {
 .check-btn.loading .btn-text {
   display: none;
 }
+
+.scan-option{
+  display: inline-block;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -1083,12 +1098,12 @@ footer a:hover {
   padding: 10px 14px;
   font-size: 16px;
   font-family: "Poppins", monospace;
+  cursor:pointer;
 }
 
-.settings-group input{
+.settings-group input#settAAABeta{
   width:16px;
   height:16px;
-  cursor:pointer;
 }
 
 .settings-group input:focus,
