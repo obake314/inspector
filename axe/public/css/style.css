@@ -54,17 +54,19 @@ h1 {
 .level-select {
   display: flex;
   align-items: center;
-  gap: 16px;
   margin-bottom: 16px;
   padding-bottom: 16px;
   border-bottom: 1px solid var(--navy-200);
+    gap: 16px;
 }
+
 .level-select-label {
   font-size: 16px;
   font-weight: 500;
   color: var(--navy-500);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  width: 120px;
 }
 .level-select-btns {
   display: flex;
@@ -76,6 +78,7 @@ h1 {
   padding: 8px 20px;
   font-size: 16px;
   font-weight: 500;
+  width: 140px;
   cursor: pointer;
   color: var(--navy-500);
 }
@@ -784,11 +787,23 @@ h1 {
 }
 /* Mode toggle */
 .mode-toggle {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--navy-200);
+}
+.mode-toggle-label {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--navy-500);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.mode-toggle-btns {
   display: flex;
   gap: 0;
-  margin-bottom: 16px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--navy-200);
 }
 .mode-btn {
   background: var(--navy-100);
@@ -798,6 +813,7 @@ h1 {
   font-weight: 500;
   cursor: pointer;
   color: var(--navy-500);
+  width: 140px;
 }
 .mode-btn:first-child {
   border-right: none;
@@ -1157,15 +1173,13 @@ footer a:hover {
 }
 .settings-gear {
   background: none;
-  border: 1px solid var(--navy-300);
-  width: 32px;
-  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   color: var(--navy-500);
-  font-size: 16px;
+  font-size: 36px;
+  border: none;
 }
 .settings-gear:hover {
   border-color: var(--navy-500);
