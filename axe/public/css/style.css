@@ -263,6 +263,11 @@ h1 {
 .results.visible {
   display: block;
 }
+
+.results.visible table{
+  width:100%;
+}
+
 .summary {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
