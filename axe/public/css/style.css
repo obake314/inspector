@@ -264,6 +264,10 @@ h1 {
   display: block;
 }
 
+.hidden-compat{
+  display: none;
+}
+
 .results.visible table{
   width:100%;
 }
