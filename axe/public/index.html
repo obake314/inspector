@@ -190,7 +190,7 @@
         .batch-page-btn:hover { border-color: var(--navy-500); }
         .batch-page-btn.active { background: var(--navy-700); border-color: var(--navy-700); color: white; }
         .batch-page-btn.error { border-color: #dc2626; color: #dc2626; }
-        .batch-page-btn .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+        .batch-page-btn .status-dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; }
         .batch-page-btn .status-dot.ok { background: #059669; }
         .batch-page-btn .status-dot.ng { background: #dc2626; }
         .batch-summary-table { width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 24px; }
@@ -325,7 +325,7 @@
                 <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:600;">
                     <input type="checkbox" id="settAAABeta" style="width:16px;height:16px;cursor:pointer;">
                     <span>AAA 基準をベータ検査に含める</span>
-                    <span style="font-size:11px;background:#7c3aed;color:white;padding:1px 7px;border-radius:10px;font-weight:600;">BETA</span>
+                    <span style="font-size:11px;background:#7c3aed;color:white;padding:1px 7px;font-weight:600;">BETA</span>
                 </label>
                 <div class="hint" style="margin-top:6px;">チェックを入れると高精度検査に WCAG 2.2 AAA 基準（SC 2.3.3, 2.4.12, 2.4.13 等）が追加されます。デフォルトは A/AA のみ。</div>
             </div>
@@ -447,7 +447,7 @@
         <div class="results" id="batchResults" style="display:none;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
                 <h2 style="font-size: 16px; font-weight: 600;">一括検査結果</h2>
-                <button class="export-btn" id="batchReportBtn" onclick="exportBatchReport()" style="display:none;background:var(--navy-700);color:#fff;padding:10px 24px;font-size:14px;font-weight:600;border:none;border-radius:4px;cursor:pointer;">レポート出力（Sheets）</button>
+                <button class="export-btn" id="batchReportBtn" onclick="exportBatchReport()" style="display:none;background:var(--navy-700);color:#fff;padding:10px 24px;font-size:14px;font-weight:600;border:none;cursor:pointer;">レポート出力（Sheets）</button>
             </div>
             <div id="batchSummaryArea"></div>
             <div class="batch-results-nav" id="batchResultsNav"></div>
@@ -473,7 +473,7 @@
             <div class="scan-time" id="scanTime"></div>
             <div class="scan-debug" id="scanDebug" style="font-size: 14px; color: var(--navy-400); margin-bottom: 16px; font-family: 'Poppins', monospace;"></div>
             <div style="display:flex;gap:8px;margin-bottom:16px;">
-                <button class="export-btn" id="reportBtn" onclick="exportToSheets()" style="display:none;background:#1a73e8;color:#fff;padding:10px 24px;font-size:14px;font-weight:600;border:none;border-radius:4px;cursor:pointer;">レポート出力（Sheets）</button>
+                <button class="export-btn" id="reportBtn" onclick="exportToSheets()" style="display:none;background:#1a73e8;color:#fff;padding:10px 24px;font-size:14px;font-weight:600;border:none;cursor:pointer;">レポート出力（Sheets）</button>
                 <button class="export-btn" id="csvBtn" onclick="exportCSV()" style="display:none;padding:10px 16px;font-size:13px;">CSV出力</button>
             </div>
             <div class="tabs">
@@ -733,7 +733,11 @@
             { text: "読み順序が意味のある順序", ref: "1.3.2", level: "A", category: "構造" },
             { text: "感覚的特徴だけに依存しない", ref: "1.3.3", level: "A", category: "構造" },
             { text: "UI要素の目的が特定可能", ref: "1.3.6", level: "AAA", category: "構造" },
-            { text: "ステータスメッセージがARIAで通知される", ref: "4.1.3", level: "AA", category: "構造" }
+            { text: "ステータスメッセージがARIAで通知される", ref: "4.1.3", level: "AA", category: "構造" },
+            { text: "aria-expanded がトグル要素に適切に設定されている", ref: "4.1.2", level: "A", category: "ARIA" },
+            { text: "aria-current='page' が現在ページのナビゲーションリンクに設定されている", ref: "4.1.2", level: "AA", category: "ARIA" },
+            { text: "動的エラー・通知に aria-live または role='alert' が使用されている", ref: "4.1.3", level: "AA", category: "ARIA" },
+            { text: "カスタムウィジェットのroleが意味的に正確（例: role='button'が実際にボタン動作をする）", ref: "4.1.2", level: "A", category: "ARIA" }
         ];
 
         let lastResults = null, checkedItems = new Set();
@@ -1167,7 +1171,7 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 renderManualChecklist();
                 updateProgress();
                 
-                status.innerHTML = `評価完了 <span style="background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 10px; margin-left: 8px;">合格: ${passCount} / 不合格: ${failCount} / 要手動: ${manualCount} / 該当なし: ${naCount}</span>`;
+                status.innerHTML = `評価完了 <span style="background: rgba(255,255,255,0.2); padding: 2px 8px; margin-left: 8px;">合格: ${passCount} / 不合格: ${failCount} / 要手動: ${manualCount} / 該当なし: ${naCount}</span>`;
                 
             } catch (error) {
                 status.textContent = `エラー: ${error.message}`;
@@ -1221,7 +1225,7 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                             <div class="manual-checkbox ${checkedItems.has(item.index) ? 'checked' : ''}" data-index="${item.index}" onclick="toggleCheck(${item.index}, this)"></div>
                             <div class="manual-content">
                                 <div class="manual-text">${item.text}</div>
-                                ${ai ? `<div class="ai-reason" style="font-size: 14px; color: ${textColor}; margin-top: 4px; padding: 6px 8px; background: ${bgColor}; border-radius: 4px;">
+                                ${ai ? `<div class="ai-reason" style="font-size: 14px; color: ${textColor}; margin-top: 4px; padding: 6px 8px; background: ${bgColor};">
                                     <strong>AI判定: ${statusLabel}</strong> - ${escapeHtml(ai.reason || '')}
                                     ${ai.suggestion ? `<br><strong>改善案:</strong> ${escapeHtml(ai.suggestion)}` : ''}
                                     <span style="opacity: 0.6; margin-left: 8px;">(確信度: ${Math.round((ai.confidence || 0) * 100)}%)</span>
@@ -1389,7 +1393,7 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                     const color = done ? '#16a34a' : active ? '#0d7a5f' : '#94a3b8';
                     const bg = done ? '#dcfce7' : active ? '#d1fae5' : '#f1f5f9';
                     const prefix = done ? '✓ ' : active ? '▶ ' : '';
-                    return `<span style="padding:2px 8px;border-radius:10px;background:${bg};color:${color};font-weight:${active?'600':'400'};white-space:nowrap">${prefix}${p.label}</span>`;
+                    return `<span style="padding:2px 8px;background:${bg};color:${color};font-weight:${active?'600':'400'};white-space:nowrap">${prefix}${p.label}</span>`;
                 }).join('');
             }
 
@@ -1854,23 +1858,23 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
             }
 
             let html = `<div style="display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap;">
-                <div style="background:#f0fdf4;border:1px solid #bbf7d0;padding:12px 20px;border-radius:6px;text-align:center;">
+                <div style="background:#f0fdf4;border:1px solid #bbf7d0;padding:12px 20px;text-align:center;">
                     <div style="font-size:24px;font-weight:700;color:#059669;">${passCount}</div>
                     <div style="font-size:13px;color:#059669;">合格</div>
                 </div>
-                <div style="background:#fef2f2;border:1px solid #fecaca;padding:12px 20px;border-radius:6px;text-align:center;">
+                <div style="background:#fef2f2;border:1px solid #fecaca;padding:12px 20px;text-align:center;">
                     <div style="font-size:24px;font-weight:700;color:#dc2626;">${failCount}</div>
                     <div style="font-size:13px;color:#dc2626;">不合格</div>
                 </div>
-                <div style="background:#f9fafb;border:1px solid #e5e7eb;padding:12px 20px;border-radius:6px;text-align:center;">
+                <div style="background:#f9fafb;border:1px solid #e5e7eb;padding:12px 20px;text-align:center;">
                     <div style="font-size:24px;font-weight:700;color:#6b7280;">${naCount}</div>
                     <div style="font-size:13px;color:#6b7280;">対象外</div>
                 </div>
-                ${manualCount > 0 ? `<div style="background:#f5f3ff;border:1px solid #ddd6fe;padding:12px 20px;border-radius:6px;text-align:center;">
+                ${manualCount > 0 ? `<div style="background:#f5f3ff;border:1px solid #ddd6fe;padding:12px 20px;text-align:center;">
                     <div style="font-size:24px;font-weight:700;color:#7c3aed;">${manualCount}</div>
                     <div style="font-size:13px;color:#7c3aed;">要手動確認</div>
                 </div>` : ''}
-                ${errCount > 0 ? `<div style="background:#fffbeb;border:1px solid #fde68a;padding:12px 20px;border-radius:6px;text-align:center;">
+                ${errCount > 0 ? `<div style="background:#fffbeb;border:1px solid #fde68a;padding:12px 20px;text-align:center;">
                     <div style="font-size:24px;font-weight:700;color:#d97706;">${errCount}</div>
                     <div style="font-size:13px;color:#d97706;">エラー</div>
                 </div>` : ''}
@@ -1895,10 +1899,10 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 const label = statusLabels[r.status] || r.status;
                 const violations = r.violations || [];
                 const isAAA = AAA_SCS.has(r.sc);
-                html += `<div style="background:white;border:1px solid var(--navy-200);border-left:4px solid ${color};margin-bottom:10px;padding:14px 16px;border-radius:0 4px 4px 0;">
+                html += `<div style="background:white;border:1px solid var(--navy-200);border-left:4px solid ${color};margin-bottom:10px;padding:14px 16px;">
                     <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
-                        <span style="background:${color};color:white;font-size:12px;font-weight:600;padding:2px 10px;border-radius:12px;">${label}</span>
-                        ${isAAA ? `<span style="background:#7c3aed;color:white;font-size:11px;font-weight:600;padding:1px 7px;border-radius:10px;">AAA β</span>` : ''}
+                        <span style="background:${color};color:white;font-size:12px;font-weight:600;padding:2px 10px;">${label}</span>
+                        ${isAAA ? `<span style="background:#7c3aed;color:white;font-size:11px;font-weight:600;padding:1px 7px;">AAA β</span>` : ''}
                         <span style="font-weight:600;font-size:14px;color:var(--navy-700);">SC ${r.sc} ${r.name}</span>
                     </div>
                     <div style="font-size:14px;color:var(--navy-600);margin-bottom:${violations.length > 0 ? '8px' : '0'};">${escapeHtml(r.message || '')}</div>

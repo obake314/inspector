@@ -2099,6 +2099,99 @@ async function check_2_4_4_link_purpose(page) {
   }
 }
 
+/** ARIA動的属性チェック
+ *  aria-expanded / aria-current / aria-live の欠落を静的+動的で検出
+ */
+async function check_aria_attributes(page) {
+  try {
+    const result = await page.evaluate(() => {
+      const issues = { expanded: [], current: [], live: [] };
+
+      // --- aria-expanded ---
+      // aria-controls / aria-haspopup を持つ要素、または toggle/dropdown/accordion クラスの button/a
+      const togglePattern = /toggle|dropdown|collapse|accordion|menu|expand/i;
+      const candidates = [
+        ...document.querySelectorAll('[aria-controls], [aria-haspopup]'),
+        ...[...document.querySelectorAll('button, [role="button"], a')].filter(el => {
+          const cls = (el.className && typeof el.className === 'string') ? el.className : '';
+          return togglePattern.test(cls) || togglePattern.test(el.getAttribute('data-bs-toggle') || '');
+        })
+      ];
+      const seen = new Set();
+      for (const el of candidates) {
+        if (seen.has(el)) continue;
+        seen.add(el);
+        if (el.getAttribute('aria-expanded') === null) {
+          const tag = el.tagName.toLowerCase();
+          const id = el.id ? `#${el.id}` : '';
+          const cls = (el.className && typeof el.className === 'string')
+            ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+          const label = (el.textContent || el.getAttribute('aria-label') || '').trim().slice(0, 30);
+          issues.expanded.push(`${tag}${id}${cls}: "${label}" — aria-expanded属性なし`);
+          if (issues.expanded.length >= 10) break;
+        }
+      }
+
+      // --- aria-current ---
+      const navEls = [...document.querySelectorAll('nav, [role="navigation"]')];
+      let navLinksTotal = 0;
+      let hasAriaCurrent = false;
+      for (const nav of navEls) {
+        const links = nav.querySelectorAll('a');
+        navLinksTotal += links.length;
+        if ([...links].some(a => a.hasAttribute('aria-current'))) hasAriaCurrent = true;
+      }
+      if (navLinksTotal >= 2 && !hasAriaCurrent) {
+        issues.current.push(`navまたは[role=navigation]内の${navLinksTotal}件のリンクにaria-current="page"なし`);
+      }
+
+      // --- aria-live / role="alert" ---
+      const hasForm = document.querySelectorAll('form').length > 0;
+      const hasDynamicClass = document.querySelectorAll(
+        '[class*="error"],[class*="alert"],[class*="notification"],[class*="toast"],[class*="flash"],[class*="message"]'
+      ).length > 0;
+      const hasLiveRegion = document.querySelectorAll(
+        '[aria-live],[role="alert"],[role="status"],[role="log"],[role="marquee"],[aria-atomic]'
+      ).length > 0;
+      if ((hasForm || hasDynamicClass) && !hasLiveRegion) {
+        const hint = hasForm ? 'フォームあり' : '動的通知クラスあり';
+        issues.live.push(`${hint}だがaria-live / role="alert" のリージョンが見当たりません（動的エラー通知が未実装の可能性）`);
+      }
+
+      return {
+        expandedCount: issues.expanded.length,
+        currentMissing: issues.current.length > 0,
+        liveMissing: issues.live.length > 0,
+        issues: { expanded: issues.expanded, current: issues.current, live: issues.live }
+      };
+    });
+
+    const allViolations = [
+      ...result.issues.expanded.map(v => `[aria-expanded欠落] ${v}`),
+      ...result.issues.current.map(v => `[aria-current欠落] ${v}`),
+      ...result.issues.live.map(v => `[aria-live欠落] ${v}`)
+    ];
+
+    const hasIssues = allViolations.length > 0;
+    // live/currentはページ実装次第で必須でない場合もあるためmanual_requiredとする
+    const status = result.issues.expanded.length > 0 ? 'fail'
+      : (result.currentMissing || result.liveMissing) ? 'manual_required'
+      : 'pass';
+
+    return {
+      sc: '4.1.2/4.1.3',
+      name: 'ARIA動的属性（expanded/current/live）',
+      status,
+      message: hasIssues
+        ? `aria-expanded: ${result.expandedCount}件, aria-current: ${result.currentMissing ? '未設定' : 'OK'}, aria-live: ${result.liveMissing ? '未設定の可能性' : 'OK'}`
+        : 'aria-expanded / aria-current / aria-live の欠落は検出されませんでした',
+      violations: allViolations
+    };
+  } catch (e) {
+    return { sc: '4.1.2/4.1.3', name: 'ARIA動的属性（expanded/current/live）', status: 'error', message: e.message, violations: [] };
+  }
+}
+
 /**
  * Phase 1 高精度検査 API
  */
@@ -2265,6 +2358,7 @@ app.post('/api/enhanced-check', async (req, res) => {
     results.push(await withTimeout(() => check_3_2_6_consistent_help(page)));
     results.push(await withTimeout(() => check_3_3_7_redundant_entry(page)));
     results.push(await withTimeout(() => check_2_4_4_link_purpose(page)));
+    results.push(await withTimeout(() => check_aria_attributes(page)));
 
     await page.close();
 
