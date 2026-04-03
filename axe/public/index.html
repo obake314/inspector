@@ -363,19 +363,25 @@
                 <form id="urlForm">
                     <input type="url" class="url-input" id="urlInput" placeholder="https://example.com" required style="width:100%;margin-bottom:12px;">
                 </form>
-                <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                    <button type="button" class="check-btn" id="checkBtn" onclick="const u=$('urlInput').value.trim();if(u)check(u);">
-                        <span class="btn-text">BASIC SCAN</span>
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                    <button type="button" class="check-btn" id="runScanBtn">
+                        <span class="btn-text">SCAN</span>
                         <div class="spinner"></div>
                     </button>
-                    <button type="button" class="check-btn" id="enhancedCheckBtn" onclick="runEnhancedCheck()" style="background:#0d7a5f;">
-                        <span id="enhancedBtnText">DEEP SCAN</span>
-                        <span id="enhancedSpinner" style="display:none;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin 0.8s linear infinite;"></span>
-                    </button>
-                    <button type="button" class="check-btn" id="aiEvaluateBtn" onclick="runAIEvaluation()" style="background:#4f46e5;">
-                        <span class="ai-btn-text">MULTI SCAN</span>
-                        <span class="ai-spinner" style="display:none;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin 0.8s linear infinite;"></span>
-                    </button>
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
+                        <input type="checkbox" id="deepScanOpt" checked style="width:15px;height:15px;accent-color:#0d7a5f;cursor:pointer;">
+                        <span style="background:#0d7a5f;color:#fff;padding:4px 10px;border-radius:4px;font-size:12px;font-weight:600;letter-spacing:.5px;">DEEP SCAN</span>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
+                        <input type="checkbox" id="multiScanOpt" checked style="width:15px;height:15px;accent-color:#4f46e5;cursor:pointer;">
+                        <span style="background:#4f46e5;color:#fff;padding:4px 10px;border-radius:4px;font-size:12px;font-weight:600;letter-spacing:.5px;">MULTI SCAN</span>
+                    </label>
+                </div>
+                <!-- 既存ボタンは非表示のまま内部利用 -->
+                <div style="display:none;">
+                    <button type="button" id="checkBtn"><span class="btn-text"></span><div class="spinner"></div></button>
+                    <button type="button" id="enhancedCheckBtn"><span id="enhancedBtnText"></span><span id="enhancedSpinner"></span></button>
+                    <button type="button" id="aiEvaluateBtn"><span class="ai-btn-text"></span><span class="ai-spinner"></span></button>
                 </div>
                 <div id="enhancedStatus" style="margin-top:8px;font-size:13px;color:var(--navy-500);display:none;"></div>
                 <div id="aiStatus" style="margin-top:8px;font-size:13px;color:var(--navy-500);display:none;"></div>
@@ -454,21 +460,32 @@
             <div id="batchDetailArea"></div>
         </div>
         <div class="results" id="results">
-            <div class="summary">
-                <div class="summary-item"><div class="count" id="criticalCount" style="color:#7f1d1d;">0</div><div class="label">緊急</div></div>
-                <div class="summary-item"><div class="count" id="seriousCount" style="color:#dc2626;">0</div><div class="label">重大</div></div>
-                <div class="summary-item"><div class="count" id="moderateCount" style="color:#d97706;">0</div><div class="label">中程度</div></div>
-                <div class="summary-item"><div class="count" id="minorCount" style="color:#6b7280;">0</div><div class="label">軽微</div></div>
-                <div class="summary-item"><div class="count" id="passCount" style="color:#059669;">0</div><div class="label">合格</div></div>
-                <div class="summary-item"><div class="count" id="totalCount">0</div><div class="label">合計</div></div>
+            <!-- スコアサマリーテーブル -->
+            <div id="scanScoreTable" style="display:none;margin-bottom:20px;overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:600px;">
+                    <thead>
+                        <tr style="background:#1e293b;color:white;">
+                            <th style="padding:8px 14px;text-align:left;font-weight:700;white-space:nowrap;border-radius:4px 0 0 0;">SCAN</th>
+                            <th style="padding:8px 10px;text-align:center;white-space:nowrap;min-width:80px;">全項目<br><span style="font-size:11px;opacity:.8;">スコア</span></th>
+                            <th style="padding:8px 10px;text-align:center;color:#fca5a5;white-space:nowrap;">緊急</th>
+                            <th style="padding:8px 10px;text-align:center;color:#fca5a5;white-space:nowrap;">重大</th>
+                            <th style="padding:8px 10px;text-align:center;color:#fcd34d;white-space:nowrap;">中程度</th>
+                            <th style="padding:8px 10px;text-align:center;color:#d1d5db;white-space:nowrap;">軽微</th>
+                            <th style="padding:8px 10px;text-align:center;color:#86efac;white-space:nowrap;">合格</th>
+                            <th style="padding:8px 10px;text-align:center;color:#cbd5e1;white-space:nowrap;">該当なし</th>
+                            <th style="padding:8px 10px;text-align:center;color:#94a3b8;white-space:nowrap;border-radius:0 4px 0 0;">未検証</th>
+                        </tr>
+                    </thead>
+                    <tbody id="scanScoreBody"></tbody>
+                </table>
             </div>
-            <div class="achievement-banner" id="achievementBanner" style="display:none;">
-                <div class="achievement-rate" id="achievementRate">--%</div>
-                <div class="achievement-detail">
-                    <div class="achievement-label">自動検査 達成率</div>
-                    <div id="achievementDesc" style="font-size: 14px; color: var(--navy-600); margin-top: 2px;"></div>
-                    <div class="achievement-note">手動チェック項目の結果により変動する可能性があります</div>
-                </div>
+            <!-- 非表示: 旧サマリー（内部参照用） -->
+            <div style="display:none;">
+                <span id="criticalCount">0</span><span id="seriousCount">0</span>
+                <span id="moderateCount">0</span><span id="minorCount">0</span>
+                <span id="passCount">0</span><span id="totalCount">0</span>
+                <span id="achievementRate">0</span><span id="achievementDesc"></span>
+                <span id="achievementBanner"></span>
             </div>
             <div class="scan-time" id="scanTime"></div>
             <div class="scan-debug" id="scanDebug" style="font-size: 14px; color: var(--navy-400); margin-bottom: 16px; font-family: 'Poppins', monospace;"></div>
@@ -1573,8 +1590,57 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
             }
         }
 
+        // ============================================================
+        // SCAN オーケストレーター（BASIC + DEEP + MULTI を順次実行）
+        // ============================================================
+        async function runScan() {
+            const url = $('urlInput').value.trim();
+            if (!url) return;
+            const doDeep = $('deepScanOpt').checked;
+            const doMulti = $('multiScanOpt').checked;
+            const btn = $('runScanBtn');
+            btn.classList.add('loading');
+            btn.disabled = true;
+
+            try {
+                // BASIC SCAN
+                await check(url);
+                if (lastResults) {
+                    renderScanScoreTable(
+                        computeBasicScore(lastResults),
+                        null, null, doDeep, doMulti
+                    );
+                }
+
+                // DEEP SCAN
+                if (doDeep && lastResults) {
+                    await runEnhancedCheck();
+                    renderScanScoreTable(
+                        computeBasicScore(lastResults),
+                        computeDeepScore(lastEnhancedResults),
+                        null, true, doMulti
+                    );
+                }
+
+                // MULTI SCAN
+                if (doMulti && lastResults) {
+                    await runAIEvaluation();
+                    renderScanScoreTable(
+                        computeBasicScore(lastResults),
+                        doDeep ? computeDeepScore(lastEnhancedResults) : null,
+                        computeMultiScore(aiResults),
+                        doDeep, true
+                    );
+                }
+            } finally {
+                btn.classList.remove('loading');
+                btn.disabled = false;
+            }
+        }
+
+        $('runScanBtn').addEventListener('click', () => { const u = $('urlInput').value.trim(); if (u) runScan(); });
         $('batchCheckBtn').addEventListener('click', batchCheck);
-        $('urlForm').addEventListener('submit', e => { e.preventDefault(); const u = $('urlInput').value.trim(); if (u) check(u); });
+        $('urlForm').addEventListener('submit', e => { e.preventDefault(); if ($('urlInput').value.trim()) runScan(); });
         renderManualChecklist();
 
         // --- Google Sheets連携 ---
@@ -1611,6 +1677,162 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
             } catch (e) { /* ignore */ }
         }
         checkSheetsStatusFn();
+
+        // ============================================================
+        // スキャンスコアテーブル
+        // ============================================================
+        function computeBasicScore(results) {
+            if (!results) return null;
+            const v = results.violations || [];
+            const critical = v.filter(x => x.impact === 'critical').length;
+            const serious  = v.filter(x => x.impact === 'serious').length;
+            const moderate = v.filter(x => x.impact === 'moderate').length;
+            const minor    = v.filter(x => x.impact === 'minor').length;
+            const pass     = (results.passes || []).length;
+            const unverified = (results.incomplete || []).length;
+            const total    = critical + serious + moderate + minor + pass + unverified;
+            const checkable = pass + critical + serious + moderate + minor;
+            return { total, critical, serious, moderate, minor, pass, na: 0, unverified,
+                     score: checkable > 0 ? Math.round(pass / checkable * 100) : null };
+        }
+
+        function computeDeepScore(results) {
+            if (!results || !results.length) return null;
+            const fail       = results.filter(r => r.status === 'fail').length;
+            const pass       = results.filter(r => r.status === 'pass').length;
+            const na         = results.filter(r => r.status === 'not_applicable').length;
+            const unverified = results.filter(r => r.status === 'manual_required' || r.status === 'error').length;
+            const total      = fail + pass + na + unverified;
+            const checkable  = pass + fail;
+            return { total, critical: null, serious: fail, moderate: null, minor: null,
+                     pass, na, unverified, score: checkable > 0 ? Math.round(pass / checkable * 100) : null };
+        }
+
+        function computeMultiScore(aiData) {
+            if (!aiData) return null;
+            const lo = { 'A': 1, 'AA': 2, 'AAA': 3 };
+            const lim = lo[targetLevel] || 2;
+            let fail = 0, pass = 0, na = 0, unverified = 0;
+            manualCheckItems.forEach((item, i) => {
+                if ((lo[item.level] || 2) > lim) return;
+                const r = aiData[i];
+                if (!r) { unverified++; return; }
+                if (r.status === 'pass') pass++;
+                else if (r.status === 'fail') fail++;
+                else if (r.status === 'not_applicable') na++;
+                else unverified++;
+            });
+            const total = fail + pass + na + unverified;
+            const checkable = pass + fail;
+            return { total, critical: null, serious: fail, moderate: null, minor: null,
+                     pass, na, unverified, score: checkable > 0 ? Math.round(pass / checkable * 100) : null };
+        }
+
+        function computeTotalScore(basicResults, deepResults, multiAiData) {
+            // SC をキーにして worst result をマージ
+            const rank = { fail: 0, unverified: 1, pass: 2, na: 3 };
+            const scMap = {}; // sc → { result, impact }
+            const lo = { 'A': 1, 'AA': 2, 'AAA': 3 };
+            const lim = lo[targetLevel] || 2;
+
+            function merge(sc, result, impact) {
+                if (!sc) return;
+                const cur = scMap[sc];
+                if (!cur || rank[result] < rank[cur.result]) {
+                    scMap[sc] = { result, impact: impact || cur?.impact };
+                }
+            }
+
+            if (basicResults) {
+                (basicResults.violations || []).forEach(v => merge(extractSCFromTags(v.tags) || v.id, 'fail', v.impact));
+                (basicResults.passes    || []).forEach(v => merge(extractSCFromTags(v.tags) || v.id, 'pass', null));
+                (basicResults.incomplete|| []).forEach(v => merge(extractSCFromTags(v.tags) || v.id, 'unverified', v.impact));
+            }
+            if (deepResults) {
+                deepResults.forEach(r => {
+                    const res = r.status === 'fail' ? 'fail' : r.status === 'pass' ? 'pass'
+                               : r.status === 'not_applicable' ? 'na' : 'unverified';
+                    merge(r.sc, res, null);
+                });
+            }
+            if (multiAiData) {
+                manualCheckItems.forEach((item, i) => {
+                    if ((lo[item.level] || 2) > lim) return;
+                    const r = multiAiData[i];
+                    const res = !r ? 'unverified' : r.status === 'pass' ? 'pass'
+                               : r.status === 'fail' ? 'fail'
+                               : r.status === 'not_applicable' ? 'na' : 'unverified';
+                    merge(item.ref, res, null);
+                });
+            }
+
+            const imp = { critical: 0, serious: 0, moderate: 0, minor: 0 };
+            let pass = 0, na = 0, unverified = 0, fail = 0;
+            Object.values(scMap).forEach(({ result, impact }) => {
+                if (result === 'fail') { fail++; if (imp[impact] !== undefined) imp[impact]++; else imp.serious++; }
+                else if (result === 'pass') pass++;
+                else if (result === 'na')   na++;
+                else unverified++;
+            });
+            const total = fail + pass + na + unverified;
+            const checkable = pass + fail;
+            return { total, critical: imp.critical, serious: imp.serious, moderate: imp.moderate, minor: imp.minor,
+                     pass, na, unverified, score: checkable > 0 ? Math.round(pass / checkable * 100) : null };
+        }
+
+        function renderScanScoreTable(basicScore, deepScore, multiScore, deepEnabled, multiEnabled) {
+            const DASH = '<span style="color:#cbd5e1;">—</span>';
+
+            function scoreChip(score) {
+                if (score === null || score === undefined) return DASH;
+                const c = score >= 80 ? '#059669' : score >= 50 ? '#d97706' : '#dc2626';
+                return `<span style="font-weight:700;color:${c};font-size:14px;">${score}%</span>`;
+            }
+            function num(n, color) {
+                if (n === null || n === undefined) return DASH;
+                return `<span style="font-weight:${n > 0 ? '700' : '400'};color:${n > 0 ? color : '#94a3b8'};">${n}</span>`;
+            }
+            function row(label, labelColor, labelBg, data, enabled, isTotal) {
+                const border = isTotal ? 'border-top:2px solid #334155;' : 'border-bottom:1px solid #e2e8f0;';
+                const bg     = isTotal ? '#f1f5f9' : 'white';
+                if (!enabled || !data) {
+                    return `<tr style="${border}background:${bg};">
+                        <td style="padding:9px 14px;font-weight:700;"><span style="background:${labelBg};color:${labelColor};padding:2px 8px;border-radius:3px;font-size:12px;letter-spacing:.5px;">${label}</span></td>
+                        <td colspan="8" style="padding:9px 10px;text-align:center;color:#94a3b8;font-size:12px;">${isTotal ? '' : '— 未実行 —'}</td>
+                    </tr>`;
+                }
+                return `<tr style="${border}background:${bg};">
+                    <td style="padding:9px 14px;font-weight:700;white-space:nowrap;">
+                        <span style="background:${labelBg};color:${labelColor};padding:2px 8px;border-radius:3px;font-size:12px;letter-spacing:.5px;">${label}</span>
+                    </td>
+                    <td style="padding:9px 10px;text-align:center;white-space:nowrap;line-height:1.3;">
+                        <div style="font-size:11px;color:#64748b;">${data.total}</div>
+                        <div>${scoreChip(data.score)}</div>
+                    </td>
+                    <td style="padding:9px 10px;text-align:center;">${num(data.critical, '#7f1d1d')}</td>
+                    <td style="padding:9px 10px;text-align:center;">${num(data.serious,  '#dc2626')}</td>
+                    <td style="padding:9px 10px;text-align:center;">${num(data.moderate, '#d97706')}</td>
+                    <td style="padding:9px 10px;text-align:center;">${num(data.minor,    '#6b7280')}</td>
+                    <td style="padding:9px 10px;text-align:center;">${num(data.pass,     '#059669')}</td>
+                    <td style="padding:9px 10px;text-align:center;">${num(data.na,       '#94a3b8')}</td>
+                    <td style="padding:9px 10px;text-align:center;">${num(data.unverified,'#94a3b8')}</td>
+                </tr>`;
+            }
+
+            const totalScore = computeTotalScore(
+                lastResults,
+                deepEnabled && lastEnhancedResults ? lastEnhancedResults : null,
+                multiEnabled && Object.keys(aiResults).length > 0 ? aiResults : null
+            );
+
+            $('scanScoreBody').innerHTML =
+                row('BASIC', 'white', '#1e40af', basicScore, true, false) +
+                row('DEEP',  'white', '#0d7a5f', deepScore,  deepEnabled, false) +
+                row('MULTI', 'white', '#4f46e5', multiScore, multiEnabled, false) +
+                row('TOTAL', 'white', '#334155', totalScore, true, true);
+
+            $('scanScoreTable').style.display = 'block';
+        }
 
         /**
          * 統合レポート行を生成（1URL分）

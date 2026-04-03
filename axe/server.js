@@ -2617,7 +2617,7 @@ app.post('/api/export-sheets', async (req, res) => {
 });
 
 /**
- * スプシ転記 API
+ * GoogleSheetExport API
  * body: { pages: [{ url, rows, timestamp, stats }] }
  * 構成: 表紙シート + 1URLあたり1シート
  * 列(11列): No, 検査種別, SC, 検査項目, 適合レベル, 結果, 場所, 検出数, 重要度, 詳細, 改善案
@@ -2842,7 +2842,7 @@ app.post('/api/export-report', async (req, res) => {
     });
 
     const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
-    console.log(`[Report] 転記完了: ${url} (表紙 + ${pageTabInfo.length}ページ)`);
+    console.log(`[Report] Export完了: ${url} (表紙 + ${pageTabInfo.length}ページ)`);
     res.json({ success: true, spreadsheetId, tabs: [coverTitle, ...pageTabInfo.map(p => p.title)], url });
 
   } catch (error) {
