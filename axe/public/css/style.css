@@ -160,6 +160,12 @@ h1 {
   display: none;
 }
 
+.scan-controls{
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
 .scan-option{
   display: inline-block;
 }
