@@ -640,18 +640,71 @@
             return text
                 .replace(/Fix any of the following:/gi, '以下のいずれかを修正してください:')
                 .replace(/Fix all of the following:/gi, '以下のすべてを修正してください:')
+                .replace(/Fix one of the following:/gi, '以下のいずれか1つを修正してください:')
                 .replace(/Element does not have an alt attribute/gi, '要素にalt属性がありません')
+                .replace(/Element has an empty alt text attribute/gi, 'alt属性が空です（装飾画像として扱われます）')
                 .replace(/aria-label attribute does not exist or is empty/gi, 'aria-label属性が存在しないか空です')
                 .replace(/aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty/gi, 'aria-labelledby属性が存在しないか、参照先が空です')
                 .replace(/Element has no title attribute/gi, '要素にtitle属性がありません')
                 .replace(/Element's default semantics were not overridden with/gi, '要素のデフォルトセマンティクスが上書きされていません:')
                 .replace(/Element does not have text that is visible to screen readers/gi, 'スクリーンリーダーに見えるテキストがありません')
+                .replace(/Element does not have inner text that is visible to screen readers/gi, 'スクリーンリーダーが認識できるテキストがありません')
                 .replace(/Element has a tabindex greater than 0/gi, 'tabindex値が0より大きい値です')
+                .replace(/Element uses tabindex attribute with a value other than 0/gi, 'tabindex属性に0以外の値が設定されています')
                 .replace(/Document does not have a main landmark/gi, 'メインランドマークがありません')
+                .replace(/Page does not have a heading/gi, 'ページに見出しがありません')
                 .replace(/Expected the document to have a valid lang attribute/gi, '有効なlang属性が必要です')
+                .replace(/The lang attribute value is not a valid language tag/gi, 'lang属性の値が有効な言語タグではありません')
+                .replace(/Element has insufficient color contrast of ([\d.]+)/gi, '色のコントラスト比が不十分です（$1）')
                 .replace(/Element has insufficient color contrast/gi, '色のコントラスト比が不十分です')
                 .replace(/Element's background color could not be determined/gi, '背景色を判定できませんでした')
-                .replace(/Element is not contained by a landmark/gi, 'ランドマーク領域内に含まれていません');
+                .replace(/Element is not contained by a landmark/gi, 'ランドマーク領域内に含まれていません')
+                .replace(/Ensure ARIA attributes are not prohibited for an element's role/gi, '要素のロールで禁止されているARIA属性が使用されています')
+                .replace(/ARIA attribute is not allowed/gi, '使用できないARIA属性です')
+                .replace(/Required ARIA attribute not present/gi, '必須のARIA属性がありません')
+                .replace(/Required ARIA children role not present/gi, '必須のARIA子ロールがありません')
+                .replace(/Required ARIA parent role not present/gi, '必須のARIA親ロールがありません')
+                .replace(/ARIA role is not appropriate for the element/gi, '要素に適切でないARIAロールが設定されています')
+                .replace(/Attribute cannot be used on this element/gi, 'この要素には使用できない属性です')
+                .replace(/Link has no discernible text/gi, 'リンクに識別可能なテキストがありません')
+                .replace(/Button has no discernible text/gi, 'ボタンに識別可能なテキストがありません')
+                .replace(/Form element does not have an accessible name/gi, 'フォーム要素にアクセシブルな名前がありません')
+                .replace(/Input element does not have an accessible name/gi, '入力要素にアクセシブルな名前がありません')
+                .replace(/Select element does not have an accessible name/gi, 'セレクト要素にアクセシブルな名前がありません')
+                .replace(/Scrollable region is not reachable by keyboard/gi, 'スクロール可能領域がキーボードで操作できません')
+                .replace(/Document has no title element/gi, '文書にtitle要素がありません')
+                .replace(/Frame has no title/gi, 'フレームにtitle属性がありません')
+                .replace(/frame has no title/gi, 'フレームにtitle属性がありません')
+                .replace(/Table does not have a header/gi, 'テーブルにヘッダーがありません')
+                .replace(/Cell in table does not have a header/gi, 'テーブルのセルにヘッダーがありません')
+                .replace(/Interactive control not focusable/gi, 'インタラクティブコントロールがフォーカス可能ではありません');
+        }
+
+        // axe-core tags から SC番号を抽出（例: wcag1411 → 1.4.11）
+        function extractSCFromTags(tags) {
+            if (!tags) return '';
+            for (const t of tags) {
+                const m = t.match(/^wcag(\d)(\d)(\d{1,2})$/);
+                if (m) return `${m[1]}.${m[2]}.${parseInt(m[3], 10)}`;
+            }
+            return '';
+        }
+
+        // 行データからスコア集計（F列=index5が結果）
+        function computeStats(rows) {
+            const s = { pass: 0, fail: 0, incomplete: 0, na: 0, unverified: 0 };
+            rows.forEach(row => {
+                const r = row[5];
+                if (r === '合格') s.pass++;
+                else if (r === '不合格') s.fail++;
+                else if (r === '判定不能') s.incomplete++;
+                else if (r === '該当なし' || r === '対象外') s.na++;
+                else s.unverified++;
+            });
+            s.total = rows.length;
+            const checkable = s.pass + s.fail;
+            s.passRate = checkable > 0 ? Math.round(s.pass / checkable * 100) : null;
+            return s;
         }
 
         // ルールIDから日本語名を取得
@@ -1584,10 +1637,13 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
             return '';
         }
 
+        // 列構成: [No, 検査種別, SC, 検査項目, 適合レベル, 結果, 場所, 検出数, 重要度, 詳細, 改善案]
         function buildReportRows(results, url, aiData, enhancedData, navConsistency) {
             if (aiData === undefined) aiData = aiResults;
             if (enhancedData === undefined) enhancedData = lastEnhancedResults;
             const impactJa = { critical: '緊急', serious: '重大', moderate: '中程度', minor: '軽微' };
+            const levelOrder = { 'A': 1, 'AA': 2, 'AAA': 3 };
+            const targetLevelNum = levelOrder[targetLevel] || 2;
             const rows = [];
             let itemNo = 1;
 
@@ -1598,13 +1654,12 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 );
                 const locationStr = targets.join('\n') + (v.nodes.length > 5 ? '\n他' + (v.nodes.length - 5) + '件' : '');
                 rows.push([
-                    String(itemNo++),
-                    `[自動] ${getJaRuleName(v.id)}（${v.id}）`,
-                    getWcagLevelFromTags(v.tags),
-                    '不合格',
-                    locationStr,
-                    String(v.nodes.length),
-                    `[${impactJa[v.impact] || v.impact}] ${getJaRuleDesc(v.id, v.description || v.help)}`,
+                    String(itemNo++), '自動', extractSCFromTags(v.tags),
+                    `${getJaRuleName(v.id)}（${v.id}）`,
+                    getWcagLevelFromTags(v.tags), '不合格',
+                    locationStr, String(v.nodes.length),
+                    impactJa[v.impact] || v.impact || '',
+                    getJaRuleDesc(v.id, v.description || v.help),
                     translateFailureSummary(v.nodes[0]?.failureSummary || '')
                 ]);
             });
@@ -1616,63 +1671,42 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 );
                 const locationStr = targets.join('\n') + (v.nodes.length > 5 ? '\n他' + (v.nodes.length - 5) + '件' : '');
                 rows.push([
-                    String(itemNo++),
-                    `[自動] ${getJaRuleName(v.id)}（${v.id}）`,
-                    getWcagLevelFromTags(v.tags),
-                    '判定不能',
-                    locationStr,
-                    String(v.nodes.length),
-                    `[${impactJa[v.impact] || v.impact}] ${getJaRuleDesc(v.id, v.description || v.help)}`,
-                    ''
+                    String(itemNo++), '自動', extractSCFromTags(v.tags),
+                    `${getJaRuleName(v.id)}（${v.id}）`,
+                    getWcagLevelFromTags(v.tags), '判定不能',
+                    locationStr, String(v.nodes.length),
+                    impactJa[v.impact] || v.impact || '',
+                    getJaRuleDesc(v.id, v.description || v.help), ''
                 ]);
             });
 
             // --- 自動検査: passes → 合格 ---
             (results.passes || []).forEach(v => {
                 rows.push([
-                    String(itemNo++),
-                    `[自動] ${getJaRuleName(v.id)}（${v.id}）`,
-                    getWcagLevelFromTags(v.tags),
-                    '合格',
-                    '',
-                    '',
-                    getJaRuleDesc(v.id, v.description || v.help),
-                    ''
+                    String(itemNo++), '自動', extractSCFromTags(v.tags),
+                    `${getJaRuleName(v.id)}（${v.id}）`,
+                    getWcagLevelFromTags(v.tags), '合格',
+                    '', '', '',
+                    getJaRuleDesc(v.id, v.description || v.help), ''
                 ]);
             });
 
-            // --- 手動/AIチェック項目 ---
-            const statusMap = {
-                pass: '合格', fail: '不合格',
-                manual_required: '判定不能', not_applicable: '該当なし'
-            };
+            // --- 手動/AIチェック項目（targetLevel以上のみ）---
+            const statusMap = { pass: '合格', fail: '不合格', manual_required: '判定不能', not_applicable: '該当なし' };
             manualCheckItems.forEach((item, i) => {
+                if ((levelOrder[item.level] || 2) > targetLevelNum) return;
                 const ai = aiData[i];
-                let result = '未検証';
-                let location = '';
-                let count = '';
-                let detail = '';
-                let suggestion = '';
-
+                let result = '未検証', location = '', detail = '', suggestion = '';
                 if (ai) {
                     result = statusMap[ai.status] || '未検証';
                     detail = ai.reason || '';
                     suggestion = ai.suggestion || '';
-                    if (ai.status === 'fail' || ai.status === 'manual_required') {
-                        location = '（AI評価による検出）';
-                        count = '—';
-                    }
+                    if (ai.status === 'fail' || ai.status === 'manual_required') location = '（AI評価による検出）';
                 }
-
                 rows.push([
-                    String(itemNo++),
-                    `[WCAG ${item.ref}] ${item.text}`,
-                    item.level,
-                    result,
-                    location,
-                    count,
-                    detail,
-                    suggestion
+                    String(itemNo++), ai ? 'AI' : '手動', item.ref,
+                    item.text, item.level, result,
+                    location, '', '', detail, suggestion
                 ]);
             });
 
@@ -1681,19 +1715,15 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 const enhancedAaaScs = new Set(['2.3.3','2.4.12','2.4.13','2.1.3','3.3.9']);
                 const enhancedStatusMap = { pass: '合格', fail: '不合格', error: 'エラー', not_applicable: '対象外', manual_required: '要手動確認' };
                 enhancedData.forEach(r => {
+                    if (enhancedAaaScs.has(r.sc) && targetLevelNum < 3) return;
                     const level = enhancedAaaScs.has(r.sc) ? 'AAA' : 'AA';
-                    const statusJa = enhancedStatusMap[r.status] || r.status;
                     const violations = r.violations || [];
-                    const detail = [r.message || '', ...violations.slice(0, 10)].filter(Boolean).join('\n');
                     rows.push([
-                        String(itemNo++),
-                        `[高精度] SC ${r.sc} ${r.name}`,
-                        level,
-                        statusJa,
-                        violations.length > 0 ? violations.slice(0, 3).join('\n') : '',
+                        String(itemNo++), '高精度', r.sc, r.name, level,
+                        enhancedStatusMap[r.status] || r.status,
+                        violations.slice(0, 3).join('\n'),
                         violations.length > 0 ? String(violations.length) : '',
-                        detail,
-                        ''
+                        '', r.message || '', ''
                     ]);
                 });
             }
@@ -1701,23 +1731,17 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
             // --- SC 3.2.3/3.2.4 ナビゲーション一貫性（一括検査のみ）---
             if (navConsistency) {
                 const nc = navConsistency;
-                const statusJa = nc.result === 'pass' ? '合格' : nc.result === 'not_applicable' ? '対象外' : '不合格';
-                const issueText = (nc.issues || []).join('\n');
-                const comparedText = (nc.comparedUrls || []).join('\n');
                 rows.push([
-                    String(itemNo++),
-                    `[一括] SC ${nc.sc} ${nc.title}`,
-                    'AA',
-                    statusJa,
-                    comparedText,
-                    String((nc.issues || []).length) || '',
-                    issueText || (nc.result === 'pass' ? 'ナビゲーション構造は一貫しています' : ''),
+                    String(itemNo++), '一括', nc.sc, nc.title, 'AA',
+                    nc.result === 'pass' ? '合格' : nc.result === 'not_applicable' ? '対象外' : '不合格',
+                    (nc.comparedUrls || []).join('\n'),
+                    String((nc.issues || []).length) || '', '',
+                    (nc.issues || []).join('\n') || (nc.result === 'pass' ? 'ナビゲーション構造は一貫しています' : ''),
                     ''
                 ]);
             }
 
-            // 全セルのHTMLタグをサニタイズ
-            return rows.map(row => row.map(cell => sanitizeHtmlTags(cell)));
+            return rows.map(row => row.map(cell => sanitizeHtmlTags(String(cell ?? ''))));
         }
 
         // 単一ページスプシ転記
@@ -1729,13 +1753,14 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
             try {
                 const url = lastResults.url;
                 const rows = buildReportRows(lastResults, url);
+                const stats = computeStats(rows);
                 const timestamp = lastResults.timestamp || new Date().toISOString();
 
                 const res = await fetch('/api/export-report', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        pages: [{ url, rows, timestamp }]
+                        pages: [{ url, rows, timestamp, stats }]
                     })
                 });
                 const data = await res.json();
@@ -1756,11 +1781,15 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
             btn.disabled = true;
             btn.textContent = '転記中...';
             try {
-                const pages = batchResultsData.filter(r => r.success).map(r => ({
-                    url: r.url,
-                    rows: buildReportRows(r.results, r.url, batchAIResults[r.url] || {}, batchEnhancedResults[r.url] || null, batchNavConsistency),
-                    timestamp: r.results.timestamp || new Date().toISOString()
-                }));
+                const pages = batchResultsData.filter(r => r.success).map(r => {
+                    const rows = buildReportRows(r.results, r.url, batchAIResults[r.url] || {}, batchEnhancedResults[r.url] || null, batchNavConsistency);
+                    return {
+                        url: r.url,
+                        rows,
+                        timestamp: r.results.timestamp || new Date().toISOString(),
+                        stats: computeStats(rows)
+                    };
+                });
                 if (pages.length === 0) { alert('成功した検査結果がありません'); return; }
 
                 const res = await fetch('/api/export-report', {
