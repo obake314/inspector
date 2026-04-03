@@ -156,6 +156,33 @@
         .progress-track { height: 4px; background: var(--navy-200); }
         .progress-fill { height: 100%; background: var(--navy-600); transition: width 0.3s; }
         .empty-state { text-align: center; padding: 48px 24px; color: var(--navy-400); font-size: 14px; }
+        /* ---- 統合カードUI ---- */
+        .item-card { border-bottom: 1px solid var(--navy-200); border-left: 3px solid #d1d5db; }
+        .item-card:last-child { border-bottom: none; }
+        .item-card[data-impact="critical"] { border-left-color: #7f1d1d; }
+        .item-card[data-impact="serious"]  { border-left-color: #dc2626; }
+        .item-card[data-impact="moderate"] { border-left-color: #d97706; }
+        .item-card[data-impact="minor"]    { border-left-color: #6b7280; }
+        .item-card[data-impact="pass"]     { border-left-color: #059669; }
+        .item-header { display: flex; align-items: center; gap: 8px; padding: 12px 20px; cursor: pointer; }
+        .item-header:hover { background: var(--navy-100); }
+        .item-no    { font-size: 11px; color: var(--navy-400); font-family: 'Poppins', monospace; min-width: 28px; flex-shrink: 0; }
+        .item-sc    { font-size: 11px; font-family: 'Poppins', monospace; color: var(--navy-500); background: var(--navy-100); padding: 1px 6px; flex-shrink: 0; }
+        .item-level { font-size: 11px; font-weight: 600; color: var(--navy-500); background: var(--navy-200); padding: 1px 6px; flex-shrink: 0; }
+        .item-title { flex: 1; font-size: 14px; font-weight: 500; min-width: 0; }
+        .item-summary { padding: 0 20px 5px 20px; margin-left: 36px; font-size: 13px; color: var(--navy-500); }
+        .item-count   { padding: 0 20px 10px 20px; margin-left: 36px; font-size: 12px; color: var(--navy-400); }
+        .item-locations { display: none; padding: 6px 20px 14px 56px; }
+        .item-card.expanded .item-locations { display: block; }
+        .item-card.expanded .expand-icon { transform: rotate(180deg); }
+        .location-row { font-size: 12px; font-family: 'Poppins', monospace; padding: 5px 10px; background: var(--navy-100); margin-bottom: 3px; color: var(--navy-700); word-break: break-all; }
+        /* ---- 未検証 決定ボタン ---- */
+        .decision-btns { display: flex; gap: 3px; flex-shrink: 0; }
+        .decision-btn  { border: 1px solid var(--navy-300); background: white; padding: 3px 9px; font-size: 11px; font-weight: 600; cursor: pointer; letter-spacing: .03em; }
+        .decision-btn:hover         { background: var(--navy-100); }
+        .decision-btn.active-ok     { background: #059669; color: white; border-color: #059669; }
+        .decision-btn.active-ng     { background: #dc2626; color: white; border-color: #dc2626; }
+        .decision-btn.active-hold   { background: #d97706; color: white; border-color: #d97706; }
         .error-message { background: white; border: 1px solid var(--navy-300); border-left: 3px solid var(--navy-700); padding: 16px 20px; margin-bottom: 24px; display: none; }
         .error-message.visible { display: block; }
         .error-message h4 { font-size: 14px; font-weight: 500; margin-bottom: 8px; }
@@ -491,10 +518,6 @@
             </div>
             <div class="scan-time" id="scanTime"></div>
             <div class="scan-debug" id="scanDebug" style="font-size: 14px; color: var(--navy-400); margin-bottom: 16px; font-family: 'Poppins', monospace;"></div>
-            <div style="display:flex;gap:8px;margin-bottom:16px;">
-                <button class="export-btn" id="reportBtn" onclick="exportToSheets()" style="display:none;background:#1a73e8;color:#fff;padding:10px 24px;font-size:14px;font-weight:600;border:none;cursor:pointer;">Export to GoogleSheet</button>
-                <button class="export-btn" id="csvBtn" onclick="exportCSV()" style="display:none;padding:10px 16px;font-size:13px;">CSV出力</button>
-            </div>
             <!-- 非表示: 内部利用compat要素 -->
             <div style="display:none;">
                 <span id="violationsBadge"></span><span id="passBadge"></span><span id="incompleteBadge"></span>
@@ -518,6 +541,11 @@
             <div class="tab-content" id="tab-pass"><div class="section"><div class="violation-list" id="list-pass"></div></div></div>
             <div class="tab-content" id="tab-na"><div class="section"><div class="violation-list" id="list-na"></div></div></div>
             <div class="tab-content" id="tab-unverified"><div class="section"><div class="violation-list" id="list-unverified"></div></div></div>
+            <!-- エクスポートエリア -->
+            <div id="exportArea" style="display:none;margin-top:32px;padding-top:20px;border-top:1px solid var(--navy-200);display:flex;gap:12px;justify-content:flex-end;">
+                <button class="export-btn" id="csvBtn" onclick="exportCSV()" style="padding:10px 20px;font-size:13px;">CSV出力</button>
+                <button class="export-btn" id="reportBtn" onclick="exportToSheets()" style="display:none;background:#1a73e8;color:#fff;padding:10px 24px;font-size:14px;font-weight:600;border:none;cursor:pointer;">Export to GoogleSheet</button>
+            </div>
         </div>
         <footer>
             <p><a href="https://github.com/dequelabs/axe-core" target="_blank">axe-core</a> + Puppeteer で動作</p>
@@ -795,6 +823,14 @@
         ];
 
         let lastResults = null, checkedItems = new Set();
+        const manualDecisions = new Map(); // key → 'ok'|'ng'|'hold'
+        window.setDecision = (key, val, btnEl) => {
+            manualDecisions.set(key, val);
+            const card = btnEl.closest('.item-card');
+            card.querySelectorAll('.decision-btn').forEach(b => b.classList.remove('active-ok','active-ng','active-hold'));
+            btnEl.classList.add('active-' + val);
+            card.style.borderLeftColor = val === 'ok' ? '#059669' : val === 'ng' ? '#dc2626' : '#d97706';
+        };
         let targetLevel = 'AA';
         const $ = id => document.getElementById(id);
 
@@ -1000,7 +1036,7 @@
 
             renderAllTabs();
             $('results').classList.add('visible');
-            $('csvBtn').style.display = '';
+            $('exportArea').style.display = 'flex';
 
             // 達成率バナー
             const total = results.violations.length + results.passes.length;
@@ -1723,6 +1759,46 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
         }
 
         // ============================================================
+        // 統合カードレンダラー
+        // ============================================================
+        const srcBadgeStyle = {
+            BASIC: 'background:#1e40af;color:#fff',
+            DEEP:  'background:#0d7a5f;color:#fff',
+            MULTI: 'background:#4f46e5;color:#fff'
+        };
+
+        function renderCardItem(no, src, impact, sc, level, title, summary, countText, locations, decisionKey) {
+            const dec = decisionKey ? manualDecisions.get(decisionKey) : null;
+            const borderColor = dec === 'ok' ? '#059669' : dec === 'ng' ? '#dc2626' : dec === 'hold' ? '#d97706' : '';
+            const borderStyle = borderColor ? `style="border-left-color:${borderColor};"` : '';
+            const srcBadge = src ? `<span class="badge" style="${srcBadgeStyle[src]};font-size:11px;">${src}</span>` : '';
+            const scBadge  = sc  ? `<span class="item-sc">${escapeHtml(sc)}</span>` : '';
+            const lvBadge  = level ? `<span class="item-level">${escapeHtml(level)}</span>` : '';
+            const locHtml  = locations && locations.length
+                ? `<div class="item-locations"><div style="font-size:11px;color:var(--navy-400);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">検出箇所</div>${locations.map(l => `<div class="location-row">${escapeHtml(String(l))}</div>`).join('')}</div>`
+                : '';
+            const decBtns = decisionKey
+                ? `<div class="decision-btns">
+                    <button class="decision-btn${dec==='ok'?' active-ok':''}" onclick="event.stopPropagation();setDecision('${escapeHtml(decisionKey)}','ok',this)">OK</button>
+                    <button class="decision-btn${dec==='ng'?' active-ng':''}" onclick="event.stopPropagation();setDecision('${escapeHtml(decisionKey)}','ng',this)">NG</button>
+                    <button class="decision-btn${dec==='hold'?' active-hold':''}" onclick="event.stopPropagation();setDecision('${escapeHtml(decisionKey)}','hold',this)">保留</button>
+                   </div>` : '';
+            return `<div class="item-card" data-impact="${impact||''}" ${borderStyle} onclick="this.classList.toggle('expanded')">
+                <div class="item-header">
+                    ${srcBadge}
+                    <span class="item-no">No.${no}</span>
+                    ${scBadge}${lvBadge}
+                    <span class="item-title">${escapeHtml(title)}</span>
+                    ${decBtns}
+                    <svg class="expand-icon" style="flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                </div>
+                ${summary ? `<div class="item-summary">${escapeHtml(summary)}</div>` : ''}
+                ${countText ? `<div class="item-count">${escapeHtml(countText)}</div>` : ''}
+                ${locHtml}
+            </div>`;
+        }
+
+        // ============================================================
         // 全タブ再描画（BASIC + DEEP + MULTI の結果をマージ）
         // ============================================================
         function renderAllTabs() {
@@ -1741,123 +1817,80 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                     b.push({ src: 'BASIC', type: 'violation', data: v });
                 });
                 (basic.passes || []).forEach(p => buckets.pass.push({ src: 'BASIC', type: 'pass', data: p }));
-                (basic.incomplete || []).forEach(i => buckets.unverified.push({ src: 'BASIC', type: 'violation', data: i }));
+                (basic.incomplete || []).forEach(i => buckets.unverified.push({ src: 'BASIC', type: 'incomplete', data: i }));
             }
 
             // DEEP results
             if (deep) {
                 deep.forEach(r => {
                     const item = { src: 'DEEP', type: 'deep', data: r };
-                    if (r.status === 'fail') buckets.serious.push(item);
-                    else if (r.status === 'pass') buckets.pass.push(item);
+                    if (r.status === 'fail')           buckets.serious.push(item);
+                    else if (r.status === 'pass')      buckets.pass.push(item);
                     else if (r.status === 'not_applicable') buckets.na.push(item);
-                    else buckets.unverified.push(item);
+                    else                               buckets.unverified.push(item);
                 });
             }
 
-            // MULTI results (manual check items)
+            // MULTI results
             manualCheckItems.forEach((item, i) => {
                 if ((lo[item.level] || 2) > lim) return;
                 const r = multi[i];
-                const card = { src: 'MULTI', type: 'multi', data: { ...item, aiResult: r } };
-                if (!r) { buckets.unverified.push(card); return; }
-                if (r.status === 'fail') buckets.serious.push(card);
-                else if (r.status === 'pass') buckets.pass.push(card);
+                const card = { src: 'MULTI', type: 'multi', data: { ...item, idx: i, aiResult: r } };
+                if (!r)                              buckets.unverified.push(card);
+                else if (r.status === 'fail')        buckets.serious.push(card);
+                else if (r.status === 'pass')        buckets.pass.push(card);
                 else if (r.status === 'not_applicable') buckets.na.push(card);
-                else buckets.unverified.push(card);
+                else                                 buckets.unverified.push(card);
             });
 
-            // ソース別バッジ色
-            const srcStyle = {
-                BASIC: 'background:#1e40af;color:#fff',
-                DEEP:  'background:#0d7a5f;color:#fff',
-                MULTI: 'background:#4f46e5;color:#fff'
-            };
-
-            function renderDeepItem(r, src) {
-                const statusColors = { pass: '#059669', fail: '#dc2626', error: '#d97706', not_applicable: '#6b7280', manual_required: '#7c3aed' };
-                const statusLabels = { pass: '合格', fail: '不合格', error: 'エラー', not_applicable: '対象外', manual_required: '要手動確認' };
-                const sc = r.sc || '';
-                const viols = (r.violations || []).slice(0, 5);
-                const detail = viols.length > 0 ? `<div class="violation-details"><div class="element-list">
-                    ${viols.map(v => `<div class="element-item"><div class="element-target">${escapeHtml(v.selector || '')}</div>${v.message ? `<div class="violation-desc">${escapeHtml(v.message)}</div>` : ''}</div>`).join('')}
-                </div></div>` : '';
-                return `<div class="violation-item" onclick="this.classList.toggle('expanded')">
-                    <div class="violation-header">
-                        <div class="badges">
-                            <span class="badge" style="${srcStyle[src]}">${src}</span>
-                            ${sc ? `<span class="badge">SC ${sc}</span>` : ''}
-                        </div>
-                        <div class="violation-info">
-                            <div class="violation-title">${escapeHtml(r.name || '')}</div>
-                            <div class="violation-meta">${escapeHtml(r.message || '')}</div>
-                        </div>
-                        <svg class="expand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-                    </div>
-                    ${detail}
-                </div>`;
-            }
-
-            function renderMultiItem(item) {
-                const r = item.aiResult;
-                const sc = item.ref || '';
-                const statusLabel = !r ? '未検証' : { pass: '合格', fail: '不合格', not_applicable: '対象外', manual_required: '要手動確認' }[r.status] || r.status;
-                const detail = r && (r.reason || r.suggestion) ? `<div class="violation-details">
-                    ${r.reason ? `<div class="element-list"><div class="element-item"><div class="violation-desc">${escapeHtml(r.reason)}</div></div></div>` : ''}
-                    ${r.suggestion ? `<div class="fix-suggestion"><div class="fix-suggestion-title">改善案</div><div class="fix-suggestion-text">${escapeHtml(r.suggestion)}</div></div>` : ''}
-                </div>` : '';
-                return `<div class="violation-item" onclick="this.classList.toggle('expanded')">
-                    <div class="violation-header">
-                        <div class="badges">
-                            <span class="badge" style="${srcStyle.MULTI}">MULTI</span>
-                            ${sc ? `<span class="badge">${escapeHtml(sc)}</span>` : ''}
-                            <span class="badge">${item.level || ''}</span>
-                        </div>
-                        <div class="violation-info">
-                            <div class="violation-title">${escapeHtml(item.text || '')}</div>
-                            ${r ? `<div class="violation-meta">${escapeHtml(statusLabel)}</div>` : ''}
-                        </div>
-                        <svg class="expand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-                    </div>
-                    ${detail}
-                </div>`;
-            }
-
-            function renderPassItem(p, src) {
-                const wcagLevel = getWcagLevel(p.tags);
-                const wcagRef = extractWcagRef(p.tags);
-                const jaName = getJaRuleName(p.id);
-                return `<div class="violation-item" style="border-left-color:#059669;" onclick="this.classList.toggle('expanded')">
-                    <div class="violation-header">
-                        <div class="badges">
-                            <span class="badge" style="${srcStyle[src]}">${src}</span>
-                            <span class="badge" style="background:#059669;color:white;">合格</span>
-                            <span class="badge">${wcagLevel}</span>
-                        </div>
-                        <div class="violation-info">
-                            <div class="violation-title">${jaName} <span class="wcag-ref">${p.id}</span> ${wcagRef ? `<span class="wcag-ref">${wcagRef}</span>` : ''}</div>
-                            <div class="violation-meta"><span>${(p.nodes || []).length}件</span></div>
-                        </div>
-                        <svg class="expand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-                    </div>
-                </div>`;
-            }
-
-            function itemHtml({ src, type, data }) {
-                if (type === 'violation' || type === 'pass') {
-                    if (type === 'pass') return renderPassItem(data, src);
-                    return renderViolation(data);
-                }
-                if (type === 'deep') return renderDeepItem(data, src);
-                if (type === 'multi') return renderMultiItem(data);
-                return '';
-            }
-
+            // 各タブを描画
             const EMPTY = '<div class="empty-state">項目はありません</div>';
             ['critical','serious','moderate','minor','pass','na','unverified'].forEach(key => {
                 const items = buckets[key];
                 const el = $('list-' + key);
-                if (el) el.innerHTML = items.length ? items.map(itemHtml).join('') : EMPTY;
+                if (!el) return;
+                const isUnverified = (key === 'unverified');
+                el.innerHTML = items.length
+                    ? items.map(({ src, type, data }, idx) => {
+                        const no = idx + 1;
+                        if (type === 'violation' || type === 'incomplete') {
+                            const sc    = extractSCFromTags(data.tags);
+                            const level = getWcagLevel(data.tags);
+                            const title = getJaRuleName(data.id);
+                            const summary = getJaRuleDesc(data.id, data.description || data.help);
+                            const locs  = (data.nodes || []).slice(0, 8).map(n =>
+                                Array.isArray(n.target) ? n.target.join(' > ') : (n.target || ''));
+                            const countText = data.nodes ? `検出件数：${data.nodes.length}件` : '';
+                            const dkey = isUnverified ? `BASIC:${data.id}` : null;
+                            return renderCardItem(no, isUnverified ? null : src, data.impact, sc, level, title, summary, countText, locs, dkey);
+                        }
+                        if (type === 'pass') {
+                            const sc    = extractSCFromTags(data.tags);
+                            const level = getWcagLevel(data.tags);
+                            const title = getJaRuleName(data.id);
+                            const summary = getJaRuleDesc(data.id, data.description || data.help);
+                            const locs  = (data.nodes || []).slice(0, 5).map(n =>
+                                Array.isArray(n.target) ? n.target.join(' > ') : (n.target || ''));
+                            const countText = `合格：${(data.nodes||[]).length}件`;
+                            return renderCardItem(no, src, 'pass', sc, level, title, summary, countText, locs, null);
+                        }
+                        if (type === 'deep') {
+                            const r = data;
+                            const locs = (r.violations || []).slice(0, 8).map(v => String(v));
+                            const countText = r.violations && r.violations.length ? `検出件数：${r.violations.length}件` : '';
+                            const dkey = isUnverified ? `DEEP:${r.sc}` : null;
+                            return renderCardItem(no, isUnverified ? null : src, r.status === 'fail' ? 'serious' : null, r.sc, null, r.name || '', r.message || '', countText, locs, dkey);
+                        }
+                        if (type === 'multi') {
+                            const r   = data.aiResult;
+                            const locs = r && r.reason ? [r.reason] : [];
+                            const countText = '';
+                            const dkey = isUnverified ? `MULTI:${data.idx}` : null;
+                            return renderCardItem(no, isUnverified ? null : src, null, data.ref, data.level, data.text || '', data.category || '', countText, locs, dkey);
+                        }
+                        return '';
+                    }).join('')
+                    : EMPTY;
                 const badge = $('badge-' + key);
                 if (badge) badge.textContent = items.length;
             });
@@ -1980,16 +2013,18 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 ]);
             });
 
-            // --- 自動検査: incomplete → 判定不能 ---
+            // --- 自動検査: incomplete → 判定不能（手動決定で上書き可） ---
             (results.incomplete || []).forEach(v => {
                 const targets = v.nodes.slice(0, 5).map(n =>
                     Array.isArray(n.target) ? n.target.join(' > ') : n.target
                 );
                 const locationStr = targets.join('\n') + (v.nodes.length > 5 ? '\n他' + (v.nodes.length - 5) + '件' : '');
+                const decB = manualDecisions.get(`BASIC:${v.id}`);
+                const resultB = decB ? (decB === 'ok' ? '合格' : decB === 'ng' ? '不合格' : '判定不能') : '判定不能';
                 rows.push([
                     String(itemNo++), '自動', extractSCFromTags(v.tags),
                     `${getJaRuleName(v.id)}（${v.id}）`,
-                    getWcagLevelFromTags(v.tags), '判定不能',
+                    getWcagLevelFromTags(v.tags), resultB,
                     locationStr, String(v.nodes.length),
                     impactJa[v.impact] || v.impact || '',
                     getJaRuleDesc(v.id, v.description || v.help), ''
@@ -2019,6 +2054,9 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                     suggestion = ai.suggestion || '';
                     if (ai.status === 'fail' || ai.status === 'manual_required') location = '（AI評価による検出）';
                 }
+                // 手動決定（OK/NG/保留）があれば上書き
+                const dec = manualDecisions.get(`MULTI:${i}`);
+                if (dec) result = dec === 'ok' ? '合格' : dec === 'ng' ? '不合格' : '未検証';
                 rows.push([
                     String(itemNo++), ai ? 'AI' : '手動', item.ref,
                     item.text, item.level, result,
@@ -2034,9 +2072,13 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                     if (enhancedAaaScs.has(r.sc) && targetLevelNum < 3) return;
                     const level = enhancedAaaScs.has(r.sc) ? 'AAA' : 'AA';
                     const violations = r.violations || [];
+                    // 手動決定（未検証タブでのOK/NG/保留）で上書き
+                    const decD = manualDecisions.get(`DEEP:${r.sc}`);
+                    const resultD = decD ? (decD === 'ok' ? '合格' : decD === 'ng' ? '不合格' : enhancedStatusMap[r.status] || r.status)
+                                        : enhancedStatusMap[r.status] || r.status;
                     rows.push([
                         String(itemNo++), '高精度', r.sc, r.name, level,
-                        enhancedStatusMap[r.status] || r.status,
+                        resultD,
                         violations.slice(0, 3).join('\n'),
                         violations.length > 0 ? String(violations.length) : '',
                         '', r.message || '', ''
