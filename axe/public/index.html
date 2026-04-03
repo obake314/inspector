@@ -447,7 +447,7 @@
         <div class="results" id="batchResults" style="display:none;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
                 <h2 style="font-size: 16px; font-weight: 600;">一括検査結果</h2>
-                <button class="export-btn" id="batchReportBtn" onclick="exportBatchReport()" style="display:none;background:var(--navy-700);color:#fff;padding:10px 24px;font-size:14px;font-weight:600;border:none;cursor:pointer;">レポート出力（Sheets）</button>
+                <button class="export-btn" id="batchReportBtn" onclick="exportBatchReport()" style="display:none;background:var(--navy-700);color:#fff;padding:10px 24px;font-size:14px;font-weight:600;border:none;cursor:pointer;">スプシに転記</button>
             </div>
             <div id="batchSummaryArea"></div>
             <div class="batch-results-nav" id="batchResultsNav"></div>
@@ -473,7 +473,7 @@
             <div class="scan-time" id="scanTime"></div>
             <div class="scan-debug" id="scanDebug" style="font-size: 14px; color: var(--navy-400); margin-bottom: 16px; font-family: 'Poppins', monospace;"></div>
             <div style="display:flex;gap:8px;margin-bottom:16px;">
-                <button class="export-btn" id="reportBtn" onclick="exportToSheets()" style="display:none;background:#1a73e8;color:#fff;padding:10px 24px;font-size:14px;font-weight:600;border:none;cursor:pointer;">レポート出力（Sheets）</button>
+                <button class="export-btn" id="reportBtn" onclick="exportToSheets()" style="display:none;background:#1a73e8;color:#fff;padding:10px 24px;font-size:14px;font-weight:600;border:none;cursor:pointer;">スプシに転記</button>
                 <button class="export-btn" id="csvBtn" onclick="exportCSV()" style="display:none;padding:10px 16px;font-size:13px;">CSV出力</button>
             </div>
             <div class="tabs">
@@ -1584,7 +1584,7 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
             return '';
         }
 
-        function buildReportRows(results, url, aiData, enhancedData) {
+        function buildReportRows(results, url, aiData, enhancedData, navConsistency) {
             if (aiData === undefined) aiData = aiResults;
             if (enhancedData === undefined) enhancedData = lastEnhancedResults;
             const impactJa = { critical: '緊急', serious: '重大', moderate: '中程度', minor: '軽微' };
@@ -1698,16 +1698,34 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 });
             }
 
+            // --- SC 3.2.3/3.2.4 ナビゲーション一貫性（一括検査のみ）---
+            if (navConsistency) {
+                const nc = navConsistency;
+                const statusJa = nc.result === 'pass' ? '合格' : nc.result === 'not_applicable' ? '対象外' : '不合格';
+                const issueText = (nc.issues || []).join('\n');
+                const comparedText = (nc.comparedUrls || []).join('\n');
+                rows.push([
+                    String(itemNo++),
+                    `[一括] SC ${nc.sc} ${nc.title}`,
+                    'AA',
+                    statusJa,
+                    comparedText,
+                    String((nc.issues || []).length) || '',
+                    issueText || (nc.result === 'pass' ? 'ナビゲーション構造は一貫しています' : ''),
+                    ''
+                ]);
+            }
+
             // 全セルのHTMLタグをサニタイズ
             return rows.map(row => row.map(cell => sanitizeHtmlTags(cell)));
         }
 
-        // 単一ページレポート出力（Sheets）
+        // 単一ページスプシ転記
         async function exportToSheets() {
             if (!lastResults) { alert('先にチェックを実行してください'); return; }
             const btn = $('reportBtn');
             btn.disabled = true;
-            btn.textContent = '出力中...';
+            btn.textContent = '転記中...';
             try {
                 const url = lastResults.url;
                 const rows = buildReportRows(lastResults, url);
@@ -1724,23 +1742,23 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 if (!res.ok) throw new Error(data.error || '保存失敗');
                 window.open(data.url, '_blank');
             } catch (e) {
-                alert('レポート出力エラー: ' + e.message);
+                alert('スプシ転記エラー: ' + e.message);
             } finally {
                 btn.disabled = false;
-                btn.textContent = 'レポート出力（Sheets）';
+                btn.textContent = 'スプシに転記';
             }
         }
 
-        // 一括検査レポート出力
+        // 一括検査スプシ転記
         async function exportBatchReport() {
             if (batchResultsData.length === 0) return;
             const btn = $('batchReportBtn');
             btn.disabled = true;
-            btn.textContent = '出力中...';
+            btn.textContent = '転記中...';
             try {
                 const pages = batchResultsData.filter(r => r.success).map(r => ({
                     url: r.url,
-                    rows: buildReportRows(r.results, r.url, batchAIResults[r.url] || {}, batchEnhancedResults[r.url] || null),
+                    rows: buildReportRows(r.results, r.url, batchAIResults[r.url] || {}, batchEnhancedResults[r.url] || null, batchNavConsistency),
                     timestamp: r.results.timestamp || new Date().toISOString()
                 }));
                 if (pages.length === 0) { alert('成功した検査結果がありません'); return; }
@@ -1754,10 +1772,10 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 if (!res.ok) throw new Error(data.error || '保存失敗');
                 window.open(data.url, '_blank');
             } catch (e) {
-                alert('レポート出力エラー: ' + e.message);
+                alert('スプシ転記エラー: ' + e.message);
             } finally {
                 btn.disabled = false;
-                btn.textContent = 'レポート出力（Sheets）';
+                btn.textContent = 'スプシに転記';
             }
         }
 
