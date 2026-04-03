@@ -64,118 +64,129 @@
 
     <div class="container">
         <header>
-            <div>
-                <h1>AXE INSPECTOR</h1>
-                <p class="subtitle">アクセシビリティ監査ツール</p>
+                <div class="header-name">
+                    <h1>AXE INSPECTOR</h1>
+                    <p class="subtitle">アクセシビリティ監査ツール</p>
+                </div>
                 <div class="config-status" id="configStatus">
                     <span class="config-status-item" id="statusGemini">Gemini <span class="st" id="stGemini">--</span></span>
                     <span class="config-status-item" id="statusSheets">Sheets <span class="st" id="stSheets">--</span></span>
                 </div>
-            </div>
             <button type="button" class="settings-gear" id="settingsGear" onclick="openSettings()" title="設定">&#9881;</button>
         </header>
         <div class="input-section">
-            <div class="mode-toggle" id="modeToggle">
-                <span class="level-select-label">チェック方式</span>
-             <div class="level-select-btns">
-                <button type="button" class="mode-btn active" data-mode="single">単一チェック</button>
-                <button type="button" class="mode-btn" data-mode="batch">一括チェック</button>
+            <div class="section-column mode-toggle" id="modeToggle">
+                <span class="section-headline">チェック方式</span>
+                <div class="section-right section-right-btn">
+                    <button type="button" class="mode-btn active" data-mode="single">単一チェック</button>
+                    <button type="button" class="mode-btn" data-mode="batch">一括チェック</button>
                 </div>
             </div>
-            <div class="level-select">
-                <span class="level-select-label">対象レベル</span>
-                <div class="level-select-btns">
+            <div class="level-select section-column">
+                <span class="section-headline">対象レベル</span>
+                <div class="section-right section-right-btn">
                     <button type="button" class="level-select-btn" data-level="A">A</button>
                     <button type="button" class="level-select-btn active" data-level="AA">AA</button>
                     <button type="button" style="display: none;" class="level-select-btn" data-level="AAA" id="levelBtnAAA">AAA</button>
                 </div>
             </div>
-            <div id="singleInput">
-                <form id="urlForm">
-                    <input type="url" class="url-input" id="urlInput" placeholder="https://example.com" required >
-                </form>
-                <div class="scan-controls">
-                    <button type="button" class="check-btn" id="runScanBtn">
-                        <span class="btn-text">SCAN</span>
-                        <div class="spinner"></div>
-                    </button>
-                    <label class="scan-option">
-                        <input type="checkbox" id="deepScanOpt" class="scan-option-checkbox" checked>
-                        <span style="color:#304C89;font-size:15px;">DEEP SCAN</span>
-                    </label>
-                    <label class="scan-option">
-                        <input type="checkbox" id="multiScanOpt" class="scan-option-checkbox" checked>
-                        <span style="color:#0D7A5F;font-size:15px;">MULTI SCAN</span>
-                    </label>
-                </div>
-                <!-- 既存ボタンは非表示のまま内部利用 -->
-               <div style="display:none;">
-                    <button type="button" id="checkBtn"><span class="btn-text"></span><div class="spinner"></div></button>
-                    <button type="button" id="enhancedCheckBtn"><span id="enhancedBtnText"></span><span id="enhancedSpinner"></span></button>
-                    <button type="button" id="aiEvaluateBtn"><span class="ai-btn-text"></span><span class="ai-spinner"></span></button>
-                </div>
-                <div id="enhancedStatus" style="margin-top:8px;font-size:15px;color:var(--navy-500);display:none;"></div>
-                <div id="aiStatus" style="margin-top:8px;font-size:15px;color:var(--navy-500);display:none;"></div>
-            </div>
-            <div id="batchInput" class="batch-input">
-                <textarea class="batch-textarea" id="batchUrls" placeholder="URLを1行ずつ入力（最大10件）&#10;https://example.com&#10;https://example.com/about&#10;https://example.com/contact"></textarea>
-                <div class="batch-controls">
-                    <button type="button" class="check-btn" id="batchCheckBtn">
-                        <span class="btn-text">BATCH SCAN</span>
-                        <div class="spinner"></div>
-                    </button>
-                    <label class="scan-option">
-                        <input type="checkbox" id="batchEnhancedOpt" class="scan-option-checkbox" checked>
-                        <span style="color:#304C89;font-size:15px;">DEEP SCAN</span>
-                    </label>
-                    <label class="scan-option">
-                        <input type="checkbox" id="batchAIOpt" class="scan-option-checkbox" checked>
-                        <span style="color:#0D7A5F;font-size:15px;">MULTI SCAN</span>
-                    </label>
-                    <span class="batch-count" id="batchCount">0 / 10 URL</span>
-                </div>
-                <div class="batch-progress" id="batchProgress">
-                    <div class="batch-progress-header">
-                        <div class="batch-progress-label" id="batchProgressLabel">検査中...</div>
-                        <div id="batchProgressSub"></div>
+            <div id="singleInput" class="section-column">
+                <span class="section-headline">チェックURL</span>
+                <div class="section-right">
+                    <form id="urlForm">
+                        <input type="url" class="url-input" id="urlInput" placeholder="https://example.com" required >
+                    </form>
+                    <div class="scan-controls">
+                        <button type="button" class="check-btn" id="runScanBtn">
+                            <span class="btn-text">SCAN</span>
+                            <div class="spinner"></div>
+                        </button>
+                        <label class="scan-option">
+                            <input type="checkbox" id="deepScanOpt" class="scan-option-checkbox" checked>
+                            <span style="color:#304C89;font-size:15px;">DEEP SCAN</span>
+                        </label>
+                        <label class="scan-option">
+                            <input type="checkbox" id="multiScanOpt" class="scan-option-checkbox" checked>
+                            <span style="color:#0D7A5F;font-size:15px;">MULTI SCAN</span>
+                        </label>
                     </div>
-                    <div class="batch-progress-track"><div class="batch-progress-fill" id="batchProgressFill"></div></div>
-                    <div id="batchPhaseIndicator"></div>
+                    <!-- 既存ボタンは非表示のまま内部利用 -->
+                    <div style="display:none;">
+                        <button type="button" id="checkBtn"><span class="btn-text"></span><div class="spinner"></div></button>
+                        <button type="button" id="enhancedCheckBtn"><span id="enhancedBtnText"></span><span id="enhancedSpinner"></span></button>
+                        <button type="button" id="aiEvaluateBtn"><span class="ai-btn-text"></span><span class="ai-spinner"></span></button>
+                    </div>
+                    <div id="enhancedStatus" style="margin-top:8px;font-size:15px;color:var(--navy-500);display:none;"></div>
+                    <div id="aiStatus" style="margin-top:8px;font-size:15px;color:var(--navy-500);display:none;"></div>
                 </div>
             </div>
-            <details class="basic-auth-section">
-                <summary>Basic認証（必要な場合）</summary>
-                <div class="basic-auth-inputs">
-                    <input type="text" id="basicUser" class="url-input" placeholder="ユーザー名">
-                    <input type="password" id="basicPass" class="url-input" placeholder="パスワード">
+            <div id="batchInput" class="section-column">
+                <span class="section-headline">チェックURL</span>
+                <div class="section-right">
+                    <textarea class="batch-textarea" id="batchUrls" placeholder="URLを1行ずつ入力（最大10件）&#10;https://example.com&#10;https://example.com/about&#10;https://example.com/contact"></textarea>
+                    <div class="batch-controls">
+                        <button type="button" class="check-btn" id="batchCheckBtn">
+                            <span class="btn-text">BATCH SCAN</span>
+                            <div class="spinner"></div>
+                        </button>
+                        <label class="scan-option">
+                            <input type="checkbox" id="batchEnhancedOpt" class="scan-option-checkbox" checked>
+                            <span style="color:#304C89;font-size:15px;">DEEP SCAN</span>
+                        </label>
+                        <label class="scan-option">
+                            <input type="checkbox" id="batchAIOpt" class="scan-option-checkbox" checked>
+                            <span style="color:#0D7A5F;font-size:15px;">MULTI SCAN</span>
+                        </label>
+                        <span class="batch-count" id="batchCount">0 / 10 URL</span>
+                    </div>
+                    <div class="batch-progress" id="batchProgress">
+                        <div class="batch-progress-header">
+                            <div class="batch-progress-label" id="batchProgressLabel">検査中...</div>
+                            <div id="batchProgressSub"></div>
+                        </div>
+                        <div class="batch-progress-track"><div class="batch-progress-fill" id="batchProgressFill"></div></div>
+                        <div id="batchPhaseIndicator"></div>
+                    </div>
+                </div>    
+            </div>
+            <div class="section-column">
+                <span class="section-headline">オプション設定</span>
+                <div class="section-right">
+                        <details class="basic-auth-section">
+                        <summary>Basic認証（必要な場合）</summary>
+                        <div class="basic-auth-inputs">
+                            <input type="text" id="basicUser" class="url-input" placeholder="ユーザー名">
+                            <input type="password" id="basicPass" class="url-input" placeholder="パスワード">
+                        </div>
+                    </details>
+                    <div class="note" id="levelNote">Level AA: A + AA の基準をチェック（推奨水準）</div>
+                    <details class="skip-rules-section">
+                        <summary>除外ルール設定</summary>
+                        <div class="skip-rules-list">
+                            <label class="skip-rule-item">
+                                <input type="checkbox" data-rule="region">
+                                <span>region</span>
+                                <small>ランドマーク外コンテンツ（トップへ戻るボタン等）</small>
+                            </label>
+                            <label class="skip-rule-item">
+                                <input type="checkbox" data-rule="landmark-one-main">
+                                <span>landmark-one-main</span>
+                                <small>main要素が1つだけか</small>
+                            </label>
+                            <label class="skip-rule-item">
+                                <input type="checkbox" data-rule="heading-order">
+                                <span>heading-order</span>
+                                <small>見出しレベルの順序</small>
+                            </label>
+                            <label class="skip-rule-item">
+                                <input type="checkbox" data-rule="color-contrast">
+                                <span>color-contrast</span>
+                                <small>コントラスト比（デザイン意図がある場合）</small>
+                            </label>
+                        </div>
+                    </details>
                 </div>
-            </details>
-            <div class="note" id="levelNote">Level AA: A + AA の基準をチェック（推奨水準）</div>
-            <details class="skip-rules-section">
-                <summary>除外ルール設定</summary>
-                <div class="skip-rules-list">
-                    <label class="skip-rule-item">
-                        <input type="checkbox" data-rule="region">
-                        <span>region</span>
-                        <small>ランドマーク外コンテンツ（トップへ戻るボタン等）</small>
-                    </label>
-                    <label class="skip-rule-item">
-                        <input type="checkbox" data-rule="landmark-one-main">
-                        <span>landmark-one-main</span>
-                        <small>main要素が1つだけか</small>
-                    </label>
-                    <label class="skip-rule-item">
-                        <input type="checkbox" data-rule="heading-order">
-                        <span>heading-order</span>
-                        <small>見出しレベルの順序</small>
-                    </label>
-                    <label class="skip-rule-item">
-                        <input type="checkbox" data-rule="color-contrast">
-                        <span>color-contrast</span>
-                        <small>コントラスト比（デザイン意図がある場合）</small>
-                    </label>
-                </div>
-            </details>
+            </div>
         </div>
         <div class="error-message" id="errorMessage">
             <h4>エラー</h4>
@@ -995,14 +1006,22 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
         // --- Mode toggle ---
         let currentMode = 'single';
         let scanExecuted = false;
-        document.querySelectorAll('.mode-btn').forEach(b => b.addEventListener('click', () => {
+        const modeButtons = Array.from(document.querySelectorAll('.mode-btn'));
+        function setMode(mode) {
+            const singleInput = $('singleInput');
+            const batchInput = $('batchInput');
+            if (!singleInput || !batchInput) return;
+            currentMode = mode === 'batch' ? 'batch' : 'single';
+            modeButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.mode === currentMode));
+            singleInput.style.display = currentMode === 'single' ? 'flex' : 'none';
+            batchInput.style.display = currentMode === 'batch' ? 'flex' : 'none';
+        }
+        modeButtons.forEach(btn => btn.addEventListener('click', () => {
             if (scanExecuted) return; // スキャン実行後は切り替え禁止
-            document.querySelectorAll('.mode-btn').forEach(x => x.classList.remove('active'));
-            b.classList.add('active');
-            currentMode = b.dataset.mode;
-            $('singleInput').style.display = currentMode === 'single' ? 'block' : 'none';
-            $('batchInput').classList.toggle('visible', currentMode === 'batch');
+            setMode(btn.dataset.mode);
         }));
+        // 初期表示を明示（初回ロード時に single / batch の表示崩れを防ぐ）
+        setMode(currentMode);
 
         // Batch URL count
         $('batchUrls').addEventListener('input', () => {
