@@ -159,11 +159,7 @@
         /* ---- 統合カードUI ---- */
         .item-card { border-bottom: 1px solid var(--navy-200); border-left: 3px solid #d1d5db; }
         .item-card:last-child { border-bottom: none; }
-        .item-card[data-impact="critical"] { border-left-color: #7f1d1d; }
-        .item-card[data-impact="serious"]  { border-left-color: #dc2626; }
-        .item-card[data-impact="moderate"] { border-left-color: #d97706; }
-        .item-card[data-impact="minor"]    { border-left-color: #6b7280; }
-        .item-card[data-impact="pass"]     { border-left-color: #059669; }
+     
         .item-header { display: flex; align-items: center; gap: 8px; padding: 12px 20px; cursor: pointer; }
         .item-header:hover { background: var(--navy-100); }
         .item-no    { font-size: 11px; color: var(--navy-400); font-family: 'Poppins', monospace; min-width: 28px; flex-shrink: 0; }
@@ -376,9 +372,9 @@
             <button type="button" class="settings-gear" id="settingsGear" onclick="openSettings()" title="設定">&#9881;</button>
         </header>
         <div class="input-section">
-            <div class="mode-toggle">
-                <button type="button" class="mode-btn active" data-mode="single">単一ページ</button>
-                <button type="button" class="mode-btn" data-mode="batch">一括検査（最大10件）</button>
+            <div class="mode-toggle" id="modeToggle">
+                <button type="button" class="mode-btn active" data-mode="single">単一チェック</button>
+                <button type="button" class="mode-btn" data-mode="batch">一括チェック</button>
             </div>
             <div class="level-select">
                 <span class="level-select-label">対象レベル</span>
@@ -398,12 +394,12 @@
                         <div class="spinner"></div>
                     </button>
                     <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                        <input type="checkbox" id="deepScanOpt" checked style="width:15px;height:15px;accent-color:#0d7a5f;cursor:pointer;">
-                        <span style="color:#0d7a5f;font-size:12px;font-weight:600;letter-spacing:.5px;">DEEP SCAN</span>
+                        <input type="checkbox" id="deepScanOpt" checked style="width:15px;height:15px;accent-color:#304C89;cursor:pointer;">
+                        <span style="color:#304C89;font-size:12px;font-weight:600;letter-spacing:.5px;">DEEP SCAN</span>
                     </label>
                     <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                        <input type="checkbox" id="multiScanOpt" checked style="width:15px;height:15px;accent-color:#4f46e5;cursor:pointer;">
-                        <span style="color:#4f46e5;font-size:12px;font-weight:600;letter-spacing:.5px;">MULTI SCAN</span>
+                        <input type="checkbox" id="multiScanOpt" checked style="width:15px;height:15px;accent-color:#0D7A5F;cursor:pointer;">
+                        <span style="color:#0D7A5F;font-size:12px;font-weight:600;letter-spacing:.5px;">MULTI SCAN</span>
                     </label>
                 </div>
                 <!-- 既存ボタンは非表示のまま内部利用 -->
@@ -417,20 +413,22 @@
             </div>
             <div id="batchInput" class="batch-input">
                 <textarea class="batch-textarea" id="batchUrls" placeholder="URLを1行ずつ入力（最大10件）&#10;https://example.com&#10;https://example.com/about&#10;https://example.com/contact"></textarea>
-                <div class="batch-actions">
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;">
                     <button type="button" class="check-btn" id="batchCheckBtn">
-                        <span class="btn-text">一括チェック</span>
+                        <span class="btn-text">BATCH SCAN</span>
                         <div class="spinner"></div>
                     </button>
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
+                        <input type="checkbox" id="batchEnhancedOpt" checked style="width:15px;height:15px;accent-color:#304C89;cursor:pointer;">
+                        <span style="color:#304C89;font-size:12px;font-weight:600;letter-spacing:.5px;">DEEP SCAN</span>
+                        <span style="font-size:11px;color:var(--navy-400);">（+2〜4分）</span>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
+                        <input type="checkbox" id="batchAIOpt" checked style="width:15px;height:15px;accent-color:#0D7A5F;cursor:pointer;">
+                        <span style="color:#0D7A5F;font-size:12px;font-weight:600;letter-spacing:.5px;">MULTI SCAN</span>
+                        <span style="font-size:11px;color:var(--navy-400);">（+1〜2分）</span>
+                    </label>
                     <span class="batch-count" id="batchCount">0 / 10 URL</span>
-                </div>
-                <div style="display:flex;gap:20px;margin-top:10px;font-size:13px;color:var(--navy-600);">
-                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-                        <input type="checkbox" id="batchEnhancedOpt"> DEEP SCANも実行（各URL +2〜4分）
-                    </label>
-                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-                        <input type="checkbox" id="batchAIOpt"> MULTI SCANも実行（各URL +1〜2分）
-                    </label>
                 </div>
                 <div class="batch-progress" id="batchProgress">
                     <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
@@ -482,7 +480,6 @@
         <div class="results" id="batchResults" style="display:none;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
                 <h2 style="font-size: 16px; font-weight: 600;">一括検査結果</h2>
-                <button class="export-btn" id="batchReportBtn" onclick="exportBatchReport()" style="display:none;background:var(--navy-700);color:#fff;padding:10px 24px;font-size:14px;font-weight:600;border:none;cursor:pointer;">Export to GoogleSheet</button>
             </div>
             <div id="batchSummaryArea"></div>
             <div class="batch-results-nav" id="batchResultsNav"></div>
@@ -495,14 +492,14 @@
                     <thead>
                         <tr style="background:#f1f5f9;color:#374151;border-bottom:2px solid #d1d5db;">
                             <th style="padding:13px 20px;text-align:left;font-weight:700;white-space:nowrap;font-size:13px;text-transform:uppercase;letter-spacing:.06em;border-right:1px solid #d1d5db;">SCAN</th>
-                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;min-width:90px;font-size:13px;border-right:1px solid #e2e8f0;">全項目<br><span style="font-size:11px;color:#6b7280;font-weight:400;">スコア</span></th>
-                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;font-size:13px;color:#991b1b;border-right:1px solid #e2e8f0;">緊急</th>
+                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;min-width:90px;font-size:13px;border-right:1px solid #e2e8f0;"><span style="font-size:11px;color:#6b7280;font-weight:400;">全項目数</span><br>スコア</th>
+                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;font-size:13px;color:#b91c1c;border-right:1px solid #e2e8f0;">緊急</th>
                             <th style="padding:13px 14px;text-align:center;white-space:nowrap;font-size:13px;color:#b91c1c;border-right:1px solid #e2e8f0;">重大</th>
                             <th style="padding:13px 14px;text-align:center;white-space:nowrap;font-size:13px;color:#b45309;border-right:1px solid #e2e8f0;">中程度</th>
-                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;font-size:13px;color:#6b7280;border-right:1px solid #e2e8f0;">軽微</th>
-                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;font-size:13px;color:#047857;border-right:1px solid #e2e8f0;">合格</th>
-                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;font-size:13px;color:#6b7280;border-right:1px solid #e2e8f0;">該当なし</th>
-                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;font-size:13px;color:#6b7280;">未検証</th>
+                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;font-size:13px;color:var(--navy-600);border-right:1px solid #e2e8f0;">軽微</th>
+                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;font-size:13px;color:var(--navy-600);border-right:1px solid #e2e8f0;">合格</th>
+                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;font-size:13px;color:var(--navy-400);border-right:1px solid #e2e8f0;">該当なし</th>
+                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;font-size:13px;color:var(--navy-400);">未検証</th>
                         </tr>
                     </thead>
                     <tbody id="scanScoreBody"></tbody>
@@ -516,8 +513,6 @@
                 <span id="achievementRate">0</span><span id="achievementDesc"></span>
                 <span id="achievementBanner"></span>
             </div>
-            <div class="scan-time" id="scanTime"></div>
-            <div class="scan-debug" id="scanDebug" style="font-size: 14px; color: var(--navy-400); margin-bottom: 16px; font-family: 'Poppins', monospace;"></div>
             <!-- 非表示: 内部利用compat要素 -->
             <div style="display:none;">
                 <span id="violationsBadge"></span><span id="passBadge"></span><span id="incompleteBadge"></span>
@@ -1031,8 +1026,6 @@
             $('passCount').textContent = results.passes.length;
             $('totalCount').textContent = results.violations.length + results.passes.length + (results.incomplete?.length || 0);
 
-            $('scanTime').textContent = `スキャン: ${url} （${new Date().toLocaleString('ja-JP')}）`;
-            $('scanDebug').textContent = `違反: ${results.violations.length}件 | 合格: ${results.passes.length}件 | 要確認: ${results.incomplete?.length || 0}件`;
 
             renderAllTabs();
             $('results').classList.add('visible');
@@ -1295,7 +1288,9 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
 
         // --- Mode toggle ---
         let currentMode = 'single';
+        let scanExecuted = false;
         document.querySelectorAll('.mode-btn').forEach(b => b.addEventListener('click', () => {
+            if (scanExecuted) return; // スキャン実行後は切り替え禁止
             document.querySelectorAll('.mode-btn').forEach(x => x.classList.remove('active'));
             b.classList.add('active');
             currentMode = b.dataset.mode;
@@ -1345,27 +1340,41 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
         }
 
         function renderBatchSummary() {
+            const tdSt = 'padding:10px 12px;text-align:center;border:1px solid var(--navy-200);font-size:13px;';
             const rows = batchResultsData.map((r, i) => {
                 if (!r.success) {
-                    return `<tr><td title="${r.url}">${r.url}</td><td colspan="6" style="color:#dc2626;text-align:left;">${r.error}</td></tr>`;
+                    return `<tr><td style="${tdSt}text-align:left;" title="${r.url}">${r.url}</td><td colspan="8" style="${tdSt}color:#b91c1c;text-align:left;">${r.error}</td></tr>`;
                 }
-                const imp = { critical: 0, serious: 0, moderate: 0, minor: 0 };
-                r.results.violations.forEach(v => { imp[v.impact] = (imp[v.impact] || 0) + v.nodes.length; });
-                const total = r.results.violations.length;
-                const cls = total > 0 ? ' class="has-violations"' : '';
-                return `<tr${cls}>
-                    <td title="${r.url}">${r.url}</td>
-                    <td>${imp.critical || '-'}</td>
-                    <td>${imp.serious || '-'}</td>
-                    <td>${imp.moderate || '-'}</td>
-                    <td>${imp.minor || '-'}</td>
-                    <td>${r.results.passes.length}</td>
-                    <td><strong>${total}</strong></td>
+                const sc = computeBasicScore(r.results);
+                const scoreColor = sc.score >= 80 ? '#047857' : sc.score >= 50 ? '#b45309' : '#b91c1c';
+                const d = (n, col) => n > 0 ? `<span style="color:${col};font-weight:700;">${n}</span>` : `<span style="color:var(--navy-400);">-</span>`;
+                const cls = sc.critical + sc.serious > 0 ? ' class="has-violations"' : '';
+                return `<tr${cls} style="cursor:pointer;" onclick="showBatchDetail(${i})">
+                    <td style="${tdSt}text-align:left;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.url}">${r.url}</td>
+                    <td style="${tdSt}min-width:80px;line-height:1.3;"><div style="font-size:11px;color:var(--navy-400);">${sc.total}</div><div style="font-weight:700;color:${scoreColor};font-size:15px;">${sc.score ?? '-'}%</div></td>
+                    <td style="${tdSt}">${d(sc.critical,'#b91c1c')}</td>
+                    <td style="${tdSt}">${d(sc.serious,'#b91c1c')}</td>
+                    <td style="${tdSt}">${d(sc.moderate,'#b45309')}</td>
+                    <td style="${tdSt}">${d(sc.minor,'var(--navy-600)')}</td>
+                    <td style="${tdSt}">${d(sc.pass,'var(--navy-600)')}</td>
+                    <td style="${tdSt}">${d(sc.na||0,'var(--navy-400)')}</td>
+                    <td style="${tdSt}">${d(sc.unverified||0,'var(--navy-400)')}</td>
                 </tr>`;
             }).join('');
 
-            $('batchSummaryArea').innerHTML = `<table class="batch-summary-table">
-                <thead><tr><th>URL</th><th>緊急</th><th>重大</th><th>中程度</th><th>軽微</th><th>合格</th><th>違反数</th></tr></thead>
+            const thSt = 'padding:11px 12px;text-align:center;background:var(--navy-100);font-size:12px;font-weight:600;border:1px solid var(--navy-200);text-transform:uppercase;letter-spacing:.04em;';
+            $('batchSummaryArea').innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px;">
+                <thead><tr>
+                    <th style="${thSt}text-align:left;">URL</th>
+                    <th style="${thSt}min-width:80px;">全項目<br><span style="font-weight:400;font-size:11px;">スコア</span></th>
+                    <th style="${thSt}color:#b91c1c;">緊急</th>
+                    <th style="${thSt}color:#b91c1c;">重大</th>
+                    <th style="${thSt}color:#b45309;">中程度</th>
+                    <th style="${thSt}color:var(--navy-600);">軽微</th>
+                    <th style="${thSt}color:var(--navy-600);">合格</th>
+                    <th style="${thSt}color:var(--navy-400);">該当なし</th>
+                    <th style="${thSt}color:var(--navy-400);">未検証</th>
+                </tr></thead>
                 <tbody>${rows}</tbody>
             </table>`;
         }
@@ -1387,26 +1396,29 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 $('batchDetailArea').innerHTML = `<div class="error-message visible"><h4>エラー</h4><p>${r.url}: ${r.error}</p></div>`;
                 return;
             }
+            lastEnhancedResults = batchEnhancedResults[r.url] || null;
+            aiResults = batchAIResults[r.url] || {};
             displayResults(r.results, r.url);
             $('results').classList.add('visible');
-
-            // 高精度検査結果が存在する場合は統合タブに反映
-            if (batchEnhancedResults[r.url]) {
-                renderEnhancedResults(batchEnhancedResults[r.url], sessionAAABeta);
-                renderAllTabs();
-            }
-
-            // AI評価結果が存在する場合は手動チェックタブに反映
-            if (batchAIResults[r.url]) {
-                aiResults = batchAIResults[r.url];
-                renderManualChecklist();
-            }
+            const deepEnabled = !!lastEnhancedResults;
+            const multiEnabled = Object.keys(aiResults).length > 0;
+            renderScanScoreTable(
+                computeBasicScore(lastResults),
+                deepEnabled ? computeDeepScore(lastEnhancedResults) : null,
+                multiEnabled ? computeMultiScore(aiResults) : null,
+                deepEnabled, multiEnabled
+            );
+            renderAllTabs();
+            const st = $('scanScoreTable');
+            if (st) st.scrollIntoView({ behavior: 'smooth', block: 'start' });
         };
 
         async function batchCheck() {
             const raw = $('batchUrls').value.split('\n').map(u => u.trim()).filter(u => u.length > 0);
             if (raw.length === 0) return;
             if (raw.length > 10) { alert('最大10件までです'); return; }
+            scanExecuted = true;
+            $('modeToggle').style.pointerEvents = 'none'; $('modeToggle').style.opacity = '0.4';
 
             const btn = $('batchCheckBtn');
             btn.classList.add('loading');
@@ -1572,6 +1584,8 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
         async function runScan() {
             const url = $('urlInput').value.trim();
             if (!url) return;
+            scanExecuted = true;
+            $('modeToggle').style.pointerEvents = 'none'; $('modeToggle').style.opacity = '0.4';
             const doDeep = $('deepScanOpt').checked;
             const doMulti = $('multiScanOpt').checked;
             const btn = $('runScanBtn');
@@ -1762,9 +1776,10 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
         // 統合カードレンダラー
         // ============================================================
         const srcBadgeStyle = {
-            BASIC: 'background:#1e40af;color:#fff',
-            DEEP:  'background:#0d7a5f;color:#fff',
-            MULTI: 'background:#4f46e5;color:#fff'
+            BASIC:  'background:#3581B8;color:#fff',
+            DEEP:   'background:#304C89;color:#fff',
+            MULTI:  'background:#0D7A5F;color:#fff',
+            BATCH:  'background:#334155;color:#fff'
         };
 
         function renderCardItem(no, src, impact, sc, level, title, summary, countText, locations, decisionKey) {
@@ -1843,6 +1858,13 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 else                                 buckets.unverified.push(card);
             });
 
+            // ナビゲーション一貫性（一括検査）
+            const nc = batchNavConsistency;
+            if (nc) {
+                const bucket = nc.result === 'pass' ? 'pass' : nc.result === 'not_applicable' ? 'na' : 'serious';
+                buckets[bucket].push({ src: 'BATCH', type: 'nav', data: nc });
+            }
+
             // 各タブを描画
             const EMPTY = '<div class="empty-state">項目はありません</div>';
             ['critical','serious','moderate','minor','pass','na','unverified'].forEach(key => {
@@ -1887,6 +1909,14 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                             const countText = '';
                             const dkey = isUnverified ? `MULTI:${data.idx}` : null;
                             return renderCardItem(no, isUnverified ? null : src, null, data.ref, data.level, data.text || '', data.category || '', countText, locs, dkey);
+                        }
+                        if (type === 'nav') {
+                            const locs = (data.comparedUrls || []);
+                            const countText = locs.length ? `比較URL：${locs.length}件` : '';
+                            const summary = data.result === 'pass'
+                                ? '全ページでナビゲーション構造が一致しています'
+                                : (data.issues || []).slice(0, 3).join(' / ') || data.message || '';
+                            return renderCardItem(no, 'BATCH', data.result === 'pass' ? 'pass' : 'serious', data.sc, 'AA', data.title || 'ナビゲーション一貫性', summary, countText, locs, null);
                         }
                         return '';
                     }).join('')
@@ -1942,10 +1972,10 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                         <div style="font-size:12px;color:#6b7280;margin-bottom:2px;">${data.total}</div>
                         <div>${scoreChip(data.score)}</div>
                     </td>
-                    <td style="${td}">${num(data.critical, '#991b1b')}</td>
+                    <td style="${td}">${num(data.critical, '#b91c1c')}</td>
                     <td style="${td}">${num(data.serious,  '#b91c1c')}</td>
                     <td style="${td}">${num(data.moderate, '#b45309')}</td>
-                    <td style="${td}">${num(data.minor,    '#4b5563')}</td>
+                    <td style="${td}">${num(data.minor,    'var(--navy-600)')}</td>
                     <td style="${td}">${num(data.pass,     '#047857')}</td>
                     <td style="${td}">${num(data.na,       '#6b7280')}</td>
                     <td style="padding:14px 14px;text-align:center;">${num(data.unverified,'#6b7280')}</td>
@@ -1953,10 +1983,10 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
             }
 
             $('scanScoreBody').innerHTML =
-                row('BASIC', '#1e40af', nb, true, false) +
-                row('DEEP',  '#065f46', nd, deepEnabled, false) +
-                row('MULTI', '#3730a3', nm, multiEnabled, false) +
-                row('TOTAL', '#111827', normalize(totalScore), true, true);
+                row('BASIC', '#3581B8', nb, true, false) +
+                row('DEEP',  '#304C89', nd, deepEnabled, false) +
+                row('MULTI', '#0D7A5F', nm, multiEnabled, false) +
+                row('TOTAL', 'var(--navy-900)', normalize(totalScore), true, true);
 
             $('scanScoreTable').style.display = 'block';
         }
