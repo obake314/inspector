@@ -83,6 +83,8 @@
         }
         .tab:hover { color: var(--navy-700); }
         .tab.active { color: var(--navy-800); border-bottom-color: var(--navy-700); }
+        .tab-num { display: inline-block; background: var(--navy-200); color: var(--navy-600); font-size: 11px; font-weight: 600; padding: 1px 6px; margin-left: 4px; min-width: 18px; text-align: center; }
+        .tab.active .tab-num { background: var(--navy-700); color: white; }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
         .section { background: white; border: 1px solid var(--navy-200); margin-bottom: 24px; }
@@ -370,11 +372,11 @@
                     </button>
                     <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
                         <input type="checkbox" id="deepScanOpt" checked style="width:15px;height:15px;accent-color:#0d7a5f;cursor:pointer;">
-                        <span style="background:#0d7a5f;color:#fff;padding:4px 10px;border-radius:4px;font-size:12px;font-weight:600;letter-spacing:.5px;">DEEP SCAN</span>
+                        <span style="color:#0d7a5f;font-size:12px;font-weight:600;letter-spacing:.5px;">DEEP SCAN</span>
                     </label>
                     <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
                         <input type="checkbox" id="multiScanOpt" checked style="width:15px;height:15px;accent-color:#4f46e5;cursor:pointer;">
-                        <span style="background:#4f46e5;color:#fff;padding:4px 10px;border-radius:4px;font-size:12px;font-weight:600;letter-spacing:.5px;">MULTI SCAN</span>
+                        <span style="color:#4f46e5;font-size:12px;font-weight:600;letter-spacing:.5px;">MULTI SCAN</span>
                     </label>
                 </div>
                 <!-- 既存ボタンは非表示のまま内部利用 -->
@@ -461,19 +463,19 @@
         </div>
         <div class="results" id="results">
             <!-- スコアサマリーテーブル -->
-            <div id="scanScoreTable" style="display:none;margin-bottom:20px;overflow-x:auto;">
-                <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:600px;">
+            <div id="scanScoreTable" style="display:none;margin-bottom:32px;overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:15px;min-width:700px;border:1px solid #d1d5db;">
                     <thead>
-                        <tr style="background:#1e293b;color:white;">
-                            <th style="padding:8px 14px;text-align:left;font-weight:700;white-space:nowrap;border-radius:4px 0 0 0;">SCAN</th>
-                            <th style="padding:8px 10px;text-align:center;white-space:nowrap;min-width:80px;">全項目<br><span style="font-size:11px;opacity:.8;">スコア</span></th>
-                            <th style="padding:8px 10px;text-align:center;color:#fca5a5;white-space:nowrap;">緊急</th>
-                            <th style="padding:8px 10px;text-align:center;color:#fca5a5;white-space:nowrap;">重大</th>
-                            <th style="padding:8px 10px;text-align:center;color:#fcd34d;white-space:nowrap;">中程度</th>
-                            <th style="padding:8px 10px;text-align:center;color:#d1d5db;white-space:nowrap;">軽微</th>
-                            <th style="padding:8px 10px;text-align:center;color:#86efac;white-space:nowrap;">合格</th>
-                            <th style="padding:8px 10px;text-align:center;color:#cbd5e1;white-space:nowrap;">該当なし</th>
-                            <th style="padding:8px 10px;text-align:center;color:#94a3b8;white-space:nowrap;border-radius:0 4px 0 0;">未検証</th>
+                        <tr style="background:#f1f5f9;color:#374151;border-bottom:2px solid #d1d5db;">
+                            <th style="padding:13px 20px;text-align:left;font-weight:700;white-space:nowrap;font-size:13px;text-transform:uppercase;letter-spacing:.06em;border-right:1px solid #d1d5db;">SCAN</th>
+                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;min-width:90px;font-size:13px;border-right:1px solid #e2e8f0;">全項目<br><span style="font-size:11px;color:#6b7280;font-weight:400;">スコア</span></th>
+                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;font-size:13px;color:#991b1b;border-right:1px solid #e2e8f0;">緊急</th>
+                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;font-size:13px;color:#b91c1c;border-right:1px solid #e2e8f0;">重大</th>
+                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;font-size:13px;color:#b45309;border-right:1px solid #e2e8f0;">中程度</th>
+                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;font-size:13px;color:#6b7280;border-right:1px solid #e2e8f0;">軽微</th>
+                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;font-size:13px;color:#047857;border-right:1px solid #e2e8f0;">合格</th>
+                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;font-size:13px;color:#6b7280;border-right:1px solid #e2e8f0;">該当なし</th>
+                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;font-size:13px;color:#6b7280;">未検証</th>
                         </tr>
                     </thead>
                     <tbody id="scanScoreBody"></tbody>
@@ -493,47 +495,29 @@
                 <button class="export-btn" id="reportBtn" onclick="exportToSheets()" style="display:none;background:#1a73e8;color:#fff;padding:10px 24px;font-size:14px;font-weight:600;border:none;cursor:pointer;">Export to GoogleSheet</button>
                 <button class="export-btn" id="csvBtn" onclick="exportCSV()" style="display:none;padding:10px 16px;font-size:13px;">CSV出力</button>
             </div>
-            <div class="tabs">
-                <button class="tab active" data-tab="auto">違反項目</button>
-                <button class="tab" data-tab="passes">合格項目</button>
-                <button class="tab" data-tab="incomplete">要確認</button>
-                <button class="tab" data-tab="manual">手動チェック</button>
-                <button class="tab" data-tab="enhanced">DEEP SCAN</button>
-            </div>
-            <div class="tab-content active" id="tab-auto">
-                <div class="section">
-                    <div class="section-header">
-                        <div><span class="section-title">違反項目</span> <span class="section-badge" id="violationsBadge">0</span></div>
-                    </div>
-                    <div class="violation-list" id="violationsList"></div>
-                </div>
-            </div>
-            <div class="tab-content" id="tab-passes">
-                <div class="section">
-                    <div class="section-header">
-                        <div><span class="section-title">合格したルール</span> <span class="section-badge" id="passBadge">0</span></div>
-                    </div>
-                    <div class="violation-list" id="passList"></div>
-                </div>
-            </div>
-            <div class="tab-content" id="tab-incomplete">
-                <div class="section">
-                    <div class="section-header">
-                        <div><span class="section-title">要確認項目</span> <span class="section-badge" id="incompleteBadge">0</span></div>
-                    </div>
-                    <div class="violation-list" id="incompleteList"></div>
-                </div>
-            </div>
-            <div class="tab-content" id="tab-manual">
-                <div class="section" id="manualSection"></div>
-                <div class="progress-bar">
-                    <div class="progress-label"><span>手動チェック進捗</span><span id="progressPercent">0%</span></div>
-                    <div class="progress-track"><div class="progress-fill" id="progressFill" style="width: 0%"></div></div>
-                </div>
-            </div>
-            <div class="tab-content" id="tab-enhanced">
+            <!-- 非表示: 内部利用compat要素 -->
+            <div style="display:none;">
+                <span id="violationsBadge"></span><span id="passBadge"></span><span id="incompleteBadge"></span>
+                <div id="manualSection"></div>
                 <div id="enhancedResults"></div>
+                <span id="progressPercent"></span><div id="progressFill"></div>
             </div>
+            <div class="tabs" id="resultTabs">
+                <button class="tab active" data-tab="critical">緊急 <span class="tab-num" id="badge-critical">0</span></button>
+                <button class="tab" data-tab="serious">重大 <span class="tab-num" id="badge-serious">0</span></button>
+                <button class="tab" data-tab="moderate">中程度 <span class="tab-num" id="badge-moderate">0</span></button>
+                <button class="tab" data-tab="minor">軽微 <span class="tab-num" id="badge-minor">0</span></button>
+                <button class="tab" data-tab="pass">合格 <span class="tab-num" id="badge-pass">0</span></button>
+                <button class="tab" data-tab="na">該当なし <span class="tab-num" id="badge-na">0</span></button>
+                <button class="tab" data-tab="unverified">未検証 <span class="tab-num" id="badge-unverified">0</span></button>
+            </div>
+            <div class="tab-content active" id="tab-critical"><div class="section"><div class="violation-list" id="list-critical"></div></div></div>
+            <div class="tab-content" id="tab-serious"><div class="section"><div class="violation-list" id="list-serious"></div></div></div>
+            <div class="tab-content" id="tab-moderate"><div class="section"><div class="violation-list" id="list-moderate"></div></div></div>
+            <div class="tab-content" id="tab-minor"><div class="section"><div class="violation-list" id="list-minor"></div></div></div>
+            <div class="tab-content" id="tab-pass"><div class="section"><div class="violation-list" id="list-pass"></div></div></div>
+            <div class="tab-content" id="tab-na"><div class="section"><div class="violation-list" id="list-na"></div></div></div>
+            <div class="tab-content" id="tab-unverified"><div class="section"><div class="violation-list" id="list-unverified"></div></div></div>
         </div>
         <footer>
             <p><a href="https://github.com/dequelabs/axe-core" target="_blank">axe-core</a> + Puppeteer で動作</p>
@@ -943,9 +927,10 @@
             $('levelNote').textContent = levelNotes[targetLevel];
         }));
 
-        document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
-            document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(x => x.classList.remove('active'));
+        document.querySelectorAll('#resultTabs .tab').forEach(t => t.addEventListener('click', () => {
+            document.querySelectorAll('#resultTabs .tab').forEach(x => x.classList.remove('active'));
+            // hide all tab-content within #results
+            document.querySelectorAll('#results .tab-content').forEach(x => x.classList.remove('active'));
             t.classList.add('active');
             $(`tab-${t.dataset.tab}`).classList.add('active');
         }));
@@ -1000,7 +985,7 @@
         function displayResults(results, url) {
             // axe-coreの生の結果を保存
             lastResults = { ...results, url, timestamp: new Date().toISOString(), level: targetLevel };
-            
+
             const imp = { critical: 0, serious: 0, moderate: 0, minor: 0 };
             results.violations.forEach(v => { imp[v.impact] = (imp[v.impact] || 0) + v.nodes.length; });
             $('criticalCount').textContent = imp.critical;
@@ -1009,52 +994,11 @@
             $('minorCount').textContent = imp.minor;
             $('passCount').textContent = results.passes.length;
             $('totalCount').textContent = results.violations.length + results.passes.length + (results.incomplete?.length || 0);
-            $('violationsBadge').textContent = results.violations.length;
-            $('passBadge').textContent = results.passes.length;
-            $('incompleteBadge').textContent = results.incomplete?.length || 0;
-            
+
             $('scanTime').textContent = `スキャン: ${url} （${new Date().toLocaleString('ja-JP')}）`;
-            
-            // デバッグ情報
             $('scanDebug').textContent = `違反: ${results.violations.length}件 | 合格: ${results.passes.length}件 | 要確認: ${results.incomplete?.length || 0}件`;
-            
-            $('violationsList').innerHTML = results.violations.length === 0 
-                ? '<div class="empty-state">違反は検出されませんでした</div>' 
-                : [...results.violations].sort((a, b) => ({ critical: 0, serious: 1, moderate: 2, minor: 3 })[a.impact] - ({ critical: 0, serious: 1, moderate: 2, minor: 3 })[b.impact]).map(renderViolation).join('');
-            
-            $('passList').innerHTML = results.passes.length === 0
-                ? '<div class="empty-state">合格した項目はありません</div>'
-                : results.passes.map(p => {
-                    const wcagLevel = getWcagLevel(p.tags);
-                    const wcagRef = extractWcagRef(p.tags);
-                    const jaName = getJaRuleName(p.id);
-                    const els = (p.nodes || []).slice(0, 3);
-                    const more = (p.nodes || []).length - 3;
-                    const detail = els.length > 0 ? `
-                        <div class="violation-details">
-                            <div class="element-list">
-                                ${els.map(n => `<div class="element-item"><div class="element-target">${escapeHtml(Array.isArray(n.target) ? n.target.join(' > ') : (n.target || ''))}</div>${n.html ? `<div class="element-html">${escapeHtml((n.html || '').substring(0, 200))}${(n.html || '').length > 200 ? '...' : ''}</div>` : ''}</div>`).join('')}
-                                ${more > 0 ? `<div class="element-item" style="text-align:center;color:var(--navy-400);">他${more}件</div>` : ''}
-                            </div>
-                        </div>` : '';
-                    return `<div class="violation-item" data-level="${wcagLevel.toLowerCase()}" style="border-left-color:#059669;" onclick="this.classList.toggle('expanded')">
-                        <div class="violation-header">
-                            <div class="badges"><span class="badge" style="background:#059669;color:white;">合格</span><span class="badge">${wcagLevel}</span></div>
-                            <div class="violation-info">
-                                <div class="violation-title">${jaName} <span class="wcag-ref">${p.id}</span> ${wcagRef ? `<span class="wcag-ref">${wcagRef}</span>` : ''}</div>
-                                <div class="violation-meta"><span>${(p.nodes || []).length}件</span> ${p.helpUrl ? `<a href="${p.helpUrl}" target="_blank" onclick="event.stopPropagation()">詳細</a>` : ''}</div>
-                            </div>
-                            <svg class="expand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-                        </div>
-                        ${detail}
-                    </div>`;
-                }).join('');
-            
-            $('incompleteList').innerHTML = !results.incomplete || results.incomplete.length === 0
-                ? '<div class="empty-state">要確認項目はありません</div>'
-                : results.incomplete.map(renderViolation).join('');
-            
-            renderManualChecklist();
+
+            renderAllTabs();
             $('results').classList.add('visible');
             $('csvBtn').style.display = '';
 
@@ -1410,14 +1354,10 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
             displayResults(r.results, r.url);
             $('results').classList.add('visible');
 
-            // 高精度検査結果が存在する場合は高精度タブに表示
+            // 高精度検査結果が存在する場合は統合タブに反映
             if (batchEnhancedResults[r.url]) {
                 renderEnhancedResults(batchEnhancedResults[r.url], sessionAAABeta);
-                // 高精度タブに自動切り替え
-                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-                document.querySelector('[data-tab="enhanced"]').classList.add('active');
-                $('tab-enhanced').classList.add('active');
+                renderAllTabs();
             }
 
             // AI評価結果が存在する場合は手動チェックタブに反映
@@ -1620,6 +1560,7 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                         computeDeepScore(lastEnhancedResults),
                         null, true, doMulti
                     );
+                    renderAllTabs();
                 }
 
                 // MULTI SCAN
@@ -1631,6 +1572,7 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                         computeMultiScore(aiResults),
                         doDeep, true
                     );
+                    renderAllTabs();
                 }
             } finally {
                 btn.classList.remove('loading');
@@ -1780,44 +1722,149 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                      pass, na, unverified, score: checkable > 0 ? Math.round(pass / checkable * 100) : null };
         }
 
-        function renderScanScoreTable(basicScore, deepScore, multiScore, deepEnabled, multiEnabled) {
-            const DASH = '<span style="color:#cbd5e1;">—</span>';
+        // ============================================================
+        // 全タブ再描画（BASIC + DEEP + MULTI の結果をマージ）
+        // ============================================================
+        function renderAllTabs() {
+            const basic = lastResults;
+            const deep  = lastEnhancedResults;
+            const multi = aiResults;
+            const lo    = { 'A': 1, 'AA': 2, 'AAA': 3 };
+            const lim   = lo[targetLevel] || 2;
 
-            function scoreChip(score) {
-                if (score === null || score === undefined) return DASH;
-                const c = score >= 80 ? '#059669' : score >= 50 ? '#d97706' : '#dc2626';
-                return `<span style="font-weight:700;color:${c};font-size:14px;">${score}%</span>`;
+            const buckets = { critical: [], serious: [], moderate: [], minor: [], pass: [], na: [], unverified: [] };
+
+            // BASIC violations → impact bucket
+            if (basic) {
+                (basic.violations || []).forEach(v => {
+                    const b = buckets[v.impact] || buckets.serious;
+                    b.push({ src: 'BASIC', type: 'violation', data: v });
+                });
+                (basic.passes || []).forEach(p => buckets.pass.push({ src: 'BASIC', type: 'pass', data: p }));
+                (basic.incomplete || []).forEach(i => buckets.unverified.push({ src: 'BASIC', type: 'violation', data: i }));
             }
-            function num(n, color) {
-                if (n === null || n === undefined) return DASH;
-                return `<span style="font-weight:${n > 0 ? '700' : '400'};color:${n > 0 ? color : '#94a3b8'};">${n}</span>`;
+
+            // DEEP results
+            if (deep) {
+                deep.forEach(r => {
+                    const item = { src: 'DEEP', type: 'deep', data: r };
+                    if (r.status === 'fail') buckets.serious.push(item);
+                    else if (r.status === 'pass') buckets.pass.push(item);
+                    else if (r.status === 'not_applicable') buckets.na.push(item);
+                    else buckets.unverified.push(item);
+                });
             }
-            function row(label, labelColor, labelBg, data, enabled, isTotal) {
-                const border = isTotal ? 'border-top:2px solid #334155;' : 'border-bottom:1px solid #e2e8f0;';
-                const bg     = isTotal ? '#f1f5f9' : 'white';
-                if (!enabled || !data) {
-                    return `<tr style="${border}background:${bg};">
-                        <td style="padding:9px 14px;font-weight:700;"><span style="background:${labelBg};color:${labelColor};padding:2px 8px;border-radius:3px;font-size:12px;letter-spacing:.5px;">${label}</span></td>
-                        <td colspan="8" style="padding:9px 10px;text-align:center;color:#94a3b8;font-size:12px;">${isTotal ? '' : '— 未実行 —'}</td>
-                    </tr>`;
+
+            // MULTI results (manual check items)
+            manualCheckItems.forEach((item, i) => {
+                if ((lo[item.level] || 2) > lim) return;
+                const r = multi[i];
+                const card = { src: 'MULTI', type: 'multi', data: { ...item, aiResult: r } };
+                if (!r) { buckets.unverified.push(card); return; }
+                if (r.status === 'fail') buckets.serious.push(card);
+                else if (r.status === 'pass') buckets.pass.push(card);
+                else if (r.status === 'not_applicable') buckets.na.push(card);
+                else buckets.unverified.push(card);
+            });
+
+            // ソース別バッジ色
+            const srcStyle = {
+                BASIC: 'background:#1e40af;color:#fff',
+                DEEP:  'background:#0d7a5f;color:#fff',
+                MULTI: 'background:#4f46e5;color:#fff'
+            };
+
+            function renderDeepItem(r, src) {
+                const statusColors = { pass: '#059669', fail: '#dc2626', error: '#d97706', not_applicable: '#6b7280', manual_required: '#7c3aed' };
+                const statusLabels = { pass: '合格', fail: '不合格', error: 'エラー', not_applicable: '対象外', manual_required: '要手動確認' };
+                const sc = r.sc || '';
+                const viols = (r.violations || []).slice(0, 5);
+                const detail = viols.length > 0 ? `<div class="violation-details"><div class="element-list">
+                    ${viols.map(v => `<div class="element-item"><div class="element-target">${escapeHtml(v.selector || '')}</div>${v.message ? `<div class="violation-desc">${escapeHtml(v.message)}</div>` : ''}</div>`).join('')}
+                </div></div>` : '';
+                return `<div class="violation-item" onclick="this.classList.toggle('expanded')">
+                    <div class="violation-header">
+                        <div class="badges">
+                            <span class="badge" style="${srcStyle[src]}">${src}</span>
+                            ${sc ? `<span class="badge">SC ${sc}</span>` : ''}
+                        </div>
+                        <div class="violation-info">
+                            <div class="violation-title">${escapeHtml(r.name || '')}</div>
+                            <div class="violation-meta">${escapeHtml(r.message || '')}</div>
+                        </div>
+                        <svg class="expand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                    </div>
+                    ${detail}
+                </div>`;
+            }
+
+            function renderMultiItem(item) {
+                const r = item.aiResult;
+                const sc = item.ref || '';
+                const statusLabel = !r ? '未検証' : { pass: '合格', fail: '不合格', not_applicable: '対象外', manual_required: '要手動確認' }[r.status] || r.status;
+                const detail = r && (r.reason || r.suggestion) ? `<div class="violation-details">
+                    ${r.reason ? `<div class="element-list"><div class="element-item"><div class="violation-desc">${escapeHtml(r.reason)}</div></div></div>` : ''}
+                    ${r.suggestion ? `<div class="fix-suggestion"><div class="fix-suggestion-title">改善案</div><div class="fix-suggestion-text">${escapeHtml(r.suggestion)}</div></div>` : ''}
+                </div>` : '';
+                return `<div class="violation-item" onclick="this.classList.toggle('expanded')">
+                    <div class="violation-header">
+                        <div class="badges">
+                            <span class="badge" style="${srcStyle.MULTI}">MULTI</span>
+                            ${sc ? `<span class="badge">${escapeHtml(sc)}</span>` : ''}
+                            <span class="badge">${item.level || ''}</span>
+                        </div>
+                        <div class="violation-info">
+                            <div class="violation-title">${escapeHtml(item.text || '')}</div>
+                            ${r ? `<div class="violation-meta">${escapeHtml(statusLabel)}</div>` : ''}
+                        </div>
+                        <svg class="expand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                    </div>
+                    ${detail}
+                </div>`;
+            }
+
+            function renderPassItem(p, src) {
+                const wcagLevel = getWcagLevel(p.tags);
+                const wcagRef = extractWcagRef(p.tags);
+                const jaName = getJaRuleName(p.id);
+                return `<div class="violation-item" style="border-left-color:#059669;" onclick="this.classList.toggle('expanded')">
+                    <div class="violation-header">
+                        <div class="badges">
+                            <span class="badge" style="${srcStyle[src]}">${src}</span>
+                            <span class="badge" style="background:#059669;color:white;">合格</span>
+                            <span class="badge">${wcagLevel}</span>
+                        </div>
+                        <div class="violation-info">
+                            <div class="violation-title">${jaName} <span class="wcag-ref">${p.id}</span> ${wcagRef ? `<span class="wcag-ref">${wcagRef}</span>` : ''}</div>
+                            <div class="violation-meta"><span>${(p.nodes || []).length}件</span></div>
+                        </div>
+                        <svg class="expand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                    </div>
+                </div>`;
+            }
+
+            function itemHtml({ src, type, data }) {
+                if (type === 'violation' || type === 'pass') {
+                    if (type === 'pass') return renderPassItem(data, src);
+                    return renderViolation(data);
                 }
-                return `<tr style="${border}background:${bg};">
-                    <td style="padding:9px 14px;font-weight:700;white-space:nowrap;">
-                        <span style="background:${labelBg};color:${labelColor};padding:2px 8px;border-radius:3px;font-size:12px;letter-spacing:.5px;">${label}</span>
-                    </td>
-                    <td style="padding:9px 10px;text-align:center;white-space:nowrap;line-height:1.3;">
-                        <div style="font-size:11px;color:#64748b;">${data.total}</div>
-                        <div>${scoreChip(data.score)}</div>
-                    </td>
-                    <td style="padding:9px 10px;text-align:center;">${num(data.critical, '#7f1d1d')}</td>
-                    <td style="padding:9px 10px;text-align:center;">${num(data.serious,  '#dc2626')}</td>
-                    <td style="padding:9px 10px;text-align:center;">${num(data.moderate, '#d97706')}</td>
-                    <td style="padding:9px 10px;text-align:center;">${num(data.minor,    '#6b7280')}</td>
-                    <td style="padding:9px 10px;text-align:center;">${num(data.pass,     '#059669')}</td>
-                    <td style="padding:9px 10px;text-align:center;">${num(data.na,       '#94a3b8')}</td>
-                    <td style="padding:9px 10px;text-align:center;">${num(data.unverified,'#94a3b8')}</td>
-                </tr>`;
+                if (type === 'deep') return renderDeepItem(data, src);
+                if (type === 'multi') return renderMultiItem(data);
+                return '';
             }
+
+            const EMPTY = '<div class="empty-state">項目はありません</div>';
+            ['critical','serious','moderate','minor','pass','na','unverified'].forEach(key => {
+                const items = buckets[key];
+                const el = $('list-' + key);
+                if (el) el.innerHTML = items.length ? items.map(itemHtml).join('') : EMPTY;
+                const badge = $('badge-' + key);
+                if (badge) badge.textContent = items.length;
+            });
+        }
+
+        function renderScanScoreTable(basicScore, deepScore, multiScore, deepEnabled, multiEnabled) {
+            const DASH = '<span style="color:#9ca3af;">—</span>';
 
             const totalScore = computeTotalScore(
                 lastResults,
@@ -1825,11 +1872,58 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 multiEnabled && Object.keys(aiResults).length > 0 ? aiResults : null
             );
 
+            // 全項目を一律共通にするため grand total で正規化
+            const grandTotal = totalScore ? totalScore.total : (basicScore ? basicScore.total : 0);
+            function normalize(score) {
+                if (!score) return score;
+                const gap = Math.max(0, grandTotal - score.total);
+                return { ...score, total: grandTotal, unverified: score.unverified + gap };
+            }
+            const nb = normalize(basicScore);
+            const nd = normalize(deepScore);
+            const nm = normalize(multiScore);
+
+            function scoreChip(score) {
+                if (score === null || score === undefined) return DASH;
+                const c = score >= 80 ? '#047857' : score >= 50 ? '#b45309' : '#b91c1c';
+                return `<span style="font-weight:700;color:${c};font-size:17px;font-family:'Poppins',monospace;">${score}%</span>`;
+            }
+            function num(n, color) {
+                if (n === null || n === undefined) return DASH;
+                return `<span style="font-size:16px;font-weight:${n > 0 ? '700' : '400'};color:${n > 0 ? color : '#9ca3af'};">${n}</span>`;
+            }
+            function row(label, labelColor, data, enabled, isTotal) {
+                const topBorder = isTotal ? 'border-top:2px solid #374151;' : '';
+                const bg = isTotal ? '#f8fafc' : 'white';
+                const fontW = isTotal ? '700' : '600';
+                const td = `padding:14px 14px;text-align:center;border-right:1px solid #e2e8f0;`;
+                if (!enabled || !data) {
+                    return `<tr style="${topBorder}background:${bg};border-bottom:1px solid #e2e8f0;">
+                        <td style="padding:14px 20px;font-weight:${fontW};white-space:nowrap;border-right:1px solid #d1d5db;font-size:14px;letter-spacing:.06em;text-transform:uppercase;color:${labelColor};">${label}</td>
+                        <td colspan="8" style="${td}text-align:center;color:#9ca3af;font-size:13px;">${isTotal ? '' : '— 未実行 —'}</td>
+                    </tr>`;
+                }
+                return `<tr style="${topBorder}background:${bg};border-bottom:1px solid #e2e8f0;">
+                    <td style="padding:14px 20px;font-weight:${fontW};white-space:nowrap;border-right:1px solid #d1d5db;font-size:14px;letter-spacing:.06em;text-transform:uppercase;color:${labelColor};">${label}</td>
+                    <td style="${td}min-width:90px;line-height:1.4;">
+                        <div style="font-size:12px;color:#6b7280;margin-bottom:2px;">${data.total}</div>
+                        <div>${scoreChip(data.score)}</div>
+                    </td>
+                    <td style="${td}">${num(data.critical, '#991b1b')}</td>
+                    <td style="${td}">${num(data.serious,  '#b91c1c')}</td>
+                    <td style="${td}">${num(data.moderate, '#b45309')}</td>
+                    <td style="${td}">${num(data.minor,    '#4b5563')}</td>
+                    <td style="${td}">${num(data.pass,     '#047857')}</td>
+                    <td style="${td}">${num(data.na,       '#6b7280')}</td>
+                    <td style="padding:14px 14px;text-align:center;">${num(data.unverified,'#6b7280')}</td>
+                </tr>`;
+            }
+
             $('scanScoreBody').innerHTML =
-                row('BASIC', 'white', '#1e40af', basicScore, true, false) +
-                row('DEEP',  'white', '#0d7a5f', deepScore,  deepEnabled, false) +
-                row('MULTI', 'white', '#4f46e5', multiScore, multiEnabled, false) +
-                row('TOTAL', 'white', '#334155', totalScore, true, true);
+                row('BASIC', '#1e40af', nb, true, false) +
+                row('DEEP',  '#065f46', nd, deepEnabled, false) +
+                row('MULTI', '#3730a3', nm, multiEnabled, false) +
+                row('TOTAL', '#111827', normalize(totalScore), true, true);
 
             $('scanScoreTable').style.display = 'block';
         }
@@ -2060,11 +2154,6 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
             status.textContent = `DEEP SCAN実行中（${modeLabel}、2〜4分かかります）...`;
             resultsEl.innerHTML = '';
 
-            // 高精度検査タブに切り替え
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-            document.querySelector('[data-tab="enhanced"]').classList.add('active');
-            document.getElementById('tab-enhanced').classList.add('active');
             document.getElementById('results').style.display = 'block';
 
             try {
