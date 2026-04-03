@@ -38,7 +38,7 @@ function showReportDialog() {
     'label{display:block;margin-top:14px;font-weight:600;font-size:14px}',
     'input{width:100%;padding:7px 10px;margin-top:4px;border:1px solid #ccc;font-size:14px;box-sizing:border-box}',
     '.chips{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}',
-    '.chip{padding:5px 12px;border:1px solid #1a73e8;border-radius:20px;font-size:14px;cursor:pointer;background:#fff;color:#1a73e8;user-select:none;transition:.15s}',
+    '.chip{padding:5px 12px;border:1px solid #1a73e8;font-size:14px;cursor:pointer;background:#fff;color:#1a73e8;user-select:none;transition:.15s}',
     '.chip.on{background:#1a73e8;color:#fff}',
     '.foot{margin-top:22px;display:flex;align-items:center;gap:12px;justify-content:flex-end}',
     '.btn{padding:9px 28px;border:none;cursor:pointer;font-size:14px;font-weight:600}',
