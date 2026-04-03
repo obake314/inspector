@@ -30,7 +30,11 @@ body {
 }
 header {
   margin-bottom: 40px;
+  display: flex; 
+  align-items: flex-start; 
+  justify-content: space-between;
 }
+
 h1 {
   font-size: 30px;
   font-weight: 600;
@@ -101,6 +105,8 @@ h1 {
   font-size: 16px;
   font-family: "Poppins", monospace;
   color: var(--navy-800);
+  width:100%;
+  margin-bottom:12px;
 }
 .url-input:focus {
   outline: none;
@@ -1044,16 +1050,31 @@ footer a:hover {
 }
 .settings-group {
   margin-bottom: 20px;
+  border-top: 1px solid var(--navy-200);
+  padding-top: 16px;
+  margin-top: 4px;
 }
 .settings-group label {
-  display: block;
   font-size: 16px;
-  font-weight: 500;
   color: var(--navy-600);
   margin-bottom: 6px;
   text-transform: uppercase;
   letter-spacing: 0.03em;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  cursor:pointer;
+  font-weight:600;
 }
+
+.settings-group label .beta{
+  font-size:11px;
+  background:#7c3aed;
+  color:white;
+  padding:1px 7px;
+  font-weight:600;
+}
+
 .settings-group input,
 .settings-group textarea {
   width: 100%;
@@ -1063,6 +1084,13 @@ footer a:hover {
   font-size: 16px;
   font-family: "Poppins", monospace;
 }
+
+.settings-group input{
+  width:16px;
+  height:16px;
+  cursor:pointer;
+}
+
 .settings-group input:focus,
 .settings-group textarea:focus {
   outline: none;
@@ -1075,7 +1103,7 @@ footer a:hover {
 .settings-group .hint {
   font-size: 16px;
   color: var(--navy-400);
-  margin-top: 4px;
+  margin-top: 6px;
 }
 .settings-save-btn {
   width: 100%;

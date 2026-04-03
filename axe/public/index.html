@@ -49,13 +49,13 @@
                 <input type="password" id="settNewPassword" placeholder="新しいパスワード（変更する場合のみ）">
                 <div class="hint">空欄の場合は変更しません</div>
             </div>
-            <div class="settings-group" style="border-top: 1px solid var(--navy-200); padding-top: 16px; margin-top: 4px;">
-                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:600;">
-                    <input type="checkbox" id="settAAABeta" style="width:16px;height:16px;cursor:pointer;">
+            <div class="settings-group">
+                <label>
+                    <input type="checkbox" id="settAAABeta">
                     <span>AAA 基準をベータ検査に含める</span>
-                    <span style="font-size:11px;background:#7c3aed;color:white;padding:1px 7px;font-weight:600;">BETA</span>
+                    <span class="beta">BETA</span>
                 </label>
-                <div class="hint" style="margin-top:6px;">チェックを入れると高精度検査に WCAG 2.2 AAA 基準（SC 2.3.3, 2.4.12, 2.4.13 等）が追加されます。デフォルトは A/AA のみ。</div>
+                <div class="hint">チェックを入れると高精度検査に WCAG 2.2 AAA 基準（SC 2.3.3, 2.4.12, 2.4.13 等）が追加されます。デフォルトは A/AA のみ。</div>
             </div>
             <button type="button" class="settings-save-btn" id="settSaveBtn" onclick="saveSettings()">保存</button>
             <div class="settings-msg" id="settingsMsg"></div>
@@ -63,7 +63,7 @@
     </div>
 
     <div class="container">
-        <header style="display: flex; align-items: flex-start; justify-content: space-between;">
+        <header>
             <div>
                 <h1>AXE INSPECTOR</h1>
                 <p class="subtitle">アクセシビリティ監査ツール</p>
@@ -84,29 +84,29 @@
                 <div class="level-select-btns">
                     <button type="button" class="level-select-btn" data-level="A">A</button>
                     <button type="button" class="level-select-btn active" data-level="AA">AA</button>
-                    <button type="button" class="level-select-btn" data-level="AAA" id="levelBtnAAA" style="display:none;">AAA</button>
+                    <button type="button" class="level-select-btn" data-level="AAA" id="levelBtnAAA">AAA</button>
                 </div>
             </div>
             <div id="singleInput">
                 <form id="urlForm">
-                    <input type="url" class="url-input" id="urlInput" placeholder="https://example.com" required style="width:100%;margin-bottom:12px;">
+                    <input type="url" class="url-input" id="urlInput" placeholder="https://example.com" required >
                 </form>
-                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <div class="scan-controls">
                     <button type="button" class="check-btn" id="runScanBtn">
                         <span class="btn-text">SCAN</span>
                         <div class="spinner"></div>
                     </button>
-                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                        <input type="checkbox" id="deepScanOpt" checked style="width:15px;height:15px;accent-color:#304C89;cursor:pointer;">
+                    <label class="scan-option">
+                        <input type="checkbox" id="deepScanOpt" class="scan-option-checkbox" checked>
                         <span style="color:#304C89;font-size:15px;">DEEP SCAN</span>
                     </label>
-                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                        <input type="checkbox" id="multiScanOpt" checked style="width:15px;height:15px;accent-color:#0D7A5F;cursor:pointer;">
+                    <label class="scan-option">
+                        <input type="checkbox" id="multiScanOpt" class="scan-option-checkbox" checked>
                         <span style="color:#0D7A5F;font-size:15px;">MULTI SCAN</span>
                     </label>
                 </div>
                 <!-- 既存ボタンは非表示のまま内部利用 -->
-                <div style="display:none;">
+                <div class="hidden-controls">
                     <button type="button" id="checkBtn"><span class="btn-text"></span><div class="spinner"></div></button>
                     <button type="button" id="enhancedCheckBtn"><span id="enhancedBtnText"></span><span id="enhancedSpinner"></span></button>
                     <button type="button" id="aiEvaluateBtn"><span class="ai-btn-text"></span><span class="ai-spinner"></span></button>
@@ -116,35 +116,35 @@
             </div>
             <div id="batchInput" class="batch-input">
                 <textarea class="batch-textarea" id="batchUrls" placeholder="URLを1行ずつ入力（最大10件）&#10;https://example.com&#10;https://example.com/about&#10;https://example.com/contact"></textarea>
-                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;">
+                <div class="batch-controls">
                     <button type="button" class="check-btn" id="batchCheckBtn">
                         <span class="btn-text">BATCH SCAN</span>
                         <div class="spinner"></div>
                     </button>
-                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                        <input type="checkbox" id="batchEnhancedOpt" checked style="width:15px;height:15px;accent-color:#304C89;cursor:pointer;">
+                    <label class="scan-option">
+                        <input type="checkbox" id="batchEnhancedOpt" class="scan-option-checkbox" checked>
                         <span style="color:#304C89;font-size:15px;">DEEP SCAN</span>
                     </label>
-                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                        <input type="checkbox" id="batchAIOpt" checked style="width:15px;height:15px;accent-color:#0D7A5F;cursor:pointer;">
+                    <label class="scan-option">
+                        <input type="checkbox" id="batchAIOpt" class="scan-option-checkbox" checked>
                         <span style="color:#0D7A5F;font-size:15px;">MULTI SCAN</span>
                     </label>
                     <span class="batch-count" id="batchCount">0 / 10 URL</span>
                 </div>
                 <div class="batch-progress" id="batchProgress">
-                    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+                    <div class="batch-progress-header">
                         <div class="batch-progress-label" id="batchProgressLabel">検査中...</div>
-                        <div id="batchProgressSub" style="font-size:11px;color:#888;"></div>
+                        <div id="batchProgressSub"></div>
                     </div>
                     <div class="batch-progress-track"><div class="batch-progress-fill" id="batchProgressFill"></div></div>
-                    <div id="batchPhaseIndicator" style="display:flex;gap:6px;margin-top:6px;font-size:11px;"></div>
+                    <div id="batchPhaseIndicator"></div>
                 </div>
             </div>
-            <details class="basic-auth-section" style="margin-top: 12px;">
-                <summary style="cursor: pointer; font-size: 16px; color: var(--navy-500);">Basic認証（必要な場合）</summary>
-                <div style="display: flex; gap: 12px; margin-top: 8px;">
-                    <input type="text" id="basicUser" class="url-input" placeholder="ユーザー名" style="flex: 1;">
-                    <input type="password" id="basicPass" class="url-input" placeholder="パスワード" style="flex: 1;">
+            <details class="basic-auth-section">
+                <summary>Basic認証（必要な場合）</summary>
+                <div class="basic-auth-inputs">
+                    <input type="text" id="basicUser" class="url-input" placeholder="ユーザー名">
+                    <input type="password" id="basicPass" class="url-input" placeholder="パスワード">
                 </div>
             </details>
             <div class="note" id="levelNote">Level AA: A + AA の基準をチェック（推奨水準）</div>
@@ -178,9 +178,9 @@
             <h4>エラー</h4>
             <p id="errorText"></p>
         </div>
-        <div class="results" id="batchResults" style="display:none;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-                <h2 style="font-size: 16px; font-weight: 600;">一括検査結果</h2>
+        <div class="results" id="batchResults">
+            <div class="batch-results-header">
+                <h2>一括検査結果</h2>
             </div>
             <div id="batchSummaryArea"></div>
             <div class="batch-results-nav" id="batchResultsNav"></div>
@@ -188,26 +188,26 @@
         </div>
         <div class="results" id="results">
             <!-- スコアサマリーテーブル -->
-            <div id="scanScoreTable" style="display:none;margin-bottom:32px;overflow-x:auto;">
-                <table style="width:100%;border-collapse:collapse;font-size:15px;min-width:700px;border:1px solid #d1d5db;">
+            <div id="scanScoreTable">
+                <table>
                     <thead>
-                        <tr style="background:#f1f5f9;color:#374151;border-bottom:2px solid #d1d5db;">
-                            <th style="padding:13px 20px;text-align:left;font-weight:700;white-space:nowrap;font-size:13px;text-transform:uppercase;letter-spacing:.06em;border-right:1px solid #d1d5db;">SCAN</th>
-                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;min-width:90px;font-size:13px;border-right:1px solid #e2e8f0;"><span style="font-size:11px;color:#6b7280;font-weight:400;">全項目数</span><br>スコア</th>
-                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;font-size:13px;color:#b91c1c;border-right:1px solid #e2e8f0;">緊急</th>
-                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;font-size:13px;color:#b91c1c;border-right:1px solid #e2e8f0;">重大</th>
-                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;font-size:13px;color:#b45309;border-right:1px solid #e2e8f0;">中程度</th>
-                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;font-size:13px;color:var(--navy-600);border-right:1px solid #e2e8f0;">軽微</th>
-                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;font-size:13px;color:var(--navy-600);border-right:1px solid #e2e8f0;">合格</th>
-                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;font-size:13px;color:var(--navy-400);border-right:1px solid #e2e8f0;">該当なし</th>
-                            <th style="padding:13px 14px;text-align:center;white-space:nowrap;font-size:13px;color:var(--navy-400);">未検証</th>
+                        <tr>
+                            <th>SCAN</th>
+                            <th><span>全項目数</span><br>スコア</th>
+                            <th>緊急</th>
+                            <th>重大</th>
+                            <th>中程度</th>
+                            <th>軽微</th>
+                            <th>合格</th>
+                            <th>該当なし</th>
+                            <th>未検証</th>
                         </tr>
                     </thead>
                     <tbody id="scanScoreBody"></tbody>
                 </table>
             </div>
             <!-- 非表示: 旧サマリー（内部参照用） -->
-            <div style="display:none;">
+            <div class="hidden-compat">
                 <span id="criticalCount">0</span><span id="seriousCount">0</span>
                 <span id="moderateCount">0</span><span id="minorCount">0</span>
                 <span id="passCount">0</span><span id="totalCount">0</span>
@@ -215,7 +215,7 @@
                 <span id="achievementBanner"></span>
             </div>
             <!-- 非表示: 内部利用compat要素 -->
-            <div style="display:none;">
+            <div class="hidden-compat">
                 <span id="violationsBadge"></span><span id="passBadge"></span><span id="incompleteBadge"></span>
                 <div id="manualSection"></div>
                 <div id="enhancedResults"></div>
@@ -238,9 +238,9 @@
             <div class="tab-content" id="tab-na"><div class="section"><div class="violation-list" id="list-na"></div></div></div>
             <div class="tab-content" id="tab-unverified"><div class="section"><div class="violation-list" id="list-unverified"></div></div></div>
             <!-- エクスポートエリア -->
-            <div id="exportArea" style="display:none;margin-top:32px;padding-top:20px;border-top:1px solid var(--navy-200);display:flex;gap:12px;justify-content:flex-end;">
-                <button class="export-btn" id="csvBtn" onclick="exportCSV()" style="padding:10px 20px;font-size:13px;">CSV出力</button>
-                <button class="export-btn" id="reportBtn" onclick="exportToSheets()" style="display:none;background:#1a73e8;color:#fff;padding:10px 24px;font-size:14px;font-weight:600;border:none;cursor:pointer;">Export to GoogleSheet</button>
+            <div id="exportArea">
+                <button class="export-btn" id="csvBtn" onclick="exportCSV()">CSV出力</button>
+                <button class="export-btn" id="reportBtn" onclick="exportToSheets()">Export to GoogleSheet</button>
             </div>
         </div>
         <footer>
@@ -689,7 +689,8 @@
         function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
 
         function renderViolation(v) {
-            const els = v.nodes.slice(0, 5), more = v.nodes.length - 5;
+            const els = v.nodes.slice(0, 5),
+                more = v.nodes.length - 5;
             const impactLabel = impactLabels[v.impact] || v.impact || '情報';
             const wcagLevel = getWcagLevel(v.tags);
             const wcagRef = extractWcagRef(v.tags);
@@ -731,7 +732,7 @@
 
             renderAllTabs();
             $('results').classList.add('visible');
-            $('exportArea').style.display = 'flex';
+            $('exportArea').classList.add('visible');
 
             // 達成率バナー
             const total = results.violations.length + results.passes.length;
@@ -1477,18 +1478,18 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
         // ============================================================
         // 統合カードレンダラー
         // ============================================================
-        const srcBadgeStyle = {
-            BASIC:  'background:#3581B8;color:#fff',
-            DEEP:   'background:#304C89;color:#fff',
-            MULTI:  'background:#0D7A5F;color:#fff',
-            BATCH:  'background:#334155;color:#fff'
+        const srcBadgeClasses = {
+            BASIC: 'badge-basic',
+            DEEP: 'badge-deep',
+            MULTI: 'badge-multi',
+            BATCH: 'badge-batch'
         };
 
         function renderCardItem(no, src, impact, sc, level, title, summary, countText, locations, decisionKey) {
             const dec = decisionKey ? manualDecisions.get(decisionKey) : null;
             const borderColor = dec === 'ok' ? '#059669' : dec === 'ng' ? '#dc2626' : dec === 'hold' ? '#d97706' : '';
             const borderStyle = borderColor ? `style="border-left-color:${borderColor};"` : '';
-            const srcBadge = src ? `<span class="badge" style="${srcBadgeStyle[src]};font-size:11px;">${src}</span>` : '';
+            const srcBadge = src ? `<span class="badge ${srcBadgeClasses[src] || ''}">${src}</span>` : '';
             const scBadge  = sc  ? `<span class="item-sc">${escapeHtml(sc)}</span>` : '';
             const lvBadge  = level ? `<span class="item-level">${escapeHtml(level)}</span>` : '';
             const locHtml  = locations && locations.length
