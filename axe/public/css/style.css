@@ -308,6 +308,7 @@ h1 {
   display: flex;
   border-bottom: 1px solid var(--navy-200);
   margin-bottom: 24px;
+  margin-top:40px;
 }
 .tab {
   background: none;
@@ -318,6 +319,7 @@ h1 {
   cursor: pointer;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
+  width: calc(100% / 7);
 }
 .tab:hover {
   color: var(--navy-700);
@@ -1241,6 +1243,7 @@ footer a:hover {
   padding: 2px 8px;
   border: 1px solid var(--navy-300);
   color: var(--navy-400);
+  flex-direction: column;
 }
 .config-status-item .st {
   font-weight: 600;
