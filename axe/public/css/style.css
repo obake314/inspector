@@ -296,7 +296,14 @@ h1 {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-top: 4px;
+  background: var(--navy-200);
 }
+
+.scoretable thead th{
+  width:calc(100% / 9);
+}
+
+
 .tabs {
   display: flex;
   border-bottom: 1px solid var(--navy-200);
