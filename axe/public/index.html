@@ -545,13 +545,16 @@
         };
         let targetLevel = 'AA';
         const $ = id => document.getElementById(id);
+        // Production is served from /axe/, local dev from /.
+        const appBasePath = window.location.pathname.startsWith('/axe') ? '/axe' : '';
+        const apiUrl = (path) => `${appBasePath}${path}`;
 
         // --- ログイン・設定 ---
         let sessionPassword = '';
 
         (async function initAuth() {
             try {
-                const res = await fetch('/api/auth-status');
+                const res = await fetch(apiUrl('/api/auth-status'));
                 const data = await res.json();
                 if (!data.passwordRequired) {
                     $('loginOverlay').classList.add('hidden');
@@ -568,7 +571,7 @@
         async function doLogin() {
             const pw = $('loginPassword').value;
             try {
-                const res = await fetch('/api/login', {
+                const res = await fetch(apiUrl('/api/login'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ password: pw })
@@ -591,7 +594,7 @@
             $('settingsOverlay').classList.remove('hidden');
             $('settingsMsg').textContent = '';
             // 現在値をロード
-            fetch('/api/settings-get', {
+            fetch(apiUrl('/api/settings-get'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ password: sessionPassword })
@@ -619,7 +622,7 @@
             btn.textContent = '保存中...';
             $('settingsMsg').textContent = '';
             try {
-                const res = await fetch('/api/settings-save', {
+                const res = await fetch(apiUrl('/api/settings-save'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -791,7 +794,7 @@
                 const basicPass = $('basicPass')?.value || '';
                 const basicAuth = (basicUser && basicPass) ? { user: basicUser, pass: basicPass } : null;
                 
-                const response = await fetch('/api/check', {
+                const response = await fetch(apiUrl('/api/check'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ url, level: targetLevel, basicAuth })
@@ -890,7 +893,7 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
 
                 status.textContent = `${filteredItems.length}項目を評価中...（1-2分かかります）`;
 
-                const response = await fetch('/api/ai-evaluate', {
+                const response = await fetch(apiUrl('/api/ai-evaluate'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1204,7 +1207,7 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                     }
                 }, 300);
 
-                const response = await fetch('/api/batch-check', {
+                const response = await fetch(apiUrl('/api/batch-check'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ urls: raw, level: targetLevel, basicAuth })
@@ -1241,7 +1244,7 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                         progressSub.textContent = `${i + 1} / ${successUrls.length} URL`;
                         setPhaseProgress(currentPhaseIdx, i / successUrls.length);
                         try {
-                            const er = await fetch('/api/enhanced-check', {
+                            const er = await fetch(apiUrl('/api/enhanced-check'), {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ url: successUrls[i], includeAAA: sessionAAABeta, basicAuth })
@@ -1266,7 +1269,7 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                         progressSub.textContent = `${i + 1} / ${successUrls.length} URL`;
                         setPhaseProgress(currentPhaseIdx, i / successUrls.length);
                         try {
-                            const ar = await fetch('/api/ai-evaluate', {
+                            const ar = await fetch(apiUrl('/api/ai-evaluate'), {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ url: successUrls[i], checkItems: filteredItems })
@@ -1366,7 +1369,7 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
         let sheetsFolderMode = false;
         async function checkSheetsStatusFn() {
             try {
-                const res = await fetch('/api/sheets-status');
+                const res = await fetch(apiUrl('/api/sheets-status'));
                 const data = await res.json();
                 sheetsConfigured = data.configured;
                 sheetsFolderMode = !!data.folderId;
@@ -1870,7 +1873,7 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 const stats = computeStats(rows);
                 const timestamp = lastResults.timestamp || new Date().toISOString();
 
-                const res = await fetch('/api/export-report', {
+                const res = await fetch(apiUrl('/api/export-report'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1906,7 +1909,7 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 });
                 if (pages.length === 0) { alert('成功した検査結果がありません'); return; }
 
-                const res = await fetch('/api/export-report', {
+                const res = await fetch(apiUrl('/api/export-report'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ pages })
@@ -1939,7 +1942,7 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
 
             // 設定から最新の aaaBeta を取得
             try {
-                const sRes = await fetch('/api/settings-get', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: sessionPassword }) });
+                const sRes = await fetch(apiUrl('/api/settings-get'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: sessionPassword }) });
                 const sData = await sRes.json();
                 sessionAAABeta = !!sData.aaaBeta;
             } catch (e) {}
@@ -1960,7 +1963,7 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 const body = { url, includeAAA: sessionAAABeta };
                 if (basicUser && basicPass) body.basicAuth = { user: basicUser, pass: basicPass };
 
-                const res = await fetch('/api/enhanced-check', {
+                const res = await fetch(apiUrl('/api/enhanced-check'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body)
