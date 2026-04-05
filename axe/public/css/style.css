@@ -928,6 +928,7 @@ h1 {
 .batch-progress-track {
   height: 6px;
   background: var(--navy-200);
+  margin-bottom: 24px;
 }
 .batch-progress-fill {
   height: 100%;
