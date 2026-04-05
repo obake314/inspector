@@ -70,6 +70,7 @@
                 </div>
                 <div class="config-status" id="configStatus">
                     <span class="config-status-item" id="statusGemini">Gemini <span class="st" id="stGemini">-</span></span>
+                    <span class="config-status-item" id="statusServiceAccount">ServiceKey <span class="st" id="stServiceAccount">-</span></span>
                     <span class="config-status-item" id="statusSheets">Sheets <span class="st" id="stSheets">-</span></span>
                 </div>
             <button type="button" class="settings-gear" id="settingsGear" onclick="openSettings()" title="設定">&#9881;</button>
@@ -1388,7 +1389,12 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                     }
                 };
                 setStatus('Gemini', 'stGemini', data.geminiConfigured);
-                setStatus('Sheets', 'stSheets', data.configured);
+                setStatus('ServiceAccount', 'stServiceAccount', data.serviceAccountConfigured);
+
+                const serviceAccountOk = !!data.serviceAccountConfigured;
+                const folderOk = !!data.driveFolderConfigured;
+                const sheetsOk = serviceAccountOk && folderOk;
+                setStatus('Sheets', 'stSheets', sheetsOk);
 
                 // Gemini未設定時はMULTI SCANチェックボックスを無効化
                 const geminiOk = !!data.geminiConfigured;
@@ -1406,14 +1412,21 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 });
 
                 // Sheets未設定時はエクスポートボタンを無効化（表示は常にする）
-                const sheetsOk = !!data.configured;
+                let sheetsDisabledReason = '';
+                if (!serviceAccountOk && !folderOk) {
+                    sheetsDisabledReason = 'Google Service Account Key と Google Drive Folder ID の両方が未設定のため使用できません';
+                } else if (!serviceAccountOk) {
+                    sheetsDisabledReason = 'Google Service Account Key が未設定のため使用できません';
+                } else if (!folderOk) {
+                    sheetsDisabledReason = 'Google Drive Folder ID が未設定のため使用できません';
+                }
                 ['reportBtn','batchReportBtn'].forEach(id => {
                     const el = $(id);
                     if (!el) return;
                     el.style.display = '';
                     el.disabled = !sheetsOk;
                     el.style.opacity = sheetsOk ? '' : '0.35';
-                    el.title = sheetsOk ? '' : 'Google Sheetsサービスアカウントが未設定のため使用できません';
+                    el.title = sheetsOk ? '' : sheetsDisabledReason;
                 });
 
                 // AAA ボタン表示制御（sheets-status に aaaBeta を含めたため認証不要）

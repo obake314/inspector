@@ -136,9 +136,11 @@
 
 - ページ起動時と設定保存後に `GET /api/sheets-status` を呼び表示
 - Gemini 設定済み: `OK` / 未設定: `--`
+- Service Account Key 設定済み: `OK` / 未設定: `--`
 - Sheets 設定済み: `OK` / 未設定: `--`
 - Gemini 未設定時: MULTI SCAN チェックボックスを `disabled` + 半透明化（ツールチップ表示）
 - Sheets 未設定時: エクスポートボタンを `disabled` + 半透明化（非表示にはしない）
+  - Sheets設定済み判定は `Service Account Key` と `Drive Folder ID` の両方があること
 - 一括検査領域にも `batchReportBtn`（GoogleSheet）を配置し、Sheets設定状態に連動して有効/無効を切り替える
 
 ## 既知の実装差異

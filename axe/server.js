@@ -2920,11 +2920,16 @@ app.get('/api/sheets-status', (req, res) => {
   // インメモリ変数を優先（サーバー再起動後にファイルから読み直すため saved も確認）
   const geminiKey = GEMINI_API_KEY || saved.geminiApiKey || '';
   const folderId = GOOGLE_DRIVE_FOLDER_ID || saved.driveFolderId || '';
+  const serviceAccountConfigured = !!saKey;
+  const driveFolderConfigured = !!(folderId && String(folderId).trim());
+  const configured = serviceAccountConfigured && driveFolderConfigured;
   res.json({
-    configured: !!saKey,
+    configured,
     spreadsheetId: cachedSpreadsheetId || null,
     folderId: folderId || null,
     serviceAccount: saKey ? saKey.client_email : null,
+    serviceAccountConfigured,
+    driveFolderConfigured,
     geminiConfigured: !!geminiKey,
     aaaBeta: saved.aaaBeta || false
   });
