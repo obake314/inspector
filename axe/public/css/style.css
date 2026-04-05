@@ -10,7 +10,11 @@
   --navy-700: #1a2332;
   --navy-800: #111827;
   --navy-900: #0a0f18;
+  --color-basic:#3581B8;
+  --color-deep:#304C89;
+  --color-multi:#0D7A5F;
 }
+
 * {
   margin: 0;
   padding: 0;
@@ -35,9 +39,7 @@ header {
   justify-content: space-between;
 }
 
-.header h1{
-  line-height: 1;
-}
+
 
 .header_container{
   display: flex;
@@ -50,10 +52,12 @@ h1 {
   font-weight: 600;
   letter-spacing: 0.02em;
   margin-bottom: 4px;
+  line-height: 1;
 }
 .subtitle {
   color: var(--navy-500);
   font-size: 16px;
+  line-height: 1;
 }
 .input-section {
   background: white;
@@ -447,8 +451,18 @@ h1 {
   text-transform: uppercase;
   letter-spacing: 0.03em;
   background: var(--navy-200);
-  color: var(--navy-600);
+  color: white;
 }
+.badge-basic{
+  background: var(--color-basic);
+}
+.badge-deep{
+  background: var(--color-deep);
+}
+.badge-multi{
+  background: var(--color-multi); 
+}
+
 .badge.critical {
   background: #7f1d1d;
   color: white;
@@ -1060,7 +1074,7 @@ footer a:hover {
 
 .settings-group label .beta{
   font-size:11px;
-  background:#7c3aed;
+  background:var(--navy-500);
   color:white;
   padding:1px 7px;
   font-weight:600;
