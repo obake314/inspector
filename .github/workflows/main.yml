@@ -24,6 +24,10 @@ jobs:
             git checkout main
             git reset --hard origin/main
 
+            # LAST UPDATE タイムスタンプを日本時間で置換
+            BUILD_TIME=$(TZ='Asia/Tokyo' date '+%Y-%m-%d %H:%M')
+            sed -i "s/__BUILD_TIME__/${BUILD_TIME}/g" axe/public/index.html
+
             cd /var/www/inspector/axe
             npm ci --omit=dev
             pm2 restart inspector-axe --update-env
