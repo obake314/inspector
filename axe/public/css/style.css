@@ -313,7 +313,7 @@ h1 {
   font-size:12px;
   font-weight: normal;
 }
-.scoretable thead td{
+.scoretable tbody td{
   padding:14px 14px;
   text-align:center;
   border-right:1px solid var(--navy-200);
