@@ -1,6 +1,6 @@
 # SPEC_WEB
 
-最終更新: 2026-04-05
+最終更新: 2026-04-06
 
 ## 対象
 
@@ -27,6 +27,7 @@
 - 入力: `{ url, checkItems[] }`
 - 出力: `{ success, model, results: [{ index, status, reason, suggestion, confidence? }] }`
 - status: `pass` / `fail` / `not_applicable` / `manual_required`
+- Gemini未設定/接続失敗時: `success: true` のまま `model: manual-fallback` で全項目 `manual_required` を返す
 
 ## UI構成
 
@@ -90,6 +91,39 @@
 - `POST /api/batch-check`
 - `POST /api/enhanced-check`
 - `POST /api/ai-evaluate`
+
+## UI操作制約
+
+- スキャン実行後は単一/一括モード切替を禁止（`scanExecuted` フラグ）
+- スキャン実行後は対象レベル切替を禁止（同上）
+- スキャン中はボタンを `loading` 状態に変更
+
+## 詳細カード仕様
+
+- カード構成: `[バッジ] [SC番号] [レベル] タイトル ▼ / サマリー / 件数 / 検出箇所`
+- SC番号は数字のみ表示（"SC" プレフィックスなし）
+- カード内 `[No.n]` 要素は表示しない
+- バッジ色: BASIC `#3581B8` / DEEP `#304C89` / MULTI `#0D7A5F` / BATCH `#334155`
+
+## 一括検査サマリーテーブル
+
+- 列: URL / 全項目スコア / 緊急 / 重大 / 中程度 / 軽微 / 合格 / 該当なし / 未検証
+- 各行の値は当該ページの TOTAL スコア（BASIC+DEEP+MULTI 統合後の SC 単位重複除去値）
+- 行クリックで `showBatchDetail(idx)` → スコアテーブルと詳細タブを更新
+- `showBatchDetail` はグローバル状態 `lastEnhancedResults` / `aiResults` を当該ページのものに差し替えてから `renderAllTabs()` を呼ぶ
+
+## SC 3.2.3 / 3.2.4 ナビゲーション一貫性
+
+- 一括検査後の結果は `batchNavConsistency` に格納
+- 詳細ブロック（`renderAllTabs()`）内に他の SC と同様にカードとして表示
+- 別途独立したボックスとしては表示しない
+
+## Gemini / Sheets ステータスインジケーター
+
+- ページ起動時に `GET /api/sheets-status` を呼び表示
+- Gemini 設定済み: `OK` / 未設定: `--`
+- Sheets 設定済み: `OK` / 未設定: `--`
+- 設定保存後に再チェックして即時反映
 
 ## 既知の実装差異
 

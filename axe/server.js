@@ -2383,6 +2383,36 @@ app.post('/api/enhanced-check', async (req, res) => {
  */
 app.post('/api/ai-evaluate', async (req, res) => {
   const { url, checkItems } = req.body;
+  const safeCheckItems = Array.isArray(checkItems) ? checkItems : [];
+  const fallbackSuggestion = 'Gemini API設定後に再実行してください';
+  const makeFallbackResults = (reason) => {
+    return safeCheckItems.map((_, index) => ({
+      index,
+      status: 'manual_required',
+      confidence: 0.3,
+      reason,
+      suggestion: fallbackSuggestion
+    }));
+  };
+  const normalizeStatus = (status) => {
+    if (status === 'pass' || status === 'fail' || status === 'not_applicable' || status === 'manual_required') {
+      return status;
+    }
+    return 'manual_required';
+  };
+
+  if (!url) {
+    return res.status(400).json({ error: 'URLを指定してください' });
+  }
+  if (safeCheckItems.length === 0) {
+    return res.json({ success: true, model: GEMINI_MODEL, results: [] });
+  }
+  if (!GEMINI_API_KEY) {
+    const reason = 'GEMINI_API_KEY が未設定のため自動評価をスキップしました';
+    console.warn('[AI] ' + reason);
+    return res.json({ success: true, model: 'manual-fallback', fallback: true, reason, results: makeFallbackResults(reason) });
+  }
+
   let browser;
 
   try {
@@ -2431,7 +2461,7 @@ app.post('/api/ai-evaluate', async (req, res) => {
     
     await page.close();
 
-    const itemsList = checkItems.map((item, i) => 
+    const itemsList = safeCheckItems.map((item, i) =>
       `${i}. ${item.text} (WCAG ${item.ref}, Level ${item.level}, カテゴリ: ${item.category})`
     ).join('\n');
 
@@ -2480,10 +2510,17 @@ ${itemsList}
   }
 ]
 
-全${checkItems.length}項目を評価してください。`;
+全${safeCheckItems.length}項目を評価してください。`;
 
     console.log('Gemini API 呼び出し中...');
-    const aiResponse = await callGeminiAPI(prompt, screenshot);
+    let aiResponse = '';
+    try {
+      aiResponse = await callGeminiAPI(prompt, screenshot);
+    } catch (apiError) {
+      const reason = `AIサービスに接続できないため手動確認へフォールバックしました: ${apiError.message}`;
+      console.warn('[AI] ' + reason);
+      return res.json({ success: true, model: 'manual-fallback', fallback: true, reason, results: makeFallbackResults(reason) });
+    }
     console.log('AI応答受信, 長さ:', aiResponse.length);
     
     let results = [];
@@ -2526,7 +2563,30 @@ ${itemsList}
       throw new Error('AI応答の解析に失敗しました。再度お試しください。');
     }
 
-    res.json({ success: true, model: GEMINI_MODEL, results });
+    const byIndex = new Map();
+    results.forEach((result) => {
+      const idx = Number(result.index);
+      if (!Number.isInteger(idx) || idx < 0 || idx >= safeCheckItems.length) return;
+      byIndex.set(idx, {
+        index: idx,
+        status: normalizeStatus(result.status),
+        confidence: typeof result.confidence === 'number' ? result.confidence : 0.5,
+        reason: result.reason || 'AIの判断理由が未取得です',
+        suggestion: result.suggestion || ''
+      });
+    });
+
+    const normalizedResults = safeCheckItems.map((_, idx) => {
+      return byIndex.get(idx) || {
+        index: idx,
+        status: 'manual_required',
+        confidence: 0.3,
+        reason: 'AI応答に該当結果が無かったため、手動確認が必要です',
+        suggestion: '再実行するか手動で確認してください'
+      };
+    });
+
+    res.json({ success: true, model: GEMINI_MODEL, results: normalizedResults });
 
   } catch (error) {
     console.error('AI評価エラー発生:', error.message);

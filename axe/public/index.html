@@ -548,14 +548,31 @@
         // Production is served from /axe/, local dev from /.
         const appBasePath = window.location.pathname.startsWith('/axe') ? '/axe' : '';
         const apiUrl = (path) => `${appBasePath}${path}`;
+        async function parseApiJson(response, apiName) {
+            const text = await response.text();
+            if (!text) return {};
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                const preview = text.trim().slice(0, 120).replace(/\s+/g, ' ');
+                if (preview.startsWith('<')) {
+                    throw new Error(`${apiName} がJSONではなくHTMLを返しました。ルーティング設定を確認してください。`);
+                }
+                throw new Error(`${apiName} のJSON解析に失敗しました。`);
+            }
+        }
+        async function fetchApiJson(url, options, apiName) {
+            const response = await fetch(url, options);
+            const data = await parseApiJson(response, apiName);
+            return { response, data };
+        }
 
         // --- ログイン・設定 ---
         let sessionPassword = '';
 
         (async function initAuth() {
             try {
-                const res = await fetch(apiUrl('/api/auth-status'));
-                const data = await res.json();
+                const { data } = await fetchApiJson(apiUrl('/api/auth-status'), undefined, '/api/auth-status');
                 if (!data.passwordRequired) {
                     $('loginOverlay').classList.add('hidden');
                     return;
@@ -571,11 +588,11 @@
         async function doLogin() {
             const pw = $('loginPassword').value;
             try {
-                const res = await fetch(apiUrl('/api/login'), {
+                const { response: res } = await fetchApiJson(apiUrl('/api/login'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ password: pw })
-                });
+                }, '/api/login');
                 if (res.ok) {
                     sessionPassword = pw;
                     $('loginOverlay').classList.add('hidden');
@@ -590,15 +607,16 @@
             }
         }
 
-        function openSettings() {
+        async function openSettings() {
             $('settingsOverlay').classList.remove('hidden');
             $('settingsMsg').textContent = '';
             // 現在値をロード
-            fetch(apiUrl('/api/settings-get'), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password: sessionPassword })
-            }).then(r => r.json()).then(data => {
+            try {
+                const { data } = await fetchApiJson(apiUrl('/api/settings-get'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: sessionPassword })
+                }, '/api/settings-get');
                 $('settGeminiKey').value = data.geminiApiKey || '';
                 $('settServiceAccount').value = data.serviceAccountKey || '';
                 $('settFolderId').value = data.driveFolderId || '';
@@ -609,7 +627,7 @@
                 $('settGeminiKey').placeholder = data.envGemini ? '設定済み（変更する場合のみ入力）' : 'Gemini APIキーを入力してください';
                 $('settServiceAccount').placeholder = data.envServiceAccount ? '設定済み（変更する場合のみ入力）' : 'Service Account JSONを貼り付けてください';
                 $('settFolderId').placeholder = data.envFolder ? '設定済み（変更する場合のみ入力）' : 'Google DriveフォルダIDを入力してください';
-            }).catch(() => {});
+            } catch (e) {}
         }
 
         function closeSettings() {
@@ -622,7 +640,7 @@
             btn.textContent = '保存中...';
             $('settingsMsg').textContent = '';
             try {
-                const res = await fetch(apiUrl('/api/settings-save'), {
+                const { response: res, data } = await fetchApiJson(apiUrl('/api/settings-save'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -634,8 +652,7 @@
                         newPassword: $('settNewPassword').value || undefined,
                         aaaBeta: $('settAAABeta').checked
                     })
-                });
-                const data = await res.json();
+                }, '/api/settings-save');
                 if (!res.ok) throw new Error(data.error);
                 $('settingsMsg').className = 'settings-msg ok';
                 $('settingsMsg').textContent = '保存しました';
@@ -794,13 +811,11 @@
                 const basicPass = $('basicPass')?.value || '';
                 const basicAuth = (basicUser && basicPass) ? { user: basicUser, pass: basicPass } : null;
                 
-                const response = await fetch(apiUrl('/api/check'), {
+                const { response, data } = await fetchApiJson(apiUrl('/api/check'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ url, level: targetLevel, basicAuth })
-                });
-                
-                const data = await response.json();
+                }, '/api/check');
                 
                 if (!response.ok || !data.success) {
                     throw new Error(data.message || data.error || 'チェックに失敗しました');
@@ -893,16 +908,14 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
 
                 status.textContent = `${filteredItems.length}項目を評価中...（1-2分かかります）`;
 
-                const response = await fetch(apiUrl('/api/ai-evaluate'), {
+                const { response, data } = await fetchApiJson(apiUrl('/api/ai-evaluate'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         url: lastResults.url,
                         checkItems: filteredItems
                     })
-                });
-
-                const data = await response.json();
+                }, '/api/ai-evaluate');
 
                 if (!response.ok) {
                     throw new Error(data.message || data.error || 'AI評価に失敗しました');
@@ -1207,16 +1220,15 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                     }
                 }, 300);
 
-                const response = await fetch(apiUrl('/api/batch-check'), {
+                const { response, data } = await fetchApiJson(apiUrl('/api/batch-check'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ urls: raw, level: targetLevel, basicAuth })
-                });
+                }, '/api/batch-check');
 
                 clearInterval(progressTimer);
                 setPhaseProgress(0, 1);
 
-                const data = await response.json();
                 if (!response.ok) throw new Error(data.error || '一括チェックに失敗しました');
 
                 batchResultsData = data.results;
@@ -1244,12 +1256,11 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                         progressSub.textContent = `${i + 1} / ${successUrls.length} URL`;
                         setPhaseProgress(currentPhaseIdx, i / successUrls.length);
                         try {
-                            const er = await fetch(apiUrl('/api/enhanced-check'), {
+                            const { response: er, data: ed } = await fetchApiJson(apiUrl('/api/enhanced-check'), {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ url: successUrls[i], includeAAA: sessionAAABeta, basicAuth })
-                            });
-                            const ed = await er.json();
+                            }, '/api/enhanced-check');
                             if (er.ok) batchEnhancedResults[successUrls[i]] = ed.results;
                         } catch (e) {}
                         setPhaseProgress(currentPhaseIdx, (i + 1) / successUrls.length);
@@ -1269,12 +1280,11 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                         progressSub.textContent = `${i + 1} / ${successUrls.length} URL`;
                         setPhaseProgress(currentPhaseIdx, i / successUrls.length);
                         try {
-                            const ar = await fetch(apiUrl('/api/ai-evaluate'), {
+                            const { response: ar, data: ad } = await fetchApiJson(apiUrl('/api/ai-evaluate'), {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ url: successUrls[i], checkItems: filteredItems })
-                            });
-                            const ad = await ar.json();
+                            }, '/api/ai-evaluate');
                             if (ar.ok) {
                                 const processed = {};
                                 ad.results.forEach(result => {
@@ -1369,8 +1379,7 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
         let sheetsFolderMode = false;
         async function checkSheetsStatusFn() {
             try {
-                const res = await fetch(apiUrl('/api/sheets-status'));
-                const data = await res.json();
+                const { data } = await fetchApiJson(apiUrl('/api/sheets-status'), undefined, '/api/sheets-status');
                 sheetsConfigured = data.configured;
                 sheetsFolderMode = !!data.folderId;
                 if (sheetsConfigured) {
@@ -2033,14 +2042,13 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 const stats = computeStats(rows);
                 const timestamp = lastResults.timestamp || new Date().toISOString();
 
-                const res = await fetch(apiUrl('/api/export-report'), {
+                const { response: res, data } = await fetchApiJson(apiUrl('/api/export-report'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         pages: [{ url, rows, timestamp, stats }]
                     })
-                });
-                const data = await res.json();
+                }, '/api/export-report');
                 if (!res.ok) throw new Error(data.error || '保存失敗');
                 window.open(data.url, '_blank');
             } catch (e) {
@@ -2069,12 +2077,11 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 });
                 if (pages.length === 0) { alert('成功した検査結果がありません'); return; }
 
-                const res = await fetch(apiUrl('/api/export-report'), {
+                const { response: res, data } = await fetchApiJson(apiUrl('/api/export-report'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ pages })
-                });
-                const data = await res.json();
+                }, '/api/export-report');
                 if (!res.ok) throw new Error(data.error || '保存失敗');
                 window.open(data.url, '_blank');
             } catch (e) {
@@ -2102,8 +2109,7 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
 
             // 設定から最新の aaaBeta を取得
             try {
-                const sRes = await fetch(apiUrl('/api/settings-get'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: sessionPassword }) });
-                const sData = await sRes.json();
+                const { data: sData } = await fetchApiJson(apiUrl('/api/settings-get'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: sessionPassword }) }, '/api/settings-get');
                 sessionAAABeta = !!sData.aaaBeta;
             } catch (e) {}
 
@@ -2123,12 +2129,11 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 const body = { url, includeAAA: sessionAAABeta };
                 if (basicUser && basicPass) body.basicAuth = { user: basicUser, pass: basicPass };
 
-                const res = await fetch(apiUrl('/api/enhanced-check'), {
+                const { response: res, data } = await fetchApiJson(apiUrl('/api/enhanced-check'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body)
-                });
-                const data = await res.json();
+                }, '/api/enhanced-check');
                 if (!res.ok) throw new Error(data.error || '検査失敗');
 
                 const aaa = data.includeAAA ? ' (AAA β含む)' : ' (A/AA)';
