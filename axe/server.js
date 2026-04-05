@@ -135,6 +135,77 @@ async function getOrCreateSpreadsheet(token, saEmail) {
   );
 }
 
+const STATUS_NONE = 'NONE';
+const STATUS_NG = 'NG';
+const STATUS_OK = 'OK';
+
+async function getSheetsConnectivityStatus() {
+  const saved = loadSettings();
+  const saKey = loadServiceAccountKey();
+  const folderId = (GOOGLE_DRIVE_FOLDER_ID || saved.driveFolderId || '').trim();
+
+  let serviceAccountStatus = saKey ? STATUS_NG : STATUS_NONE;
+  let driveFolderStatus = folderId ? STATUS_NG : STATUS_NONE;
+  let sheetsStatus = STATUS_NONE;
+
+  let serviceAccountError = null;
+  let driveFolderError = null;
+  let spreadsheetId = null;
+  let token = null;
+
+  if (saKey) {
+    try {
+      token = await getGoogleAccessToken(saKey);
+      serviceAccountStatus = STATUS_OK;
+    } catch (e) {
+      serviceAccountStatus = STATUS_NG;
+      serviceAccountError = e.message;
+    }
+  }
+
+  if (folderId) {
+    if (token) {
+      try {
+        spreadsheetId = await getOrCreateSpreadsheet(token, saKey.client_email);
+        driveFolderStatus = STATUS_OK;
+      } catch (e) {
+        driveFolderStatus = STATUS_NG;
+        driveFolderError = e.message;
+      }
+    } else {
+      driveFolderStatus = STATUS_NG;
+      driveFolderError = 'Service Account の疎通確認に失敗したため Drive Folder を確認できません';
+    }
+  }
+
+  if (serviceAccountStatus === STATUS_NONE && driveFolderStatus === STATUS_NONE) {
+    sheetsStatus = STATUS_NONE;
+  } else if (serviceAccountStatus === STATUS_OK && driveFolderStatus === STATUS_OK) {
+    sheetsStatus = STATUS_OK;
+  } else {
+    sheetsStatus = STATUS_NG;
+  }
+
+  let sheetsStatusDetail = '';
+  if (sheetsStatus === STATUS_NONE) {
+    sheetsStatusDetail = 'Google Service Account Key / Google Drive Folder ID を入力してください';
+  } else if (sheetsStatus === STATUS_NG) {
+    sheetsStatusDetail = driveFolderError || serviceAccountError || 'Google Sheets疎通確認に失敗しました';
+  }
+
+  return {
+    sheetsStatus,
+    serviceAccountStatus,
+    driveFolderStatus,
+    serviceAccountError,
+    driveFolderError,
+    sheetsStatusDetail,
+    serviceAccount: saKey ? saKey.client_email : null,
+    folderId: folderId || null,
+    spreadsheetId: spreadsheetId || cachedSpreadsheetId || null
+  };
+}
+
 /**
  * 共通のブラウザ起動設定
  */
@@ -263,13 +334,19 @@ app.post('/api/settings-save', (req, res) => {
     genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
   }
 
-  // Service Account Key（プレースホルダでなければ更新）
-  if (serviceAccountKey && serviceAccountKey !== '(設定済み)') {
-    try {
-      JSON.parse(serviceAccountKey); // バリデーション
-      saved.serviceAccountKey = serviceAccountKey;
-    } catch (e) {
-      return res.status(400).json({ error: 'Service Account KeyのJSON形式が不正です' });
+  // Service Account Key
+  if (typeof serviceAccountKey === 'string') {
+    if (!serviceAccountKey.trim()) {
+      delete saved.serviceAccountKey; // 空欄保存でクリア
+      cachedSpreadsheetId = null;
+    } else if (serviceAccountKey !== '(設定済み)') {
+      try {
+        JSON.parse(serviceAccountKey); // バリデーション
+        saved.serviceAccountKey = serviceAccountKey;
+        cachedSpreadsheetId = null;
+      } catch (e) {
+        return res.status(400).json({ error: 'Service Account KeyのJSON形式が不正です' });
+      }
     }
   }
 
@@ -277,6 +354,7 @@ app.post('/api/settings-save', (req, res) => {
   if (typeof driveFolderId === 'string') {
     saved.driveFolderId = driveFolderId;
     GOOGLE_DRIVE_FOLDER_ID = driveFolderId;
+    cachedSpreadsheetId = null;
   }
 
   // Report Folder ID
@@ -2914,25 +2992,31 @@ app.post('/api/export-report', async (req, res) => {
 /**
  * Google Sheets設定確認 API
  */
-app.get('/api/sheets-status', (req, res) => {
-  const saKey = loadServiceAccountKey();
+app.get('/api/sheets-status', async (req, res) => {
   const saved = loadSettings();
-  // インメモリ変数を優先（サーバー再起動後にファイルから読み直すため saved も確認）
   const geminiKey = GEMINI_API_KEY || saved.geminiApiKey || '';
-  const folderId = GOOGLE_DRIVE_FOLDER_ID || saved.driveFolderId || '';
-  const serviceAccountConfigured = !!saKey;
-  const driveFolderConfigured = !!(folderId && String(folderId).trim());
-  const configured = serviceAccountConfigured && driveFolderConfigured;
-  res.json({
-    configured,
-    spreadsheetId: cachedSpreadsheetId || null,
-    folderId: folderId || null,
-    serviceAccount: saKey ? saKey.client_email : null,
-    serviceAccountConfigured,
-    driveFolderConfigured,
-    geminiConfigured: !!geminiKey,
-    aaaBeta: saved.aaaBeta || false
-  });
+  try {
+    const status = await getSheetsConnectivityStatus();
+    res.json({
+      configured: status.sheetsStatus === STATUS_OK,
+      sheetsStatus: status.sheetsStatus,
+      sheetsStatusDetail: status.sheetsStatusDetail,
+      spreadsheetId: status.spreadsheetId,
+      folderId: status.folderId,
+      serviceAccount: status.serviceAccount,
+      serviceAccountConfigured: status.serviceAccountStatus !== STATUS_NONE,
+      driveFolderConfigured: status.driveFolderStatus !== STATUS_NONE,
+      serviceAccountStatus: status.serviceAccountStatus,
+      driveFolderStatus: status.driveFolderStatus,
+      serviceAccountError: status.serviceAccountError,
+      driveFolderError: status.driveFolderError,
+      geminiConfigured: !!geminiKey,
+      aaaBeta: saved.aaaBeta || false
+    });
+  } catch (e) {
+    console.error('[sheets-status] Error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 /**

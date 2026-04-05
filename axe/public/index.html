@@ -69,9 +69,10 @@
                     <p class="subtitle">アクセシビリティ監査ツール</p>
                 </div>
                 <div class="config-status" id="configStatus">
-                    <span class="config-status-item" id="statusGemini">Gemini <span class="st" id="stGemini">-</span></span>
-                    <span class="config-status-item" id="statusServiceAccount">ServiceKey <span class="st" id="stServiceAccount">-</span></span>
-                    <span class="config-status-item" id="statusSheets">Sheets <span class="st" id="stSheets">-</span></span>
+                    <span class="config-status-item" id="statusGemini">Gemini <span class="st" id="stGemini">NONE</span></span>
+                    <span class="config-status-item" id="statusServiceAccount">ServiceKey <span class="st" id="stServiceAccount">NONE</span></span>
+                    <span class="config-status-item" id="statusDriveFolder">DriveFolder <span class="st" id="stDriveFolder">NONE</span></span>
+                    <span class="config-status-item" id="statusSheets">Sheets <span class="st" id="stSheets">NONE</span></span>
                 </div>
             <button type="button" class="settings-gear" id="settingsGear" onclick="openSettings()" title="設定">&#9881;</button>
         </header>
@@ -792,45 +793,20 @@
 
         function exportCSV() {
             if (!lastResults) return;
-            const lv = { A: 0, AA: 0, AAA: 0 };
-            lastResults.violations.forEach(v => lv[v.wcagLevel || 'A']++);
-            const report = `# WCAG 2.2 アクセシビリティレポート
+            const rows = buildReportRows(lastResults, lastResults.url, aiResults, lastEnhancedResults, batchNavConsistency);
+            const header = ['No', '検査種別', 'SC', '検査項目', '適合レベル', '結果', '場所', '検出数', '重要度', '詳細', '改善案'];
+            const table = [header, ...rows];
 
-## 概要
-- URL: ${lastResults.url}
-- 日時: ${new Date(lastResults.timestamp).toLocaleString('ja-JP')}
-- レベル: ${lastResults.level}
-
-## 違反件数
-| レベル | 件数 |
-|-------|------|
-| A | ${lv.A} |
-| AA | ${lv.AA} |
-| AAA | ${lv.AAA} |
-| 合計 | ${lastResults.violations.length} |
-
-合格: ${lastResults.passes.length}件
-要確認: ${lastResults.incomplete?.length || 0}件
-
-## 違反の詳細
-${lastResults.violations.map(v => `### ${v.id} [${v.wcagLevel || 'A'}] - ${impactLabels[v.impact] || v.impact}
-${sanitizeHtmlTags(v.description)}
-該当箇所: ${v.nodes.length}件
-${v.nodes.slice(0, 5).map(n => `- ${sanitizeHtmlTags(Array.isArray(n.target) ? n.target.join(' > ') : n.target)}`).join('\n')}
-${v.helpUrl ? `参考: ${v.helpUrl}` : ''}
-`).join('\n')}
-
-## 手動チェック項目
-### Level A
-${manualCheckItems.filter(i => i.level === 'A').map(i => `- [ ] ${i.text} (${i.ref})`).join('\n')}
-### Level AA
-${manualCheckItems.filter(i => i.level === 'AA').map(i => `- [ ] ${i.text} (${i.ref})`).join('\n')}
-### Level AAA
-${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i.ref})`).join('\n')}
-`;
-            const a = document.createElement('a'); 
-            a.href = URL.createObjectURL(new Blob([report], { type: 'text/markdown' })); 
-            a.download = `wcag-report-${new Date().toISOString().split('T')[0]}.md`; 
+            const escapeCsv = (value) => {
+                const s = String(value ?? '');
+                if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+                return s;
+            };
+            const csv = table.map(row => row.map(escapeCsv).join(',')).join('\r\n');
+            const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `wcag-report-${new Date().toISOString().split('T')[0]}.csv`;
             a.click();
         }
 
@@ -1374,30 +1350,31 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 const { data } = await fetchApiJson(apiUrl('/api/sheets-status'), undefined, '/api/sheets-status');
                 sheetsConfigured = data.configured;
                 sheetsFolderMode = !!data.folderId;
-                // ヘッダーステータス更新
-                const setStatus = (id, stId, configured) => {
+                // ヘッダーステータス更新（NONE / NG / OK）
+                const setStatus = (id, stId, statusCode) => {
                     const el = $('status' + id);
                     const st = $(stId);
                     if (!el || !st) return;
                     el.classList.remove('ok', 'ng');
-                    if (configured) {
+                    const code = (statusCode || 'NONE').toUpperCase();
+                    st.textContent = code;
+                    if (code === 'OK') {
                         el.classList.add('ok');
-                        st.textContent = 'OK';
-                    } else {
+                    } else if (code === 'NG') {
                         el.classList.add('ng');
-                        st.textContent = '--';
                     }
                 };
-                setStatus('Gemini', 'stGemini', data.geminiConfigured);
-                setStatus('ServiceAccount', 'stServiceAccount', data.serviceAccountConfigured);
-
-                const serviceAccountOk = !!data.serviceAccountConfigured;
-                const folderOk = !!data.driveFolderConfigured;
-                const sheetsOk = serviceAccountOk && folderOk;
-                setStatus('Sheets', 'stSheets', sheetsOk);
+                const geminiStatus = data.geminiConfigured ? 'OK' : 'NONE';
+                const serviceAccountStatus = data.serviceAccountStatus || (data.serviceAccountConfigured ? 'NG' : 'NONE');
+                const driveFolderStatus = data.driveFolderStatus || (data.driveFolderConfigured ? 'NG' : 'NONE');
+                const sheetsStatus = data.sheetsStatus || (data.configured ? 'OK' : 'NG');
+                setStatus('Gemini', 'stGemini', geminiStatus);
+                setStatus('ServiceAccount', 'stServiceAccount', serviceAccountStatus);
+                setStatus('DriveFolder', 'stDriveFolder', driveFolderStatus);
+                setStatus('Sheets', 'stSheets', sheetsStatus);
 
                 // Gemini未設定時はMULTI SCANチェックボックスを無効化
-                const geminiOk = !!data.geminiConfigured;
+                const geminiOk = geminiStatus === 'OK';
                 ['multiScanOpt','batchAIOpt'].forEach(id => {
                     const el = $(id);
                     if (!el) return;
@@ -1412,14 +1389,8 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 });
 
                 // Sheets未設定時はエクスポートボタンを無効化（表示は常にする）
-                let sheetsDisabledReason = '';
-                if (!serviceAccountOk && !folderOk) {
-                    sheetsDisabledReason = 'Google Service Account Key と Google Drive Folder ID の両方が未設定のため使用できません';
-                } else if (!serviceAccountOk) {
-                    sheetsDisabledReason = 'Google Service Account Key が未設定のため使用できません';
-                } else if (!folderOk) {
-                    sheetsDisabledReason = 'Google Drive Folder ID が未設定のため使用できません';
-                }
+                const sheetsOk = sheetsStatus === 'OK';
+                const sheetsDisabledReason = data.sheetsStatusDetail || 'Google Sheets疎通確認に失敗したため使用できません';
                 ['reportBtn','batchReportBtn'].forEach(id => {
                     const el = $(id);
                     if (!el) return;
