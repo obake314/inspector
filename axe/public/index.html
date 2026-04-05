@@ -201,6 +201,7 @@
         <div class="results" id="batchResults">
             <div class="batch-results-header">
                 <h2>一括検査結果</h2>
+                <button class="export-btn" id="batchReportBtn" onclick="exportBatchReport()">GoogleSheet</button>
             </div>
             <div id="batchSummaryArea"></div>
             <div class="batch-results-nav" id="batchResultsNav"></div>
@@ -244,9 +245,10 @@
             <div class="tab-content" id="tab-unverified"><div class="section"><div class="violation-list" id="list-unverified"></div></div></div>
             <!-- エクスポートエリア -->
             <div id="exportArea">
-                Export to 
+                Export to
                 <button class="export-btn" id="csvBtn" onclick="exportCSV()">CSV</button>
                 <button class="export-btn" id="reportBtn" onclick="exportToSheets()">GoogleSheet</button>
+                <button class="export-btn clear-btn" id="clearBtn" onclick="clearScan()">クリア</button>
             </div>
         </div>
         <footer>
@@ -955,6 +957,50 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
             });
         }
 
+        // スキャン結果をすべてリセットして再検査可能な状態に戻す
+        function clearScan() {
+            // --- 状態リセット ---
+            lastResults = null;
+            lastEnhancedResults = null;
+            aiResults = {};
+            manualDecisions.clear();
+            batchResultsData = [];
+            batchNavConsistency = null;
+            batchEnhancedResults = {};
+            batchAIResults = {};
+            scanExecuted = false;
+
+            // --- UI非表示 ---
+            $('results').classList.remove('visible');
+            $('exportArea').classList.remove('visible');
+            $('batchResults').style.display = 'none';
+            $('errorMessage').classList.remove('visible');
+            const bar = $('navConsistencyBar');
+            if (bar) bar.remove();
+            $('scanScoreTable').style.display = 'none';
+
+            // --- タブ・リストクリア ---
+            ['critical','serious','moderate','minor','pass','na','unverified'].forEach(k => {
+                const el = $('list-' + k);
+                if (el) el.innerHTML = '';
+                const badge = $('badge-' + k);
+                if (badge) badge.textContent = '0';
+            });
+
+            // --- UIロック解除 ---
+            const unlock = el => { if (el) { el.style.pointerEvents = ''; el.style.opacity = ''; } };
+            unlock($('modeToggle'));
+            document.querySelectorAll('.level-select-btn').forEach(unlock);
+            unlock($('optionsSection'));
+            ['deepScanLabel','multiScanLabel','batchDeepLabel','batchAILabel'].forEach(id => unlock($(id)));
+            // チェックボックスはGemini設定状態に応じて再判定
+            ['deepScanOpt','batchEnhancedOpt'].forEach(id => {
+                const el = $(id);
+                if (el) { el.disabled = false; el.checked = true; }
+            });
+            checkSheetsStatusFn(); // Gemini/Sheets状態を再チェックしてMULTI等を適切に有効化
+        }
+
         // 初期表示を明示（初回ロード時に single / batch の表示崩れを防ぐ）
         setMode(currentMode);
 
@@ -1327,16 +1373,19 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 const { data } = await fetchApiJson(apiUrl('/api/sheets-status'), undefined, '/api/sheets-status');
                 sheetsConfigured = data.configured;
                 sheetsFolderMode = !!data.folderId;
-                if (sheetsConfigured) {
-                    $('reportBtn').style.display = '';
-                    $('batchReportBtn').style.display = '';
-                }
                 // ヘッダーステータス更新
                 const setStatus = (id, stId, configured) => {
                     const el = $('status' + id);
+                    const st = $(stId);
+                    if (!el || !st) return;
                     el.classList.remove('ok', 'ng');
-                    if (configured) { el.classList.add('ok'); $(stId).textContent = 'OK'; }
-                    else { $(stId).textContent = '--'; }
+                    if (configured) {
+                        el.classList.add('ok');
+                        st.textContent = 'OK';
+                    } else {
+                        el.classList.add('ng');
+                        st.textContent = '--';
+                    }
                 };
                 setStatus('Gemini', 'stGemini', data.geminiConfigured);
                 setStatus('Sheets', 'stSheets', data.configured);
@@ -1375,7 +1424,9 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                     targetLevel = 'AA';
                     document.querySelectorAll('.level-select-btn').forEach(b => b.classList.toggle('active', b.dataset.level === 'AA'));
                 }
-            } catch (e) { /* ignore */ }
+            } catch (e) {
+                console.error('checkSheetsStatusFn error:', e);
+            }
         }
         checkSheetsStatusFn();
 

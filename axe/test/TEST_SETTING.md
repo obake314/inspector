@@ -55,3 +55,14 @@
 - 期待結果
   - API呼び出しが `apiUrl('/api/...')` を使用
   - `fetch('/api/...')` 直書きがない
+
+## T-SET-08: Gemini/Sheetsインジケーター反映
+
+- 手順
+  1. 設定画面で Gemini API Key / Service Account / Folder ID を保存
+  2. ヘッダーの `Gemini` / `Sheets` 表示を確認
+  3. `MULTI SCAN` と `GoogleSheet` ボタン（単一/一括）状態を確認
+- 期待結果
+  - 設定済みなら `Gemini: OK` / `Sheets: OK`
+  - `MULTI SCAN` チェックボックスが有効化される
+  - `reportBtn` と `batchReportBtn` が有効化される

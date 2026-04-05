@@ -727,6 +727,15 @@ h1 {
 .export-btn:hover {
   border-color: var(--navy-500);
 }
+.export-btn.clear-btn {
+  margin-left: auto;
+  color: var(--navy-400);
+  border-color: var(--navy-200);
+}
+.export-btn.clear-btn:hover {
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
 .wcag-list-item {
   padding: 10px 20px;
   border-bottom: 1px solid var(--navy-200);
@@ -861,6 +870,16 @@ h1 {
   flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 16px;
+}
+.batch-results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.batch-results-header h2 {
+  margin: 0;
 }
 .batch-page-btn {
   background: white;

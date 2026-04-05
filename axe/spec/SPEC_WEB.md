@@ -39,6 +39,10 @@
 - 結果表示:
   - スコアテーブル（BASIC/DEEP/MULTI/TOTAL）
   - 詳細タブ（critical/serious/moderate/minor/pass/na/unverified）
+- クリアボタン（エクスポートエリア右端）:
+  - スキャン結果・状態を全リセットして再検査可能状態に戻す
+  - UIロックを解除（モード切替・レベル・オプション等）
+  - Gemini/Sheets 設定状態を再チェックして適切に有効化
 
 ## スキャン実行フロー（単一）
 
@@ -135,9 +139,9 @@
 - Sheets 設定済み: `OK` / 未設定: `--`
 - Gemini 未設定時: MULTI SCAN チェックボックスを `disabled` + 半透明化（ツールチップ表示）
 - Sheets 未設定時: エクスポートボタンを `disabled` + 半透明化（非表示にはしない）
+- 一括検査領域にも `batchReportBtn`（GoogleSheet）を配置し、Sheets設定状態に連動して有効/無効を切り替える
 
 ## 既知の実装差異
 
 1. 除外ルールUI（`data-rule`）は表示のみで未連携
-2. `batchReportBtn` はJS参照のみでDOM未定義
-3. Basic認証はBASIC/DEEPには適用、MULTIには未適用
+2. Basic認証はBASIC/DEEPには適用、MULTIには未適用
