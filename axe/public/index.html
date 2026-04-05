@@ -96,20 +96,6 @@
                     <form id="urlForm">
                         <input type="url" class="url-input" id="urlInput" placeholder="https://example.com" required >
                     </form>
-                    <div class="scan-controls">
-                        <button type="button" class="check-btn" id="runScanBtn">
-                            <span class="btn-text">SCAN</span>
-                            <div class="spinner"></div>
-                        </button>
-                        <label class="scan-option">
-                            <input type="checkbox" id="deepScanOpt" class="scan-option-checkbox" checked>
-                            <span style="color:#304C89;font-size:15px;">DEEP SCAN</span>
-                        </label>
-                        <label class="scan-option">
-                            <input type="checkbox" id="multiScanOpt" class="scan-option-checkbox" checked>
-                            <span style="color:#0D7A5F;font-size:15px;">MULTI SCAN</span>
-                        </label>
-                    </div>
                     <!-- 既存ボタンは非表示のまま内部利用 -->
                     <div style="display:none;">
                         <button type="button" id="checkBtn"><span class="btn-text"></span><div class="spinner"></div></button>
@@ -124,21 +110,6 @@
                 <span class="section-headline">チェックURL</span>
                 <div class="section-right">
                     <textarea class="batch-textarea" id="batchUrls" placeholder="URLを1行ずつ入力（最大10件）&#10;https://example.com&#10;https://example.com/about&#10;https://example.com/contact"></textarea>
-                    <div class="batch-controls">
-                        <button type="button" class="check-btn" id="batchCheckBtn">
-                            <span class="btn-text">BATCH SCAN</span>
-                            <div class="spinner"></div>
-                        </button>
-                        <label class="scan-option">
-                            <input type="checkbox" id="batchEnhancedOpt" class="scan-option-checkbox" checked>
-                            <span style="color:#304C89;font-size:15px;">DEEP SCAN</span>
-                        </label>
-                        <label class="scan-option">
-                            <input type="checkbox" id="batchAIOpt" class="scan-option-checkbox" checked>
-                            <span style="color:#0D7A5F;font-size:15px;">MULTI SCAN</span>
-                        </label>
-                        <span class="batch-count" id="batchCount">0 / 10 URL</span>
-                    </div>
                     <div class="batch-progress" id="batchProgress">
                         <div class="batch-progress-header">
                             <div class="batch-progress-label" id="batchProgressLabel">検査中...</div>
@@ -147,9 +118,9 @@
                         <div class="batch-progress-track"><div class="batch-progress-fill" id="batchProgressFill"></div></div>
                         <div id="batchPhaseIndicator"></div>
                     </div>
-                </div>    
+                </div>
             </div>
-            <div class="section-column">
+            <div class="section-column" id="optionsSection">
                 <span class="section-headline">オプション設定</span>
                 <div class="section-right">
                         <details class="basic-auth-section">
@@ -187,6 +158,41 @@
                     </details>
                 </div>
             </div>
+            <!-- SCANアクションエリア（オプション設定の下） -->
+            <div class="section-column" id="scanActionSection">
+                <span class="section-headline"></span>
+                <div class="section-right">
+                    <div id="singleScanControls" class="scan-controls">
+                        <button type="button" class="check-btn" id="runScanBtn">
+                            <span class="btn-text">SCAN</span>
+                            <div class="spinner"></div>
+                        </button>
+                        <label class="scan-option" id="deepScanLabel">
+                            <input type="checkbox" id="deepScanOpt" class="scan-option-checkbox" checked>
+                            <span style="color:#304C89;font-size:15px;">DEEP SCAN</span>
+                        </label>
+                        <label class="scan-option" id="multiScanLabel">
+                            <input type="checkbox" id="multiScanOpt" class="scan-option-checkbox" checked>
+                            <span style="color:#0D7A5F;font-size:15px;">MULTI SCAN</span>
+                        </label>
+                    </div>
+                    <div id="batchScanControls" class="scan-controls" style="display:none;">
+                        <button type="button" class="check-btn" id="batchCheckBtn">
+                            <span class="btn-text">BATCH SCAN</span>
+                            <div class="spinner"></div>
+                        </button>
+                        <label class="scan-option" id="batchDeepLabel">
+                            <input type="checkbox" id="batchEnhancedOpt" class="scan-option-checkbox" checked>
+                            <span style="color:#304C89;font-size:15px;">DEEP SCAN</span>
+                        </label>
+                        <label class="scan-option" id="batchAILabel">
+                            <input type="checkbox" id="batchAIOpt" class="scan-option-checkbox" checked>
+                            <span style="color:#0D7A5F;font-size:15px;">MULTI SCAN</span>
+                        </label>
+                        <span class="batch-count" id="batchCount">0 / 10 URL</span>
+                    </div>
+                </div>
+            </div>
         </div>
         <div class="error-message" id="errorMessage">
             <h4>エラー</h4>
@@ -219,21 +225,6 @@
                     </thead>
                     <tbody id="scanScoreBody"></tbody>
                 </table>
-            </div>
-            <!-- 非表示: 旧サマリー（内部参照用） -->
-            <div class="hidden-compat">
-                <span id="criticalCount">0</span><span id="seriousCount">0</span>
-                <span id="moderateCount">0</span><span id="minorCount">0</span>
-                <span id="passCount">0</span><span id="totalCount">0</span>
-                <span id="achievementRate">0</span><span id="achievementDesc"></span>
-                <span id="achievementBanner"></span>
-            </div>
-            <!-- 非表示: 内部利用compat要素 -->
-            <div class="hidden-compat">
-                <span id="violationsBadge"></span><span id="passBadge"></span><span id="incompleteBadge"></span>
-                <div id="manualSection"></div>
-                <div id="enhancedResults"></div>
-                <span id="progressPercent"></span><div id="progressFill"></div>
             </div>
             <div class="tabs" id="resultTabs">
                 <button class="tab active" data-tab="critical">緊急 <span class="tab-num" id="badge-critical">0</span></button>
@@ -534,7 +525,7 @@
             { text: "カスタムウィジェットのroleが意味的に正確（例: role='button'が実際にボタン動作をする）", ref: "4.1.2", level: "A", category: "ARIA" }
         ];
 
-        let lastResults = null, checkedItems = new Set();
+        let lastResults = null;
         const manualDecisions = new Map(); // key → 'ok'|'ng'|'hold'
         window.setDecision = (key, val, btnEl) => {
             manualDecisions.set(key, val);
@@ -703,23 +694,6 @@
             $(`tab-${t.dataset.tab}`).classList.add('active');
         }));
         
-        function updateProgress() { 
-            const levelOrder = { 'A': 1, 'AA': 2, 'AAA': 3 };
-            const targetLevelNum = levelOrder[targetLevel];
-            const filteredItems = manualCheckItems.filter(item => levelOrder[item.level] <= targetLevelNum);
-            const relevantChecked = [...checkedItems].filter(i => {
-                const item = manualCheckItems[i];
-                return item && levelOrder[item.level] <= targetLevelNum;
-            });
-            const p = filteredItems.length > 0 ? Math.round((relevantChecked.length / filteredItems.length) * 100) : 0;
-            $('progressPercent').textContent = `${p}%`; 
-            $('progressFill').style.width = `${p}%`; 
-        }
-
-        window.toggleCheck = (i, el) => { 
-            checkedItems.has(i) ? (checkedItems.delete(i), el.classList.remove('checked')) : (checkedItems.add(i), el.classList.add('checked')); 
-            updateProgress(); 
-        };
 
         function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
 
@@ -755,28 +729,9 @@
             // axe-coreの生の結果を保存
             lastResults = { ...results, url, timestamp: new Date().toISOString(), level: targetLevel };
 
-            const imp = { critical: 0, serious: 0, moderate: 0, minor: 0 };
-            results.violations.forEach(v => { imp[v.impact] = (imp[v.impact] || 0) + v.nodes.length; });
-            $('criticalCount').textContent = imp.critical;
-            $('seriousCount').textContent = imp.serious;
-            $('moderateCount').textContent = imp.moderate;
-            $('minorCount').textContent = imp.minor;
-            $('passCount').textContent = results.passes.length;
-            $('totalCount').textContent = results.violations.length + results.passes.length + (results.incomplete?.length || 0);
-
-
             renderAllTabs();
             $('results').classList.add('visible');
             $('exportArea').classList.add('visible');
-
-            // 達成率バナー
-            const total = results.violations.length + results.passes.length;
-            if (total > 0) {
-                const rate = Math.round((results.passes.length / total) * 100);
-                $('achievementRate').textContent = rate + '%';
-                $('achievementDesc').textContent = `合格 ${results.passes.length} / ${total} 項目（自動検査）`;
-                $('achievementBanner').style.display = '';
-            }
         }
         
         // WCAGタグからレベルを取得
@@ -933,7 +888,6 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                         
                         // 合格・該当なしは自動でチェックを入れる
                         if (result.status === 'pass' || result.status === 'not_applicable') {
-                            checkedItems.add(originalIndex);
                             if (result.status === 'pass') passCount++;
                             else naCount++;
                         } else if (result.status === 'fail') {
@@ -944,10 +898,6 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                     }
                 });
 
-                // UIを更新
-                renderManualChecklist();
-                updateProgress();
-                
                 status.innerHTML = `評価完了 <span style="background: rgba(255,255,255,0.2); padding: 2px 8px; margin-left: 8px;">合格: ${passCount} / 不合格: ${failCount} / 要手動: ${manualCount} / 該当なし: ${naCount}</span>`;
                 
             } catch (error) {
@@ -961,64 +911,6 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
         }
 
         // 手動チェックリストをレンダリング（AI結果を反映）
-        function renderManualChecklist() {
-            const levelOrder = { 'A': 1, 'AA': 2, 'AAA': 3 };
-            const targetLevelNum = levelOrder[targetLevel];
-            const filteredItems = manualCheckItems
-                .map((item, index) => ({ ...item, index }))
-                .filter(item => levelOrder[item.level] <= targetLevelNum);
-            
-            const categories = [...new Set(filteredItems.map(i => i.category))];
-            $('manualSection').innerHTML = categories.map(cat => {
-                const items = filteredItems.filter(i => i.category === cat);
-                return `<div class="manual-category">
-                    <div class="manual-category-header">${cat}<span class="manual-category-count">${items.length}項目</span></div>
-                    <div class="manual-items">${items.map(item => {
-                        const ai = aiResults[item.index];
-                        const aiStatusClass = ai ? `ai-${ai.status}` : '';
-                        
-                        // ステータスに応じたアイコンと色
-                        let aiIcon = '', bgColor = '', textColor = '', statusLabel = '';
-                        if (ai) {
-                            switch (ai.status) {
-                                case 'pass':
-                                    aiIcon = ''; bgColor = '#ecfdf5'; textColor = '#059669'; statusLabel = '合格';
-                                    break;
-                                case 'fail':
-                                    aiIcon = ''; bgColor = '#fef2f2'; textColor = '#dc2626'; statusLabel = '不合格';
-                                    break;
-                                case 'manual_required':
-                                    aiIcon = ''; bgColor = '#fef3c7'; textColor = '#d97706'; statusLabel = '要手動確認';
-                                    break;
-                                case 'not_applicable':
-                                    aiIcon = ''; bgColor = '#f3f4f6'; textColor = '#6b7280'; statusLabel = '該当なし';
-                                    break;
-                                default:
-                                    aiIcon = ''; bgColor = '#fffbeb'; textColor = '#d97706'; statusLabel = '不明';
-                            }
-                        }
-                        
-                        return `<div class="manual-item ${aiStatusClass}">
-                            <div class="manual-checkbox ${checkedItems.has(item.index) ? 'checked' : ''}" data-index="${item.index}" onclick="toggleCheck(${item.index}, this)"></div>
-                            <div class="manual-content">
-                                <div class="manual-text">${item.text}</div>
-                                ${ai ? `<div class="ai-reason" style="font-size: 16px; color: ${textColor}; margin-top: 4px; padding: 6px 8px; background: ${bgColor};">
-                                    <strong>AI判定: ${statusLabel}</strong> - ${escapeHtml(ai.reason || '')}
-                                    ${ai.suggestion ? `<br><strong>改善案:</strong> ${escapeHtml(ai.suggestion)}` : ''}
-                                    <span style="opacity: 0.6; margin-left: 8px;">(確信度: ${Math.round((ai.confidence || 0) * 100)}%)</span>
-                                </div>` : ''}
-                                <div class="manual-info">
-                                    <span class="wcag-ref">${item.ref}</span>
-                                    <span class="badge">${item.level}</span>
-                                    <a href="https://www.w3.org/WAI/WCAG22/Understanding/${item.ref.replace(/\./g, '')}" target="_blank">詳細</a>
-                                </div>
-                            </div>
-                        </div>`;
-                    }).join('')}</div>
-                </div>`;
-            }).join('');
-            updateProgress();
-        }
 
         // --- Mode toggle ---
         let currentMode = 'single';
@@ -1031,12 +923,38 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
             currentMode = mode === 'batch' ? 'batch' : 'single';
             modeButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.mode === currentMode));
             singleInput.style.display = currentMode === 'single' ? 'flex' : 'none';
-            batchInput.style.display = currentMode === 'batch' ? 'flex' : 'none';
+            batchInput.style.display  = currentMode === 'batch'  ? 'flex' : 'none';
+            // SCANアクションエリアの切り替え
+            const sc = $('singleScanControls');
+            const bc = $('batchScanControls');
+            if (sc) sc.style.display = currentMode === 'single' ? 'flex' : 'none';
+            if (bc) bc.style.display = currentMode === 'batch'  ? 'flex' : 'none';
         }
         modeButtons.forEach(btn => btn.addEventListener('click', () => {
-            if (scanExecuted) return; // スキャン実行後は切り替え禁止
+            if (scanExecuted) return;
             setMode(btn.dataset.mode);
         }));
+
+        // スキャン実行後に全UI入力要素をロック
+        function lockScanUI() {
+            scanExecuted = true;
+            const lock = el => { if (el) { el.style.pointerEvents = 'none'; el.style.opacity = '0.4'; } };
+            lock($('modeToggle'));
+            // 対象レベルボタン
+            document.querySelectorAll('.level-select-btn').forEach(lock);
+            // オプション設定ブロック
+            lock($('optionsSection'));
+            // SCANアクションエリアのチェックボックスのみ無効化（ボタンは runScan/batchCheck 内で disabled）
+            ['deepScanOpt','multiScanOpt','batchEnhancedOpt','batchAIOpt'].forEach(id => {
+                const el = $(id);
+                if (el) { el.disabled = true; }
+            });
+            ['deepScanLabel','multiScanLabel','batchDeepLabel','batchAILabel'].forEach(id => {
+                const el = $(id);
+                if (el) { el.style.opacity = '0.4'; el.style.pointerEvents = 'none'; }
+            });
+        }
+
         // 初期表示を明示（初回ロード時に single / batch の表示崩れを防ぐ）
         setMode(currentMode);
 
@@ -1131,6 +1049,37 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
             }).join('');
         }
 
+        // SC 3.2.3/3.2.4 ナビゲーション一貫性を情報バーとして #results の先頭に表示
+        function renderNavBar() {
+            const existing = $('navConsistencyBar');
+            if (existing) existing.remove();
+            const nc = batchNavConsistency;
+            if (!nc) return;
+            const isPas = nc.result === 'pass';
+            const color = isPas ? '#059669' : '#b91c1c';
+            const bg    = isPas ? '#f0fdf4' : '#fff1f2';
+            const border= isPas ? '#bbf7d0' : '#fecaca';
+            let issueHtml = '';
+            if (!isPas && nc.issues && nc.issues.length > 0) {
+                issueHtml = nc.issues.map(iss =>
+                    `<div style="font-size:12px;color:var(--navy-600);margin-top:3px;padding-left:8px;border-left:2px solid ${color};">
+                        ${escapeHtml(iss.message)}
+                        ${iss.missing && iss.missing.length ? `<span style="color:#b91c1c;"> 消えたリンク: ${iss.missing.map(t=>escapeHtml(t)).join(', ')}</span>` : ''}
+                        ${iss.added && iss.added.length ? `<span style="color:#d97706;"> 追加リンク: ${iss.added.map(t=>escapeHtml(t)).join(', ')}</span>` : ''}
+                    </div>`
+                ).join('');
+            }
+            const bar = document.createElement('div');
+            bar.id = 'navConsistencyBar';
+            bar.style.cssText = `margin-bottom:12px;padding:10px 14px;background:${bg};border:1px solid ${border};font-size:13px;`;
+            bar.innerHTML = `<span style="font-weight:600;color:${color};">SC ${escapeHtml(nc.sc||'3.2.3/3.2.4')}　${escapeHtml(nc.title||'ナビゲーション一貫性')}</span>
+                <span style="margin-left:10px;color:${color};font-weight:600;">${isPas ? '合格' : '不合格'}</span>
+                <span style="margin-left:10px;color:var(--navy-500);font-size:12px;">比較URL: ${(nc.comparedUrls||[]).length}件</span>
+                ${isPas ? '<span style="margin-left:8px;font-size:12px;color:#059669;">全ページでナビゲーション構造が一致しています</span>' : issueHtml}`;
+            const resultsEl = $('results');
+            if (resultsEl) resultsEl.prepend(bar);
+        }
+
         window.showBatchDetail = function(idx) {
             renderBatchNav(idx);
             const r = batchResultsData[idx];
@@ -1151,6 +1100,7 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 deepEnabled, multiEnabled
             );
             renderAllTabs();
+            renderNavBar();
             const st = $('scanScoreTable');
             if (st) st.scrollIntoView({ behavior: 'smooth', block: 'start' });
         };
@@ -1159,8 +1109,7 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
             const raw = $('batchUrls').value.split('\n').map(u => u.trim()).filter(u => u.length > 0);
             if (raw.length === 0) return;
             if (raw.length > 10) { alert('最大10件までです'); return; }
-            scanExecuted = true;
-            $('modeToggle').style.pointerEvents = 'none'; $('modeToggle').style.opacity = '0.4';
+            lockScanUI();
 
             const btn = $('batchCheckBtn');
             btn.classList.add('loading');
@@ -1240,7 +1189,6 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 progressSub.textContent = '';
 
                 renderBatchSummary();
-                renderNavConsistency();
                 renderBatchNav(0);
                 $('batchResults').style.display = 'block';
 
@@ -1323,8 +1271,7 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
         async function runScan() {
             const url = $('urlInput').value.trim();
             if (!url) return;
-            scanExecuted = true;
-            $('modeToggle').style.pointerEvents = 'none'; $('modeToggle').style.opacity = '0.4';
+            lockScanUI();
             const doDeep = $('deepScanOpt').checked;
             const doMulti = $('multiScanOpt').checked;
             const btn = $('runScanBtn');
@@ -1372,8 +1319,6 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
         $('runScanBtn').addEventListener('click', () => { const u = $('urlInput').value.trim(); if (u) runScan(); });
         $('batchCheckBtn').addEventListener('click', batchCheck);
         $('urlForm').addEventListener('submit', e => { e.preventDefault(); if ($('urlInput').value.trim()) runScan(); });
-        renderManualChecklist();
-
         // --- Google Sheets連携 ---
         let sheetsConfigured = false;
         let sheetsFolderMode = false;
@@ -1395,6 +1340,32 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 };
                 setStatus('Gemini', 'stGemini', data.geminiConfigured);
                 setStatus('Sheets', 'stSheets', data.configured);
+
+                // Gemini未設定時はMULTI SCANチェックボックスを無効化
+                const geminiOk = !!data.geminiConfigured;
+                ['multiScanOpt','batchAIOpt'].forEach(id => {
+                    const el = $(id);
+                    if (!el) return;
+                    el.disabled = !geminiOk;
+                    if (!geminiOk) el.checked = false;
+                });
+                ['multiScanLabel','batchAILabel'].forEach(id => {
+                    const el = $(id);
+                    if (!el) return;
+                    el.style.opacity = geminiOk ? '' : '0.35';
+                    el.title = geminiOk ? '' : 'Gemini APIキーが未設定のため使用できません';
+                });
+
+                // Sheets未設定時はエクスポートボタンを無効化（表示は常にする）
+                const sheetsOk = !!data.configured;
+                ['reportBtn','batchReportBtn'].forEach(id => {
+                    const el = $(id);
+                    if (!el) return;
+                    el.style.display = '';
+                    el.disabled = !sheetsOk;
+                    el.style.opacity = sheetsOk ? '' : '0.35';
+                    el.title = sheetsOk ? '' : 'Google Sheetsサービスアカウントが未設定のため使用できません';
+                });
 
                 // AAA ボタン表示制御（sheets-status に aaaBeta を含めたため認証不要）
                 sessionAAABeta = !!data.aaaBeta;
@@ -1739,12 +1710,7 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                 else                                 buckets.unverified.push(card);
             });
 
-            // ナビゲーション一貫性（一括検査）
-            const nc = batchNavConsistency;
-            if (nc) {
-                const bucket = nc.result === 'pass' ? 'pass' : nc.result === 'not_applicable' ? 'na' : 'serious';
-                buckets[bucket].push({ src: 'BATCH', type: 'nav', data: nc });
-            }
+            // SC 3.2.3/3.2.4 ナビゲーション一貫性はカード表示せず情報バーで表示（showBatchDetail参照）
 
             // 各タブを描画
             const EMPTY = '<div class="empty-state">項目はありません</div>';
@@ -1790,14 +1756,6 @@ ${manualCheckItems.filter(i => i.level === 'AAA').map(i => `- [ ] ${i.text} (${i
                             const countText = '';
                             const dkey = isUnverified ? `MULTI:${data.idx}` : null;
                             return renderCardItem(no, isUnverified ? null : src, null, data.ref, data.level, data.text || '', data.category || '', countText, locs, dkey);
-                        }
-                        if (type === 'nav') {
-                            const locs = (data.comparedUrls || []);
-                            const countText = locs.length ? `比較URL：${locs.length}件` : '';
-                            const summary = data.result === 'pass'
-                                ? '全ページでナビゲーション構造が一致しています'
-                                : (data.issues || []).slice(0, 3).join(' / ') || data.message || '';
-                            return renderCardItem(no, 'BATCH', data.result === 'pass' ? 'pass' : 'serious', data.sc, 'AA', data.title || 'ナビゲーション一貫性', summary, countText, locs, null);
                         }
                         return '';
                     }).join('')

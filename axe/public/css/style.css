@@ -270,10 +270,6 @@ h1 {
   display: block;
 }
 
-.hidden-compat{
-  display: none;
-}
-
 .results.visible table{
   width:100%;
 }
@@ -567,107 +563,6 @@ h1 {
   font-size: 16px;
   color: var(--navy-500);
   white-space: pre-wrap;
-}
-.manual-category {
-  border-bottom: 1px solid var(--navy-200);
-}
-.manual-category:last-child {
-  border-bottom: none;
-}
-.manual-category-header {
-  padding: 14px 20px;
-  background: var(--navy-100);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 16px;
-  font-weight: 500;
-}
-.manual-category-count {
-  font-size: 16px;
-  color: var(--navy-500);
-  font-weight: 400;
-}
-.manual-items {
-  padding: 8px 20px;
-}
-.manual-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--navy-200);
-}
-.manual-item:last-child {
-  border-bottom: none;
-}
-.manual-checkbox {
-  width: 18px;
-  height: 18px;
-  border: 1px solid var(--navy-300);
-  flex-shrink: 0;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-top: 1px;
-}
-.manual-checkbox:hover {
-  border-color: var(--navy-500);
-}
-.manual-checkbox.checked {
-  background: var(--navy-700);
-  border-color: var(--navy-700);
-}
-.manual-checkbox.checked::after {
-  content: "";
-  width: 10px;
-  height: 6px;
-  border-left: 2px solid white;
-  border-bottom: 2px solid white;
-  transform: rotate(-45deg) translateY(-1px);
-}
-.manual-content {
-  flex: 1;
-}
-.manual-text {
-  font-size: 16px;
-  margin-bottom: 4px;
-}
-.manual-info {
-  display: flex;
-  gap: 12px;
-  font-size: 16px;
-  color: var(--navy-400);
-}
-.manual-info a {
-  color: var(--navy-500);
-  text-decoration: none;
-}
-.manual-info a:hover {
-  text-decoration: underline;
-}
-.progress-bar {
-  margin-top: 24px;
-  background: white;
-  border: 1px solid var(--navy-200);
-  padding: 16px 20px;
-}
-.progress-label {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 8px;
-  font-size: 16px;
-  color: var(--navy-500);
-}
-.progress-track {
-  height: 4px;
-  background: var(--navy-200);
-}
-.progress-fill {
-  height: 100%;
-  background: var(--navy-600);
-  transition: width 0.3s;
 }
 .empty-state {
   text-align: center;
@@ -1271,38 +1166,6 @@ footer a:hover {
 .config-status-item.ng {
   border-color: #dc2626;
   color: #dc2626;
-}
-.achievement-banner {
-  background: white;
-  border: 1px solid var(--navy-200);
-  padding: 24px 28px;
-  margin-bottom: 24px;
-  display: flex;
-  align-items: center;
-  gap: 32px;
-}
-.achievement-rate {
-  font-size: 48px;
-  font-weight: 600;
-  font-family: "Poppins", monospace;
-  color: var(--navy-700);
-  line-height: 1;
-}
-.achievement-detail {
-  flex: 1;
-}
-.achievement-label {
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--navy-500);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 4px;
-}
-.achievement-note {
-  font-size: 15px;
-  color: var(--navy-400);
-  margin-top: 6px;
 }
 @media (max-width: 768px) {
   .url-form {

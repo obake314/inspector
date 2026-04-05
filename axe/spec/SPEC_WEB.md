@@ -1,6 +1,6 @@
 # SPEC_WEB
 
-最終更新: 2026-04-06
+最終更新: 2026-04-07
 
 ## 対象
 
@@ -94,9 +94,18 @@
 
 ## UI操作制約
 
-- スキャン実行後は単一/一括モード切替を禁止（`scanExecuted` フラグ）
-- スキャン実行後は対象レベル切替を禁止（同上）
+- スキャン実行後は以下の全要素を操作不可にロック（`lockScanUI()` 呼び出し）
+  - 単一/一括モード切替（`#modeToggle`）
+  - 対象レベル切替（`.level-select-btn`）
+  - DEEP SCAN / MULTI SCAN チェックボックス
+  - オプション設定ブロック（`#optionsSection`）
 - スキャン中はボタンを `loading` 状態に変更
+
+## SCANアクション配置
+
+- SCAN / DEEP SCAN / MULTI SCAN ボタン・チェックボックスはオプション設定ブロックの下（`#scanActionSection`）に配置
+- 単一モード: `#singleScanControls` を表示
+- 一括モード: `#batchScanControls` を表示（モード切替時に連動）
 
 ## 詳細カード仕様
 
@@ -115,15 +124,17 @@
 ## SC 3.2.3 / 3.2.4 ナビゲーション一貫性
 
 - 一括検査後の結果は `batchNavConsistency` に格納
-- 詳細ブロック（`renderAllTabs()`）内に他の SC と同様にカードとして表示
-- 別途独立したボックスとしては表示しない
+- カード表示はしない
+- `showBatchDetail()` で各 URL タブを表示するたびに `renderNavBar()` が `#results` の先頭に情報バーとして挿入
+- PASS/FAIL にかかわらず全 URL タブで常に表示
 
-## Gemini / Sheets ステータスインジケーター
+## Gemini / Sheets ステータスインジケーター・制御
 
-- ページ起動時に `GET /api/sheets-status` を呼び表示
+- ページ起動時と設定保存後に `GET /api/sheets-status` を呼び表示
 - Gemini 設定済み: `OK` / 未設定: `--`
 - Sheets 設定済み: `OK` / 未設定: `--`
-- 設定保存後に再チェックして即時反映
+- Gemini 未設定時: MULTI SCAN チェックボックスを `disabled` + 半透明化（ツールチップ表示）
+- Sheets 未設定時: エクスポートボタンを `disabled` + 半透明化（非表示にはしない）
 
 ## 既知の実装差異
 
