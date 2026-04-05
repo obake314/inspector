@@ -18,7 +18,13 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
+            set -euo pipefail
             cd /var/www/inspector
-            git pull origin main
-            cd /var/www/inspector/axe && npm install --production
-            pm2 restart inspector-axe
+            git fetch origin main
+            git checkout main
+            git reset --hard origin/main
+
+            cd /var/www/inspector/axe
+            npm ci --omit=dev
+            pm2 restart inspector-axe --update-env
+            pm2 save
