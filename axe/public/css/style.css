@@ -309,6 +309,16 @@ h1 {
   width:calc(100% / 9);
 }
 
+.scoretable thead th.label-all span{
+  font-size:12px;
+  font-weight: normal;
+}
+.scoretable thead td{
+  padding:14px 14px;
+  text-align:center;
+  border-right:1px solid var(--navy-200);
+  background: #fff;
+}
 
 .tabs {
   display: flex;
