@@ -35,6 +35,10 @@ header {
   justify-content: space-between;
 }
 
+.header h1{
+  line-height: 1;
+}
+
 .header_container{
   display: flex;
   align-items: center;
@@ -1219,10 +1223,10 @@ footer a:hover {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: var(--navy-500);
+  color: var(--navy-300);
   font-size: 36px;
   border: none;
-  align-self: flex-end;
+  align-self: flex-start;
 }
 .settings-gear:hover {
   border-color: var(--navy-500);
@@ -1231,7 +1235,6 @@ footer a:hover {
 .config-status {
   display: flex;
   gap: 8px;
-  margin-top: 8px;
   flex-wrap: wrap;
 }
 .config-status-item {
