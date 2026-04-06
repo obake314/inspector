@@ -338,11 +338,14 @@ h1 {
 .scan-option-checkbox:hover {
   border-color: var(--navy-700);
 }
+
+#batchEnhancedOpt:checked,
 .scan-option-checkbox#deepScanOpt:checked {
   background: var(--color-deep);
   border-color: var(--navy-700);
 }
 
+#batchAIOpt:checked,
 .scan-option-checkbox#multiScanOpt:checked {
   background: var(--color-multi);
   border-color: var(--navy-700);
