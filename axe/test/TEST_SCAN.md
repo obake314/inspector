@@ -17,6 +17,17 @@
 - 期待結果
   - `results[]` を返す
   - `status` が `pass/fail/not_applicable/manual_required/error`
+  - 正常完了時は UI に「検査完了: N基準を検査」と表示される
+
+## T-SCAN-02b: DEEP SCAN タイムアウト
+
+- 手順
+  1. 応答が極端に遅い（または接続が滞留する）URLで DEEP SCAN を実行
+- 期待結果
+  - 8分以内にサーバーが HTTP 504 を返す
+  - UI に「DEEP SCANがタイムアウトしました（8分超過）」と表示される
+  - DEEP SCAN ボタンがローディング解除されて再操作可能になる
+  - 9分時点でクライアント側 AbortController が発火した場合も同様のエラーメッセージが表示される
 
 ## T-SCAN-03: MULTI SCAN
 
@@ -120,3 +131,43 @@
   1. SCAN実行後、任意タブのカードを確認
 - 期待結果
   - カードヘッダーに `No.1` / `No.2` などの番号要素が表示されない
+
+## T-SCAN-15: DEEP SCAN 結果件数（A/AA）
+
+- 手順
+  1. `includeAAA: false` で `POST /axe/api/enhanced-check`
+- 期待結果
+  - 返却 `results[]` に AAA 専用 SC（2.3.3, 2.4.12 等）が含まれない
+  - 件数が A/AA 範囲内
+
+## T-SCAN-16: DEEP SCAN 結果件数（AAA含む）
+
+- 手順
+  1. `includeAAA: true` で `POST /axe/api/enhanced-check`
+- 期待結果
+  - 返却 `results[]` に AAA SC が含まれる
+  - `includeAAA: true` がレスポンスに含まれる
+
+## T-SCAN-17: BASIC SCAN Basic認証
+
+- 手順
+  1. Basic認証が必要なURLに対して `basicAuth: {user, pass}` を付与して `POST /axe/api/check`
+- 期待結果
+  - 401エラーなく `success: true` を返す
+
+## T-SCAN-18: DEEP SCAN Basic認証
+
+- 手順
+  1. Basic認証が必要なURLに対して `basicAuth: {user, pass}` を付与して `POST /axe/api/enhanced-check`
+- 期待結果
+  - 401エラーなく `results[]` を返す
+
+## T-SCAN-19: クリア後の再スキャン
+
+- 手順
+  1. SCAN実行後にクリアボタンをクリック
+  2. 別のURLを入力して再度SCAN実行
+- 期待結果
+  - 前回の結果が残らない
+  - スコアテーブル・詳細タブが新しい結果で正常表示される
+  - UIロック（モード切替・レベル・チェックボックス）が再びかかる

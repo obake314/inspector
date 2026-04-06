@@ -1,6 +1,6 @@
 # SPEC_WEB
 
-最終更新: 2026-04-07
+最終更新: 2026-04-06
 
 ## 対象
 
@@ -20,6 +20,10 @@
 - 入力: `{ url, includeAAA?, basicAuth? }`
 - 出力: `{ success, results: [{ sc, name, status, message, violations[] }], includeAAA }`
 - status: `pass` / `fail` / `not_applicable` / `manual_required` / `error`
+- タイムアウト仕様:
+  - サーバー側: リクエスト受信から **8分** で 504 を返す
+  - クライアント側: fetch に **9分** の AbortController タイムアウトを設定
+  - `server.timeout` / `server.keepAliveTimeout`: **10分**（旧: 2分）
 
 ### MULTI SCAN
 

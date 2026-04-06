@@ -68,3 +68,36 @@
   - `MULTI SCAN` チェックボックスが有効化される
   - `reportBtn` と `batchReportBtn` が有効化される
   - `Service Account Key` または `Folder ID` が `NONE` または `NG` の場合、`Sheets` は `NONE/NG` となり、`reportBtn` / `batchReportBtn` は無効化される
+
+## T-SET-09: aaaBeta 設定の保存と反映
+
+- 手順
+  1. 設定画面で `AAA（ベータ）` を有効にして保存
+  2. ページリロード
+  3. `POST /axe/api/settings-get` でレスポンス確認
+  4. DEEP SCAN のレベル表示を確認
+- 期待結果
+  - `aaaBeta: true` が返る
+  - DEEP SCAN 実行中ステータスに `A/AA/AAA（β）` と表示される
+  - `GET /axe/api/sheets-status` の `aaaBeta` フィールドも `true`
+
+## T-SET-10: クリアボタンの動作
+
+- 手順
+  1. 任意URLでSCAN実行（DEEP/MULTI有効）
+  2. スキャン完了後、エクスポートエリア右端の「クリア」ボタンをクリック
+- 期待結果
+  - スキャン結果・スコアテーブル・詳細タブがすべてクリアされる
+  - UIロック解除: 単一/一括切替・レベル切替・DEEP/MULTI チェックボックス・オプション設定が操作可能に戻る
+  - Gemini / Sheets ステータスが再チェックされ、設定状態に応じてボタンが適切に有効/無効化される
+
+## T-SET-11: Basic認証フィールドの表示と動作
+
+- 手順
+  1. オプション設定の Basic認証フィールドに user / pass を入力
+  2. BASIC SCAN を実行
+  3. DEEP SCAN を実行
+- 期待結果
+  - BASIC SCAN: `basicAuth` が `POST /api/check` に含まれる
+  - DEEP SCAN: `basicAuth` が `POST /api/enhanced-check` に含まれる
+  - MULTI SCAN: `basicAuth` は送信されない（仕様上未適用）

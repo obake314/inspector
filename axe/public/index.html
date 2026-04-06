@@ -178,6 +178,13 @@
                             <span style="color:#0D7A5F;font-size:16px;">MULTI SCAN</span>
                         </label>
                     </div>
+                    <div class="batch-progress" id="singleProgress">
+                        <div class="batch-progress-header">
+                            <div class="batch-progress-label" id="singleProgressLabel">検査中...</div>
+                        </div>
+                        <div class="batch-progress-track"><div class="batch-progress-fill" id="singleProgressFill"></div></div>
+                        <div id="singlePhaseIndicator"></div>
+                    </div>
                     <div id="batchScanControls" class="scan-controls" style="display:none;">
                         <button type="button" class="check-btn" id="batchCheckBtn">
                             <span class="btn-text">BATCH SCAN</span>
@@ -815,9 +822,9 @@
         // 高精度検査結果を保存（単一ページ）
         let lastEnhancedResults = null;
 
-        async function runAIEvaluation() {
+        async function runAIEvaluation(silent = false) {
             if (!lastResults?.url) {
-                alert('先にURLをチェックしてください');
+                if (!silent) alert('先にURLをチェックしてください');
                 return;
             }
 
@@ -829,8 +836,10 @@
             btn.disabled = true;
             btnText.textContent = '評価中...';
             spinner.style.display = 'inline-block';
-            status.style.display = 'block';
-            status.textContent = 'Gemini AIに接続中...';
+            if (!silent) {
+                status.style.display = 'block';
+                status.textContent = 'Gemini AIに接続中...';
+            }
 
             try {
                 // 対象レベルに応じたチェック項目をフィルタ
@@ -840,7 +849,7 @@
                     .map((item, index) => ({ ...item, index }))
                     .filter(item => levelOrder[item.level] <= targetLevelNum);
 
-                status.textContent = `${filteredItems.length}項目を評価中...（1-2分かかります）`;
+                if (!silent) status.textContent = `${filteredItems.length}項目を評価中...（1-2分かかります）`;
 
                 const { response, data } = await fetchApiJson(apiUrl('/api/ai-evaluate'), {
                     method: 'POST',
@@ -864,24 +873,20 @@
                     const originalIndex = filteredItems[idx]?.index;
                     if (originalIndex !== undefined) {
                         aiResults[originalIndex] = result;
-                        
-                        // 合格・該当なしは自動でチェックを入れる
-                        if (result.status === 'pass' || result.status === 'not_applicable') {
-                            if (result.status === 'pass') passCount++;
-                            else naCount++;
-                        } else if (result.status === 'fail') {
-                            failCount++;
-                        } else if (result.status === 'manual_required') {
-                            manualCount++;
-                        }
+                        if (result.status === 'pass') passCount++;
+                        else if (result.status === 'not_applicable') naCount++;
+                        else if (result.status === 'fail') failCount++;
+                        else if (result.status === 'manual_required') manualCount++;
                     }
                 });
 
-                status.innerHTML = `評価完了 <span style="background: rgba(255,255,255,0.2); padding: 2px 8px; margin-left: 8px;">合格: ${passCount} / 不合格: ${failCount} / 要手動: ${manualCount} / 該当なし: ${naCount}</span>`;
-                
+                if (!silent) {
+                    status.innerHTML = `評価完了 <span style="background: rgba(255,255,255,0.2); padding: 2px 8px; margin-left: 8px;">合格: ${passCount} / 不合格: ${failCount} / 要手動: ${manualCount} / 該当なし: ${naCount}</span>`;
+                }
             } catch (error) {
-                status.textContent = `エラー: ${error.message}`;
+                if (!silent) status.textContent = `エラー: ${error.message}`;
                 console.error('AI評価エラー:', error);
+                throw error;
             } finally {
                 btn.disabled = false;
                 btnText.textContent = 'MULTI SCAN';
@@ -952,6 +957,7 @@
             $('exportArea').classList.remove('visible');
             $('batchResults').style.display = 'none';
             $('errorMessage').classList.remove('visible');
+            $('singleProgress').classList.remove('visible');
             const bar = $('navConsistencyBar');
             if (bar) bar.remove();
             $('scanScoreTable').style.display = 'none';
@@ -1301,41 +1307,112 @@
             btn.classList.add('loading');
             btn.disabled = true;
 
+            // --- 進捗インジケーター ---
+            const totalPhases = 1 + (doDeep ? 1 : 0) + (doMulti ? 1 : 0);
+            const progress      = $('singleProgress');
+            const progressFill  = $('singleProgressFill');
+            const progressLabel = $('singleProgressLabel');
+            const phaseIndicator = $('singlePhaseIndicator');
+            progress.classList.add('visible');
+            progressFill.style.width = '0%';
+            // DEEP/MULTI 個別ステータスは進捗バーに統合するため非表示
+            $('enhancedStatus').style.display = 'none';
+            $('aiStatus').style.display = 'none';
+
+            function renderSinglePhases(activePhase) {
+                let pid = 1;
+                const phases = [{ id: pid++, label: 'BASIC' }];
+                if (doDeep)  phases.push({ id: pid++, label: 'DEEP' });
+                if (doMulti) phases.push({ id: pid++, label: 'MULTI' });
+                phaseIndicator.innerHTML = phases.map(p => {
+                    const done   = p.id < activePhase;
+                    const active = p.id === activePhase;
+                    const color  = done ? '#16a34a' : active ? '#FFFFFF' : 'var(--navy-400)';
+                    const bg     = done ? '#dcfce7' : active ? 'var(--navy-900)' : 'var(--navy-100)';
+                    const prefix = done ? '✓ ' : active ? '▶ ' : '';
+                    return `<span style="padding:2px 8px;background:${bg};color:${color};font-weight:${active?'600':'400'};white-space:nowrap">${prefix}${p.label}</span>`;
+                }).join('');
+            }
+
+            function setSinglePhaseProgress(phaseIndex, fraction) {
+                const sliceSize = 100 / totalPhases;
+                const pct = sliceSize * phaseIndex + sliceSize * Math.min(fraction, 1);
+                progressFill.style.width = `${pct}%`;
+            }
+
+            // アニメーションタイマー（指数的に 0→90% まで進む）
+            function startPhaseTimer(phaseIndex) {
+                let val = 0;
+                const t = setInterval(() => {
+                    if (val < 0.9) { val += (0.9 - val) * 0.05; setSinglePhaseProgress(phaseIndex, val); }
+                }, 200);
+                return t;
+            }
+
             try {
-                // BASIC SCAN
+                // --- Phase 1: BASIC ---
+                progressLabel.textContent = 'BASIC SCAN 実行中...';
+                renderSinglePhases(1);
+                const t1 = startPhaseTimer(0);
                 await check(url);
+                clearInterval(t1);
+                setSinglePhaseProgress(0, 1);
+
                 if (lastResults) {
-                    renderScanScoreTable(
-                        computeBasicScore(lastResults),
-                        null, null, doDeep, doMulti
-                    );
+                    renderScanScoreTable(computeBasicScore(lastResults), null, null, doDeep, doMulti);
                 }
 
-                // DEEP SCAN
+                // --- Phase 2: DEEP ---
                 if (doDeep && lastResults) {
-                    await runEnhancedCheck();
-                    renderScanScoreTable(
-                        computeBasicScore(lastResults),
-                        computeDeepScore(lastEnhancedResults),
-                        null, true, doMulti
-                    );
-                    renderAllTabs();
+                    progressLabel.textContent = 'DEEP SCAN 実行中（2〜4分かかります）...';
+                    renderSinglePhases(2);
+                    const t2 = startPhaseTimer(1);
+                    try {
+                        await runEnhancedCheck(true);
+                        clearInterval(t2);
+                        setSinglePhaseProgress(1, 1);
+                        renderScanScoreTable(
+                            computeBasicScore(lastResults),
+                            computeDeepScore(lastEnhancedResults),
+                            null, true, doMulti
+                        );
+                        renderAllTabs();
+                    } catch (e) {
+                        clearInterval(t2);
+                        progressLabel.textContent = `DEEP SCAN エラー: ${e.name === 'AbortError' ? 'タイムアウト（9分超過）' : e.message}`;
+                    }
                 }
 
-                // MULTI SCAN
+                // --- Phase 3: MULTI ---
                 if (doMulti && lastResults) {
-                    await runAIEvaluation();
-                    renderScanScoreTable(
-                        computeBasicScore(lastResults),
-                        doDeep ? computeDeepScore(lastEnhancedResults) : null,
-                        computeMultiScore(aiResults),
-                        doDeep, true
-                    );
-                    renderAllTabs();
+                    const multiPhaseIdx = (doDeep ? 2 : 1);
+                    progressLabel.textContent = 'MULTI SCAN 実行中...';
+                    renderSinglePhases(multiPhaseIdx + 1);
+                    const t3 = startPhaseTimer(multiPhaseIdx);
+                    try {
+                        await runAIEvaluation(true);
+                        clearInterval(t3);
+                        setSinglePhaseProgress(multiPhaseIdx, 1);
+                        renderScanScoreTable(
+                            computeBasicScore(lastResults),
+                            doDeep ? computeDeepScore(lastEnhancedResults) : null,
+                            computeMultiScore(aiResults),
+                            doDeep, true
+                        );
+                        renderAllTabs();
+                    } catch (e) {
+                        clearInterval(t3);
+                        progressLabel.textContent = `MULTI SCAN エラー: ${e.message}`;
+                    }
                 }
+
+                progressLabel.textContent = '検査完了';
+                renderSinglePhases(totalPhases + 1); // 全フェーズ完了
             } finally {
                 btn.classList.remove('loading');
                 btn.disabled = false;
+                // 完了後2秒でプログレス非表示
+                setTimeout(() => { progress.classList.remove('visible'); }, 2000);
             }
         }
 
@@ -1527,7 +1604,7 @@
                 pass,
                 na: 0,
                 unverified,
-                score: checkable > 0 ? Math.round(pass / checkable * 100) : null
+                score: Math.round(pass / getTargetScList().length * 100)
             };
         }
 
@@ -1573,7 +1650,7 @@
                 pass,
                 na,
                 unverified,
-                score: checkable > 0 ? Math.round(pass / checkable * 100) : null
+                score: Math.round(pass / getTargetScList().length * 100)
             };
         }
 
@@ -1602,7 +1679,7 @@
                 pass,
                 na,
                 unverified,
-                score: checkable > 0 ? Math.round(pass / checkable * 100) : null
+                score: Math.round(pass / getTargetScList().length * 100)
             };
         }
 
@@ -1656,7 +1733,7 @@
             const total = fail + pass + na + unverified;
             const checkable = pass + fail;
             return { total, critical: imp.critical, serious: imp.serious, moderate: imp.moderate, minor: imp.minor,
-                     pass, na, unverified, score: checkable > 0 ? Math.round(pass / checkable * 100) : null };
+                     pass, na, unverified, score: Math.round(pass / getTargetScList().length * 100) };
         }
 
         // ============================================================
@@ -2090,7 +2167,7 @@
         // ============================================================
         let sessionAAABeta = false; // 設定パネルから読み込んだ状態を保持
 
-        async function runEnhancedCheck() {
+        async function runEnhancedCheck(silent = false) {
             const url = document.getElementById('urlInput').value.trim();
             if (!url) { alert('URLを入力してください'); return; }
 
@@ -2109,9 +2186,11 @@
             btn.disabled = true;
             spinner.style.display = 'inline-block';
             btnText.textContent = '検査中...';
-            status.style.display = 'block';
-            const modeLabel = sessionAAABeta ? 'A/AA/AAA（β）' : 'A/AA';
-            status.textContent = `DEEP SCAN実行中（${modeLabel}、2〜4分かかります）...`;
+            if (!silent) {
+                status.style.display = 'block';
+                const modeLabel = sessionAAABeta ? 'A/AA/AAA（β）' : 'A/AA';
+                status.textContent = `DEEP SCAN実行中（${modeLabel}、2〜4分かかります）...`;
+            }
             resultsEl.innerHTML = '';
 
             document.getElementById('results').style.display = 'block';
@@ -2122,20 +2201,38 @@
                 const body = { url, includeAAA: sessionAAABeta };
                 if (basicUser && basicPass) body.basicAuth = { user: basicUser, pass: basicPass };
 
-                const { response: res, data } = await fetchApiJson(apiUrl('/api/enhanced-check'), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                }, '/api/enhanced-check');
+                const deepController = new AbortController();
+                const deepTimer = setTimeout(() => deepController.abort(), 9 * 60 * 1000);
+                let deepData, deepRes;
+                try {
+                    const r = await fetchApiJson(apiUrl('/api/enhanced-check'), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body),
+                        signal: deepController.signal
+                    }, '/api/enhanced-check');
+                    deepRes = r.response; deepData = r.data;
+                } finally {
+                    clearTimeout(deepTimer);
+                }
+                const res = deepRes, data = deepData;
                 if (!res.ok) throw new Error(data.error || '検査失敗');
 
-                const aaa = data.includeAAA ? ' (AAA β含む)' : ' (A/AA)';
-                status.textContent = `検査完了: ${data.results.length}基準を検査${aaa}`;
+                if (!silent) {
+                    const aaa = data.includeAAA ? ' (AAA β含む)' : ' (A/AA)';
+                    status.textContent = `検査完了: ${data.results.length}基準を検査${aaa}`;
+                }
                 lastEnhancedResults = data.results;
                 renderEnhancedResults(data.results, data.includeAAA);
             } catch (e) {
-                status.textContent = 'エラー: ' + e.message;
-                resultsEl.innerHTML = `<div style="color:#dc2626;padding:16px;">${escapeHtml(e.message)}</div>`;
+                const msg = e.name === 'AbortError'
+                    ? 'DEEP SCANがタイムアウトしました（9分超過）。対象ページの応答が遅い可能性があります。'
+                    : e.message;
+                if (!silent) {
+                    status.textContent = 'エラー: ' + msg;
+                    resultsEl.innerHTML = `<div style="color:#dc2626;padding:16px;">${escapeHtml(msg)}</div>`;
+                }
+                throw e;
             } finally {
                 btn.disabled = false;
                 spinner.style.display = 'none';

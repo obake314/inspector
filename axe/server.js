@@ -2280,6 +2280,16 @@ app.post('/api/enhanced-check', async (req, res) => {
   const { url, basicAuth, includeAAA } = req.body;
   if (!url) return res.status(400).json({ error: 'URLを指定してください' });
 
+  // リクエスト全体に8分のタイムアウトを設定
+  const HANDLER_TIMEOUT = 8 * 60 * 1000;
+  let handlerTimedOut = false;
+  const handlerTimer = setTimeout(() => {
+    handlerTimedOut = true;
+    if (!res.headersSent) {
+      res.status(504).json({ error: 'DEEP SCANがタイムアウトしました（8分超過）。対象ページの応答が遅い可能性があります。' });
+    }
+  }, HANDLER_TIMEOUT);
+
   let browser;
   try {
     console.log(`[Enhanced] Phase 1 検査開始: ${url}`);
@@ -2446,12 +2456,13 @@ app.post('/api/enhanced-check', async (req, res) => {
       : results.filter(r => !AAA_SC_LIST.has(r.sc));
 
     console.log(`[Enhanced] 完了: ${finalResults.length}基準を検査 (includeAAA:${!!includeAAA})`);
-    res.json({ success: true, url, results: finalResults, includeAAA: !!includeAAA, checkedAt: new Date().toISOString() });
+    if (!handlerTimedOut) res.json({ success: true, url, results: finalResults, includeAAA: !!includeAAA, checkedAt: new Date().toISOString() });
 
   } catch (error) {
     console.error('[Enhanced] Error:', error);
-    res.status(500).json({ error: error.message });
+    if (!handlerTimedOut && !res.headersSent) res.status(500).json({ error: error.message });
   } finally {
+    clearTimeout(handlerTimer);
     if (browser) await browser.close();
   }
 });
@@ -3214,5 +3225,5 @@ const server = app.listen(PORT, () => {
 });
 
 // タイムアウト設定をインスタンスに適用
-server.timeout = 120000;
-server.keepAliveTimeout = 120000;
+server.timeout = 600000;        // 10分（DEEP SCANの最大所要時間に対応）
+server.keepAliveTimeout = 600000;
