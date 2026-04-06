@@ -1,7 +1,7 @@
 @charset "UTF-8";
 
 :root {
-  --navy-200: #d8dce5;
+  --navy-200: #ebedf3;
   --navy-400: #7a869e;
   --navy-700: #1a2332;
   --color-basic:#3581B8;
@@ -143,9 +143,7 @@ h1 {
   justify-content: center;
   min-width: 74px;
   padding: 7px var(--space-m);
-  font-size: var(--font-size-s);
-  font-weight: 600;
-  color: var(--color-white);
+  font-size: var(--font-size-m);
   letter-spacing: 0.02em;
   border: 1px solid transparent;
   transition: all 0.2s ease;
@@ -295,7 +293,7 @@ h1 {
   gap: var(--space-s);
   padding: var(--space-s) var(--space-m);
   border: 1px solid var(--navy-200);
-  background: var(--color-white)
+  background: var(--color-white);
   transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
 }
 .scan-option:hover {
@@ -319,7 +317,7 @@ h1 {
   width: 18px;
   height: 18px;
   border: 1.5px solid var(--navy-400);
-  background: var(--color-white)
+  background: var(--color-white);
   cursor: pointer;
   position: relative;
   display: inline-grid;
@@ -331,7 +329,7 @@ h1 {
   content: '';
   width: 5px;
   height: 9px;
-  border: solid var(--color-white)
+  border: solid var(--color-white);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg) scale(0);
   transform-origin: center;
@@ -340,10 +338,16 @@ h1 {
 .scan-option-checkbox:hover {
   border-color: var(--navy-700);
 }
-.scan-option-checkbox:checked {
-  background: var(--color-serious);
+.scan-option-checkbox#deepScanOpt:checked {
+  background: var(--color-deep);
   border-color: var(--navy-700);
 }
+
+.scan-option-checkbox#multiScanLabel:checked {
+  background: var(--color-multi);
+  border-color: var(--navy-700);
+}
+
 .scan-option-checkbox:checked::after {
   transform: rotate(45deg) scale(1);
 }
@@ -410,7 +414,6 @@ h1 {
   min-width: 150px;
 }
 .skip-rule-item small {
-  color: var(--navy-400);
 }
 .results {
   display: none;
