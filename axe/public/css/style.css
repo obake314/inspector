@@ -341,7 +341,7 @@ h1 {
   border-color: var(--navy-700);
 }
 .scan-option-checkbox:checked {
-  background: var(--navy-700);
+  background: var(--color-serious);
   border-color: var(--navy-700);
 }
 .scan-option-checkbox:checked::after {
@@ -485,6 +485,23 @@ h1 {
   text-align:center;
   border-right:1px solid var(--navy-200);
   background: var(--color-white)
+}
+
+.scoretable tbody td.label-deep{
+  color: var(--color-deep);
+}
+.scoretable tbody td.label-multi{
+  color: var(--color-multi);
+}
+.scoretable tbody td.label-basic{
+  color: var(--color-basic);
+}
+
+.score-total{
+  font-size: var(--font-size-s);
+}
+.score-chip{
+  font-size: var(--font-size-l);
 }
 
 .tabs {
@@ -1009,6 +1026,11 @@ h1 {
 .batch-progress.visible {
   display: block;
 }
+
+.batch-progress .phase-chip {
+  padding: 0 var(--space-s);
+}
+
 .batch-progress-label {
   font-size: var(--font-size-m);
   color: var(--navy-400);
