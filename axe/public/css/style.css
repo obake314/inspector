@@ -516,7 +516,7 @@ h1 {
   font-size: var(--font-size-s);
 }
 .score-chip{
-  font-size: var(--font-size-l);
+  font-size: 20px;
 }
 
 .tabs {
