@@ -2407,8 +2407,8 @@
             if (!body) return;
             const deepSub = sessionAAABeta ? 'A/AA/AAA β' : 'A/AA';
             const basicLabel = `BASIC<br><span class="score-row-sub">axe-core 自動検査</span>`;
-            const deepLabel  = `DEEP<br><span class="score-row-sub">SC別ヒューリスティック検査 (${deepSub})</span>`;
-            const multiLabel = `MULTI<br><span class="score-row-sub">Gemini AI 総合評価</span>`;
+            const deepLabel  = `DEEP<br><span class="score-row-sub">ヒューリスティック検査</span>`;
+            const multiLabel = `MULTI<br><span class="score-row-sub">Gemini AI 検査</span>`;
             body.innerHTML =
                 row(basicLabel, 'label-basic', nb, true, false) +
                 row(deepLabel, 'label-deep', nd, deepEnabled, false) +
