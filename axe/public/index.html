@@ -131,7 +131,7 @@
                     <textarea class="batch-textarea" id="batchUrls" placeholder="URLを1行ずつ入力（最大10件）&#10;https://example.com&#10;https://example.com/about&#10;https://example.com/contact"></textarea>
                     <div class="batch-progress" id="batchProgress">
                         <div class="batch-progress-header">
-                            <div class="batch-progress-label" id="batchProgressLabel">検査中...</div>
+                            <div class="batch-progress-label" id="batchProgressLabel">CHECKING...</div>
                             <div id="batchProgressSub"></div>
                         </div>
                         <div class="batch-progress-track"><div class="batch-progress-fill" id="batchProgressFill"></div></div>
@@ -197,7 +197,7 @@
                     </div>
                     <div class="batch-progress" id="singleProgress">
                         <div class="batch-progress-header">
-                            <div class="batch-progress-label" id="singleProgressLabel">検査中...</div>
+                            <div class="batch-progress-label" id="singleProgressLabel">CHECKING...</div>
                         </div>
                         <div class="batch-progress-track"><div class="batch-progress-fill" id="singleProgressFill"></div></div>
                         <div id="singlePhaseIndicator"></div>
@@ -779,7 +779,7 @@
         async function saveSettings() {
             const btn = $('settSaveBtn');
             btn.disabled = true;
-            btn.textContent = '保存中...';
+            btn.textContent = 'SAVING...';
             $('settingsMsg').textContent = '';
             try {
                 const { response: res, data } = await fetchApiJson(apiUrl('/api/settings-save'), {
@@ -1011,11 +1011,11 @@
             const status = $('aiStatus');
 
             btn.disabled = true;
-            btnText.textContent = '評価中...';
+            btnText.textContent = 'SCORING...';
             spinner.style.display = 'inline-block';
             if (!silent) {
                 status.style.display = 'block';
-                status.textContent = 'Gemini AIに接続中...';
+                status.textContent = 'CONNECTING TO Gemini AI...';
             }
 
             try {
@@ -1026,7 +1026,7 @@
                     .map((item, index) => ({ ...item, index }))
                     .filter(item => levelOrder[item.level] <= targetLevelNum);
 
-                if (!silent) status.textContent = `${filteredItems.length}項目を評価中...（1-2分かかります）`;
+                if (!silent) status.textContent = `${filteredItems.length}項目 SCORING...（1-2分かかります）`;
 
                 const { response, data } = await fetchApiJson(apiUrl('/api/ai-evaluate'), {
                     method: 'POST',
@@ -1458,7 +1458,7 @@
                 progressFill.style.width = `${pct}%`;
             }
 
-            progressLabel.textContent = `${raw.length}件のURLを検査中...`;
+            progressLabel.textContent = `${raw.length} URLs TESTING...`;
             renderPhases(1);
 
             try {
@@ -1482,7 +1482,7 @@
                             setPhaseProgress(phaseOffset, progressVal);
                         }
                     }, 300);
-                    progressLabel.textContent = `${vPrefix}${raw.length}件のURLを検査中...`;
+                    progressLabel.textContent = `${vPrefix}${raw.length} URLs TESTING...`;
 
                     const { response, data } = await fetchApiJson(apiUrl('/api/batch-check'), {
                         method: 'POST',
@@ -1687,7 +1687,7 @@
                 const labelPrefix = viewLabel ? `${viewLabel} ` : '';
 
                 // --- BASIC ---
-                progressLabel.textContent = `${labelPrefix}BASIC SCAN 実行中...`;
+                progressLabel.textContent = `${labelPrefix}BASIC SCANNING ...`;
                 renderSinglePhases(phaseOffset + 1);
                 const tBasic = startPhaseTimer(phaseOffset);
                 await check(url, { viewportPreset });
@@ -1715,7 +1715,7 @@
                 let localPhaseIndex = 1;
                 if (doDeep && snapshot.basic) {
                     const deepPhase = phaseOffset + localPhaseIndex;
-                    progressLabel.textContent = `${labelPrefix}DEEP SCAN 実行中（2〜4分かかります）...`;
+                    progressLabel.textContent = `${labelPrefix}DEEP SCANNING（2〜4分かかります）...`;
                     renderSinglePhases(deepPhase + 1);
                     const tDeep = startPhaseTimer(deepPhase);
                     try {
@@ -1748,7 +1748,7 @@
                 // --- MULTI ---
                 if (doMulti && snapshot.basic) {
                     const multiPhase = phaseOffset + localPhaseIndex;
-                    progressLabel.textContent = `${labelPrefix}MULTI SCAN 実行中...`;
+                    progressLabel.textContent = `${labelPrefix}MULTI SCANNING...`;
                     renderSinglePhases(multiPhase + 1);
                     const tMulti = startPhaseTimer(multiPhase);
                     try {
@@ -2569,7 +2569,7 @@
             if (!lastResults) { alert('先にチェックを実行してください'); return; }
             const btn = $('reportBtn');
             btn.disabled = true;
-            btn.textContent = 'Export中...';
+            btn.textContent = 'Exporting...';
             try {
                 const baseUrl = lastResults.url;
                 const timestamp = lastResults.timestamp || new Date().toISOString();
@@ -2607,7 +2607,7 @@
                 alert('GoogleSheetExportエラー: ' + e.message);
             } finally {
                 btn.disabled = false;
-                btn.textContent = 'Export to GoogleSheet';
+                btn.textContent = 'GoogleSheet';
             }
         }
 
@@ -2616,7 +2616,7 @@
             if (batchResultsData.length === 0) return;
             const btn = $('batchReportBtn');
             btn.disabled = true;
-            btn.textContent = 'Export中...';
+            btn.textContent = 'Exporting...';
             try {
                 const pages = [];
                 const hasMobile = batchMobileResultsData.length > 0;
@@ -2656,7 +2656,7 @@
                 alert('GoogleSheetExportエラー: ' + e.message);
             } finally {
                 btn.disabled = false;
-                btn.textContent = 'Export to GoogleSheet';
+                btn.textContent = 'GoogleSheet';
             }
         }
 
@@ -2683,11 +2683,11 @@
 
             btn.disabled = true;
             spinner.style.display = 'inline-block';
-            btnText.textContent = '検査中...';
+            btnText.textContent = 'TESTING...';
             if (!silent) {
                 status.style.display = 'block';
                 const modeLabel = sessionAAABeta ? 'A/AA/AAA（β）' : 'A/AA';
-                status.textContent = `DEEP SCAN実行中（${modeLabel}、2〜4分かかります）...`;
+                status.textContent = `DEEP SCANNING（${modeLabel}、2〜4分かかります）...`;
             }
             if (resultsEl) resultsEl.innerHTML = '';
 
