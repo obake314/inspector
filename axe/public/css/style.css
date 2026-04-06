@@ -98,6 +98,38 @@ h1 {
 .section-right-btn{
   display: flex;
 }
+.mode-toggle .section-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  justify-content: space-between;
+}
+.viewport-mode {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.viewport-mode-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--navy-500);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-right: 4px;
+}
+.viewport-mode-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--navy-600);
+  font-size: 14px;
+  white-space: nowrap;
+}
+.viewport-mode-option input {
+  width: 16px;
+  height: 16px;
+}
 
 .level-select-btn {
   background: var(--navy-100);
@@ -303,6 +335,28 @@ h1 {
   letter-spacing: 0.05em;
   margin-top: 4px;
   background: var(--navy-200);
+}
+#scanScoreBlocks {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-bottom: 8px;
+}
+.scoretable-wrap {
+  border: 1px solid var(--navy-200);
+  background: #fff;
+}
+.scoretable-title {
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--navy-700);
+  background: var(--navy-100);
+  border-bottom: 1px solid var(--navy-200);
+}
+.scoretable {
+  overflow-x: auto;
 }
 
 .scoretable thead th{
@@ -1203,6 +1257,14 @@ footer a:hover {
   color: #dc2626;
 }
 @media (max-width: 768px) {
+  .mode-toggle .section-right {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .viewport-mode {
+    gap: 10px;
+  }
   .url-form {
     flex-direction: column;
   }

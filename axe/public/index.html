@@ -79,9 +79,26 @@
         <div class="input-section">
             <div class="section-column mode-toggle" id="modeToggle">
                 <span class="section-headline">チェック方式</span>
-                <div class="section-right section-right-btn">
-                    <button type="button" class="mode-btn active" data-mode="single">単一チェック</button>
-                    <button type="button" class="mode-btn" data-mode="batch">一括チェック</button>
+                <div class="section-right">
+                    <div class="section-right-btn">
+                        <button type="button" class="mode-btn active" data-mode="single">単一チェック</button>
+                        <button type="button" class="mode-btn" data-mode="batch">一括チェック</button>
+                    </div>
+                    <div class="viewport-mode" id="viewportModeWrap">
+                        <span class="viewport-mode-title">ビュー</span>
+                        <label class="viewport-mode-option">
+                            <input type="radio" name="viewportMode" value="desktop" id="viewportModeDesktop" checked>
+                            <span>PCのみ</span>
+                        </label>
+                        <label class="viewport-mode-option">
+                            <input type="radio" name="viewportMode" value="mobile" id="viewportModeMobile">
+                            <span>SPのみ</span>
+                        </label>
+                        <label class="viewport-mode-option">
+                            <input type="radio" name="viewportMode" value="both" id="viewportModeBoth">
+                            <span>PC+SP</span>
+                        </label>
+                    </div>
                 </div>
             </div>
             <div class="level-select section-column">
@@ -217,24 +234,50 @@
             <div id="batchDetailArea"></div>
         </div>
         <div class="results" id="results">
-            <!-- スコアサマリーテーブル -->
-            <div class="scoretable" id="scanScoreTable">
-                <table>
-                    <thead>
-                        <tr>
-                            <th class="label">SCAN</th>
-                            <th class="label-all"><span>全項目数</span><br>スコア</th>
-                            <th class="label-item">緊急</th>
-                            <th class="label-item">重大</th>
-                            <th class="label-item">中程度</th>
-                            <th class="label-item">軽微</th>
-                            <th class="label-item">合格</th>
-                            <th class="label-item">該当なし</th>
-                            <th class="label-item">未検証</th>
-                        </tr>
-                    </thead>
-                    <tbody id="scanScoreBody"></tbody>
-                </table>
+            <!-- スコアサマリーテーブル（PC/SP） -->
+            <div id="scanScoreBlocks">
+                <div class="scoretable-wrap" id="scoreBlockDesktop">
+                    <div class="scoretable-title">PC VIEW</div>
+                    <div class="scoretable" id="scanScoreTable">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th class="label">SCAN</th>
+                                    <th class="label-all"><span>全項目数</span><br>スコア</th>
+                                    <th class="label-item">緊急</th>
+                                    <th class="label-item">重大</th>
+                                    <th class="label-item">中程度</th>
+                                    <th class="label-item">軽微</th>
+                                    <th class="label-item">合格</th>
+                                    <th class="label-item">該当なし</th>
+                                    <th class="label-item">未検証</th>
+                                </tr>
+                            </thead>
+                            <tbody id="scanScoreBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="scoretable-wrap" id="scoreBlockMobile" style="display:none;">
+                    <div class="scoretable-title">SP VIEW（iPhone SE）</div>
+                    <div class="scoretable" id="scanScoreTableMobile">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th class="label">SCAN</th>
+                                    <th class="label-all"><span>全項目数</span><br>スコア</th>
+                                    <th class="label-item">緊急</th>
+                                    <th class="label-item">重大</th>
+                                    <th class="label-item">中程度</th>
+                                    <th class="label-item">軽微</th>
+                                    <th class="label-item">合格</th>
+                                    <th class="label-item">該当なし</th>
+                                    <th class="label-item">未検証</th>
+                                </tr>
+                            </thead>
+                            <tbody id="scanScoreBodyMobile"></tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
             <div class="tabs" id="resultTabs">
                 <button class="tab active" data-tab="critical">緊急 <span class="tab-num" id="badge-critical">0</span></button>
@@ -568,6 +611,14 @@
             const data = await parseApiJson(response, apiName);
             return { response, data };
         }
+        function cloneData(obj) {
+            if (obj === null || obj === undefined) return obj;
+            return JSON.parse(JSON.stringify(obj));
+        }
+        function getViewportMode() {
+            const checked = document.querySelector('input[name="viewportMode"]:checked');
+            return checked ? checked.value : 'desktop';
+        }
 
         // --- ログイン・設定 ---
         let sessionPassword = '';
@@ -765,7 +816,7 @@
             return '';
         }
 
-        async function check(url) {
+        async function check(url, options = {}) {
             $('checkBtn').classList.add('loading'); 
             $('checkBtn').disabled = true;
             $('errorMessage').classList.remove('visible'); 
@@ -780,7 +831,12 @@
                 const { response, data } = await fetchApiJson(apiUrl('/api/check'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url, level: targetLevel, basicAuth })
+                    body: JSON.stringify({
+                        url,
+                        level: targetLevel,
+                        basicAuth,
+                        viewportPreset: options.viewportPreset || 'desktop'
+                    })
                 }, '/api/check');
                 
                 if (!response.ok || !data.success) {
@@ -821,8 +877,9 @@
         let aiResults = {};
         // 高精度検査結果を保存（単一ページ）
         let lastEnhancedResults = null;
+        let lastMobileScanSnapshot = null;
 
-        async function runAIEvaluation(silent = false) {
+        async function runAIEvaluation(silent = false, options = {}) {
             if (!lastResults?.url) {
                 if (!silent) alert('先にURLをチェックしてください');
                 return;
@@ -856,7 +913,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         url: lastResults.url,
-                        checkItems: filteredItems
+                        checkItems: filteredItems,
+                        viewportPreset: options.viewportPreset || 'desktop'
                     })
                 }, '/api/ai-evaluate');
 
@@ -913,6 +971,19 @@
             const bc = $('batchScanControls');
             if (sc) sc.style.display = currentMode === 'single' ? 'flex' : 'none';
             if (bc) bc.style.display = currentMode === 'batch'  ? 'flex' : 'none';
+            const viewportWrap = $('viewportModeWrap');
+            const viewportOptions = Array.from(document.querySelectorAll('input[name="viewportMode"]'));
+            if (viewportWrap && viewportOptions.length) {
+                const enabledInMode = currentMode === 'single';
+                if (!enabledInMode) {
+                    const desktopOnly = $('viewportModeDesktop');
+                    if (desktopOnly) desktopOnly.checked = true;
+                }
+                viewportOptions.forEach(opt => { opt.disabled = !enabledInMode || scanExecuted; });
+                viewportWrap.style.opacity = enabledInMode ? '' : '0.4';
+                viewportWrap.style.pointerEvents = enabledInMode ? '' : 'none';
+                viewportWrap.title = enabledInMode ? '' : 'ビュー選択は単一チェックで利用できます';
+            }
         }
         modeButtons.forEach(btn => btn.addEventListener('click', () => {
             if (scanExecuted) return;
@@ -937,6 +1008,9 @@
                 const el = $(id);
                 if (el) { el.style.opacity = '0.4'; el.style.pointerEvents = 'none'; }
             });
+            document.querySelectorAll('input[name="viewportMode"]').forEach(el => { el.disabled = true; });
+            const viewportWrap = $('viewportModeWrap');
+            if (viewportWrap) { viewportWrap.style.opacity = '0.4'; viewportWrap.style.pointerEvents = 'none'; }
         }
 
         // スキャン結果をすべてリセットして再検査可能な状態に戻す
@@ -950,6 +1024,7 @@
             batchNavConsistency = null;
             batchEnhancedResults = {};
             batchAIResults = {};
+            lastMobileScanSnapshot = null;
             scanExecuted = false;
 
             // --- UI非表示 ---
@@ -961,6 +1036,14 @@
             const bar = $('navConsistencyBar');
             if (bar) bar.remove();
             $('scanScoreTable').style.display = 'none';
+            const desktopBody = $('scanScoreBody');
+            if (desktopBody) desktopBody.innerHTML = '';
+            const desktopBlock = $('scoreBlockDesktop');
+            if (desktopBlock) desktopBlock.style.display = 'block';
+            $('scanScoreTableMobile').style.display = 'none';
+            $('scoreBlockMobile').style.display = 'none';
+            const mobileBody = $('scanScoreBodyMobile');
+            if (mobileBody) mobileBody.innerHTML = '';
 
             // --- タブ・リストクリア ---
             ['critical','serious','moderate','minor','pass','na','unverified'].forEach(k => {
@@ -976,12 +1059,14 @@
             document.querySelectorAll('.level-select-btn').forEach(unlock);
             unlock($('optionsSection'));
             ['deepScanLabel','multiScanLabel','batchDeepLabel','batchAILabel'].forEach(id => unlock($(id)));
+            unlock($('viewportModeWrap'));
             // チェックボックスはGemini設定状態に応じて再判定
             ['deepScanOpt','batchEnhancedOpt'].forEach(id => {
                 const el = $(id);
                 if (el) { el.disabled = false; el.checked = true; }
             });
             checkSheetsStatusFn(); // Gemini/Sheets状態を再チェックしてMULTI等を適切に有効化
+            setMode(currentMode);
         }
 
         // 初期表示を明示（初回ロード時に single / batch の表示崩れを防ぐ）
@@ -1111,6 +1196,12 @@
 
         window.showBatchDetail = function(idx) {
             renderBatchNav(idx);
+            const mobileBlock = $('scoreBlockMobile');
+            if (mobileBlock) mobileBlock.style.display = 'none';
+            const mobileBody = $('scanScoreBodyMobile');
+            if (mobileBody) mobileBody.innerHTML = '';
+            const mobileTable = $('scanScoreTableMobile');
+            if (mobileTable) mobileTable.style.display = 'none';
             const r = batchResultsData[idx];
             if (!r.success) {
                 $('batchDetailArea').innerHTML = `<div class="error-message visible"><h4>エラー</h4><p>${r.url}: ${r.error}</p></div>`;
@@ -1188,6 +1279,7 @@
                 const basicUser = $('basicUser')?.value?.trim() || '';
                 const basicPass = $('basicPass')?.value || '';
                 const basicAuth = (basicUser && basicPass) ? { user: basicUser, pass: basicPass } : null;
+                const viewportPreset = 'desktop';
 
                 // Phase 1: axe-core — animate while waiting
                 let progressVal = 0;
@@ -1201,7 +1293,7 @@
                 const { response, data } = await fetchApiJson(apiUrl('/api/batch-check'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ urls: raw, level: targetLevel, basicAuth })
+                    body: JSON.stringify({ urls: raw, level: targetLevel, basicAuth, viewportPreset })
                 }, '/api/batch-check');
 
                 clearInterval(progressTimer);
@@ -1236,7 +1328,7 @@
                             const { response: er, data: ed } = await fetchApiJson(apiUrl('/api/enhanced-check'), {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ url: successUrls[i], includeAAA: sessionAAABeta, basicAuth })
+                                body: JSON.stringify({ url: successUrls[i], includeAAA: sessionAAABeta, basicAuth, viewportPreset })
                             }, '/api/enhanced-check');
                             if (er.ok) batchEnhancedResults[successUrls[i]] = ed.results;
                         } catch (e) {}
@@ -1260,7 +1352,7 @@
                             const { response: ar, data: ad } = await fetchApiJson(apiUrl('/api/ai-evaluate'), {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ url: successUrls[i], checkItems: filteredItems })
+                                body: JSON.stringify({ url: successUrls[i], checkItems: filteredItems, viewportPreset })
                             }, '/api/ai-evaluate');
                             if (ar.ok) {
                                 const processed = {};
@@ -1303,12 +1395,17 @@
             lockScanUI();
             const doDeep = $('deepScanOpt').checked;
             const doMulti = $('multiScanOpt').checked;
+            const viewportMode = getViewportMode();
+            const runDesktop = viewportMode !== 'mobile';
+            const runMobile = viewportMode !== 'desktop';
+            const viewCount = (runDesktop ? 1 : 0) + (runMobile ? 1 : 0);
             const btn = $('runScanBtn');
             btn.classList.add('loading');
             btn.disabled = true;
 
             // --- 進捗インジケーター ---
-            const totalPhases = 1 + (doDeep ? 1 : 0) + (doMulti ? 1 : 0);
+            const phasesPerView = 1 + (doDeep ? 1 : 0) + (doMulti ? 1 : 0);
+            const totalPhases = phasesPerView * viewCount;
             const progress      = $('singleProgress');
             const progressFill  = $('singleProgressFill');
             const progressLabel = $('singleProgressLabel');
@@ -1319,18 +1416,28 @@
             $('enhancedStatus').style.display = 'none';
             $('aiStatus').style.display = 'none';
 
+            const phaseLabels = [];
+            const pushPhaseLabels = (prefix) => {
+                phaseLabels.push(prefix ? `${prefix} BASIC` : 'BASIC');
+                if (doDeep) phaseLabels.push(prefix ? `${prefix} DEEP` : 'DEEP');
+                if (doMulti) phaseLabels.push(prefix ? `${prefix} MULTI` : 'MULTI');
+            };
+            if (runDesktop && runMobile) {
+                pushPhaseLabels('PC');
+                pushPhaseLabels('SP');
+            } else {
+                pushPhaseLabels('');
+            }
+
             function renderSinglePhases(activePhase) {
-                let pid = 1;
-                const phases = [{ id: pid++, label: 'BASIC' }];
-                if (doDeep)  phases.push({ id: pid++, label: 'DEEP' });
-                if (doMulti) phases.push({ id: pid++, label: 'MULTI' });
-                phaseIndicator.innerHTML = phases.map(p => {
-                    const done   = p.id < activePhase;
-                    const active = p.id === activePhase;
+                phaseIndicator.innerHTML = phaseLabels.map((label, idx) => {
+                    const phaseId = idx + 1;
+                    const done   = phaseId < activePhase;
+                    const active = phaseId === activePhase;
                     const color  = done ? '#16a34a' : active ? '#FFFFFF' : 'var(--navy-400)';
                     const bg     = done ? '#dcfce7' : active ? 'var(--navy-900)' : 'var(--navy-100)';
                     const prefix = done ? '✓ ' : active ? '▶ ' : '';
-                    return `<span style="padding:2px 8px;background:${bg};color:${color};font-weight:${active?'600':'400'};white-space:nowrap">${prefix}${p.label}</span>`;
+                    return `<span style="padding:2px 8px;background:${bg};color:${color};font-weight:${active?'600':'400'};white-space:nowrap">${prefix}${label}</span>`;
                 }).join('');
             }
 
@@ -1349,64 +1456,169 @@
                 return t;
             }
 
+            async function runViewportPipeline(viewLabel, viewportPreset, phaseOffset, scoreTableIds) {
+                const snapshot = {
+                    viewportPreset,
+                    basic: null,
+                    deep: null,
+                    multi: null
+                };
+                const labelPrefix = viewLabel ? `${viewLabel} ` : '';
+
+                // --- BASIC ---
+                progressLabel.textContent = `${labelPrefix}BASIC SCAN 実行中...`;
+                renderSinglePhases(phaseOffset + 1);
+                const tBasic = startPhaseTimer(phaseOffset);
+                await check(url, { viewportPreset });
+                clearInterval(tBasic);
+                setSinglePhaseProgress(phaseOffset, 1);
+                snapshot.basic = cloneData(lastResults);
+
+                renderScanScoreTable(
+                    computeBasicScore(snapshot.basic),
+                    null,
+                    null,
+                    doDeep,
+                    doMulti,
+                    {
+                        ...scoreTableIds,
+                        state: {
+                            basicResults: snapshot.basic,
+                            deepResults: null,
+                            multiAiData: null
+                        }
+                    }
+                );
+
+                // --- DEEP ---
+                let localPhaseIndex = 1;
+                if (doDeep && snapshot.basic) {
+                    const deepPhase = phaseOffset + localPhaseIndex;
+                    progressLabel.textContent = `${labelPrefix}DEEP SCAN 実行中（2〜4分かかります）...`;
+                    renderSinglePhases(deepPhase + 1);
+                    const tDeep = startPhaseTimer(deepPhase);
+                    try {
+                        await runEnhancedCheck(true, { viewportPreset });
+                        clearInterval(tDeep);
+                        setSinglePhaseProgress(deepPhase, 1);
+                        snapshot.deep = cloneData(lastEnhancedResults);
+                        renderScanScoreTable(
+                            computeBasicScore(snapshot.basic),
+                            computeDeepScore(snapshot.deep),
+                            null,
+                            true,
+                            doMulti,
+                            {
+                                ...scoreTableIds,
+                                state: {
+                                    basicResults: snapshot.basic,
+                                    deepResults: snapshot.deep,
+                                    multiAiData: null
+                                }
+                            }
+                        );
+                    } catch (e) {
+                        clearInterval(tDeep);
+                        progressLabel.textContent = `${labelPrefix}DEEP SCAN エラー: ${e.name === 'AbortError' ? 'タイムアウト（9分超過）' : e.message}`;
+                    }
+                    localPhaseIndex++;
+                }
+
+                // --- MULTI ---
+                if (doMulti && snapshot.basic) {
+                    const multiPhase = phaseOffset + localPhaseIndex;
+                    progressLabel.textContent = `${labelPrefix}MULTI SCAN 実行中...`;
+                    renderSinglePhases(multiPhase + 1);
+                    const tMulti = startPhaseTimer(multiPhase);
+                    try {
+                        await runAIEvaluation(true, { viewportPreset });
+                        clearInterval(tMulti);
+                        setSinglePhaseProgress(multiPhase, 1);
+                        snapshot.multi = cloneData(aiResults);
+                        renderScanScoreTable(
+                            computeBasicScore(snapshot.basic),
+                            doDeep ? computeDeepScore(snapshot.deep) : null,
+                            computeMultiScore(snapshot.multi),
+                            doDeep,
+                            true,
+                            {
+                                ...scoreTableIds,
+                                state: {
+                                    basicResults: snapshot.basic,
+                                    deepResults: doDeep ? snapshot.deep : null,
+                                    multiAiData: snapshot.multi
+                                }
+                            }
+                        );
+                    } catch (e) {
+                        clearInterval(tMulti);
+                        progressLabel.textContent = `${labelPrefix}MULTI SCAN エラー: ${e.message}`;
+                    }
+                }
+                return snapshot;
+            }
+
             try {
-                // --- Phase 1: BASIC ---
-                progressLabel.textContent = 'BASIC SCAN 実行中...';
-                renderSinglePhases(1);
-                const t1 = startPhaseTimer(0);
-                await check(url);
-                clearInterval(t1);
-                setSinglePhaseProgress(0, 1);
+                const desktopTableIds = {
+                    scoreBodyId: 'scanScoreBody',
+                    scoreTableId: 'scanScoreTable',
+                    scoreBlockId: 'scoreBlockDesktop'
+                };
+                const mobileTableIds = {
+                    scoreBodyId: 'scanScoreBodyMobile',
+                    scoreTableId: 'scanScoreTableMobile',
+                    scoreBlockId: 'scoreBlockMobile'
+                };
 
-                if (lastResults) {
-                    renderScanScoreTable(computeBasicScore(lastResults), null, null, doDeep, doMulti);
+                const desktopBody = $('scanScoreBody');
+                if (desktopBody) desktopBody.innerHTML = '';
+                const desktopTable = $('scanScoreTable');
+                if (desktopTable) desktopTable.style.display = 'none';
+                const desktopBlock = $('scoreBlockDesktop');
+                if (desktopBlock) desktopBlock.style.display = 'block';
+
+                const mobileBody = $('scanScoreBodyMobile');
+                const mobileTable = $('scanScoreTableMobile');
+                const mobileBlock = $('scoreBlockMobile');
+                if (mobileBody) mobileBody.innerHTML = '';
+                if (mobileTable) mobileTable.style.display = 'none';
+                if (mobileBlock) mobileBlock.style.display = runMobile ? 'block' : 'none';
+                if (desktopBlock) desktopBlock.style.display = runDesktop ? 'block' : 'none';
+
+                let desktopSnapshot = null;
+                if (runDesktop) {
+                    desktopSnapshot = await runViewportPipeline(
+                        'PC VIEW',
+                        'desktop',
+                        0,
+                        desktopTableIds
+                    );
                 }
 
-                // --- Phase 2: DEEP ---
-                if (doDeep && lastResults) {
-                    progressLabel.textContent = 'DEEP SCAN 実行中（2〜4分かかります）...';
-                    renderSinglePhases(2);
-                    const t2 = startPhaseTimer(1);
-                    try {
-                        await runEnhancedCheck(true);
-                        clearInterval(t2);
-                        setSinglePhaseProgress(1, 1);
-                        renderScanScoreTable(
-                            computeBasicScore(lastResults),
-                            computeDeepScore(lastEnhancedResults),
-                            null, true, doMulti
-                        );
-                        renderAllTabs();
-                    } catch (e) {
-                        clearInterval(t2);
-                        progressLabel.textContent = `DEEP SCAN エラー: ${e.name === 'AbortError' ? 'タイムアウト（9分超過）' : e.message}`;
-                    }
+                let mobileSnapshot = null;
+                if (runMobile) {
+                    const mobileOffset = runDesktop ? phasesPerView : 0;
+                    mobileSnapshot = await runViewportPipeline(
+                        'SP VIEW',
+                        'iphone-se',
+                        mobileOffset,
+                        mobileTableIds
+                    );
                 }
 
-                // --- Phase 3: MULTI ---
-                if (doMulti && lastResults) {
-                    const multiPhaseIdx = (doDeep ? 2 : 1);
-                    progressLabel.textContent = 'MULTI SCAN 実行中...';
-                    renderSinglePhases(multiPhaseIdx + 1);
-                    const t3 = startPhaseTimer(multiPhaseIdx);
-                    try {
-                        await runAIEvaluation(true);
-                        clearInterval(t3);
-                        setSinglePhaseProgress(multiPhaseIdx, 1);
-                        renderScanScoreTable(
-                            computeBasicScore(lastResults),
-                            doDeep ? computeDeepScore(lastEnhancedResults) : null,
-                            computeMultiScore(aiResults),
-                            doDeep, true
-                        );
-                        renderAllTabs();
-                    } catch (e) {
-                        clearInterval(t3);
-                        progressLabel.textContent = `MULTI SCAN エラー: ${e.message}`;
-                    }
-                }
+                // タブ・エクスポートは PC優先、SPのみ選択時は SP を主表示として使用
+                const primarySnapshot = runDesktop ? desktopSnapshot : mobileSnapshot;
+                lastResults = cloneData(primarySnapshot?.basic || null);
+                lastEnhancedResults = cloneData(primarySnapshot?.deep || null);
+                aiResults = primarySnapshot?.multi ? cloneData(primarySnapshot.multi) : {};
+                lastMobileScanSnapshot = runMobile ? cloneData(mobileSnapshot) : null;
 
-                progressLabel.textContent = '検査完了';
+                renderAllTabs();
+                $('results').classList.add('visible');
+                $('exportArea').classList.add('visible');
+                if (runDesktop && runMobile) progressLabel.textContent = 'PC/SP 検査完了';
+                else if (runDesktop) progressLabel.textContent = 'PC 検査完了';
+                else progressLabel.textContent = 'SP 検査完了';
                 renderSinglePhases(totalPhases + 1); // 全フェーズ完了
             } finally {
                 btn.classList.remove('loading');
@@ -1877,13 +2089,20 @@
             });
         }
 
-        function renderScanScoreTable(basicScore, deepScore, multiScore, deepEnabled, multiEnabled) {
+        function renderScanScoreTable(basicScore, deepScore, multiScore, deepEnabled, multiEnabled, options = {}) {
             const DASH = '<span style="color:var(--navy-400);;">—</span>';
+            const scoreBodyId = options.scoreBodyId || 'scanScoreBody';
+            const scoreTableId = options.scoreTableId || 'scanScoreTable';
+            const scoreBlockId = options.scoreBlockId || null;
+            const state = options.state || {};
+            const basicResults = state.basicResults !== undefined ? state.basicResults : lastResults;
+            const deepResults = state.deepResults !== undefined ? state.deepResults : (deepEnabled ? lastEnhancedResults : null);
+            const multiAiData = state.multiAiData !== undefined ? state.multiAiData : (multiEnabled && Object.keys(aiResults).length > 0 ? aiResults : null);
 
             const totalScore = computeTotalScore(
-                lastResults,
-                deepEnabled && lastEnhancedResults ? lastEnhancedResults : null,
-                multiEnabled && Object.keys(aiResults).length > 0 ? aiResults : null
+                basicResults,
+                deepEnabled ? deepResults : null,
+                multiEnabled ? multiAiData : null
             );
 
             // WCAGレベルごとの固定項目数で正規化
@@ -1950,13 +2169,20 @@
                 </tr>`;
             }
 
-            $('scanScoreBody').innerHTML =
+            const body = $(scoreBodyId);
+            if (!body) return;
+            body.innerHTML =
                 row('BASIC', '#3581B8', nb, true, false) +
                 row('DEEP',  '#304C89', nd, deepEnabled, false) +
                 row('MULTI', '#0D7A5F', nm, multiEnabled, false) +
                 row('TOTAL', 'var(--navy-900)', normalize(totalScore), true, true);
 
-            $('scanScoreTable').style.display = 'block';
+            const table = $(scoreTableId);
+            if (table) table.style.display = 'block';
+            if (scoreBlockId) {
+                const block = $(scoreBlockId);
+                if (block) block.style.display = 'block';
+            }
         }
 
         /**
@@ -2167,7 +2393,7 @@
         // ============================================================
         let sessionAAABeta = false; // 設定パネルから読み込んだ状態を保持
 
-        async function runEnhancedCheck(silent = false) {
+        async function runEnhancedCheck(silent = false, options = {}) {
             const url = document.getElementById('urlInput').value.trim();
             if (!url) { alert('URLを入力してください'); return; }
 
@@ -2198,7 +2424,11 @@
             try {
                 const basicUser = document.getElementById('basicUser').value.trim();
                 const basicPass = document.getElementById('basicPass').value.trim();
-                const body = { url, includeAAA: sessionAAABeta };
+                const body = {
+                    url,
+                    includeAAA: sessionAAABeta,
+                    viewportPreset: options.viewportPreset || 'desktop'
+                };
                 if (basicUser && basicPass) body.basicAuth = { user: basicUser, pass: basicPass };
 
                 const deepController = new AbortController();

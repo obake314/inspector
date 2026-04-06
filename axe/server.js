@@ -247,6 +247,21 @@ async function getBrowser() {
   return await puppeteer.launch(options);
 }
 
+function normalizeViewportPreset(raw) {
+  return String(raw || 'desktop').toLowerCase() === 'iphone-se' ? 'iphone-se' : 'desktop';
+}
+
+async function applyViewportPreset(page, presetRaw) {
+  const preset = normalizeViewportPreset(presetRaw);
+  if (preset === 'iphone-se') {
+    const device = puppeteer.KnownDevices['iPhone SE'];
+    await page.emulate(device);
+    return preset;
+  }
+  await page.setViewport({ width: 1280, height: 800 });
+  return 'desktop';
+}
+
 /**
  * Gemini 2.5 APIを呼び出す関数
  */
@@ -383,12 +398,14 @@ app.post('/api/settings-save', (req, res) => {
  * アクセシビリティチェック（axe-core実行）API
  */
 app.post('/api/check', async (req, res) => {
-  const { url, level, basicAuth } = req.body; // basicAuth: { user, pass }
+  const { url, level, basicAuth, viewportPreset } = req.body; // basicAuth: { user, pass }
   let browser;
   try {
-    console.log(`[Axe] 診断開始: ${url} (Level ${level})`);
+    const preset = normalizeViewportPreset(viewportPreset);
+    console.log(`[Axe] 診断開始: ${url} (Level ${level}, View ${preset})`);
     browser = await getBrowser();
     const page = await browser.newPage();
+    await applyViewportPreset(page, preset);
     
     // Basic認証がある場合
     if (basicAuth && basicAuth.user && basicAuth.pass) {
@@ -417,7 +434,7 @@ app.post('/api/check', async (req, res) => {
     const results = await builder.analyze();
     await page.close();
     
-    res.json({ success: true, results });
+    res.json({ success: true, viewportPreset: preset, results });
 
   } catch (error) {
     console.error('Scan Error:', error);
@@ -431,7 +448,8 @@ app.post('/api/check', async (req, res) => {
  * バッチアクセシビリティチェック（最大10URL同時検査）API
  */
 app.post('/api/batch-check', async (req, res) => {
-  const { urls, level, basicAuth } = req.body; // urls: string[]
+  const { urls, level, basicAuth, viewportPreset } = req.body; // urls: string[]
+  const preset = normalizeViewportPreset(viewportPreset);
   if (!Array.isArray(urls) || urls.length === 0) {
     return res.status(400).json({ error: 'URLの配列を指定してください' });
   }
@@ -441,7 +459,7 @@ app.post('/api/batch-check', async (req, res) => {
 
   let browser;
   try {
-    console.log(`[Axe Batch] ${urls.length}件の診断開始 (Level ${level})`);
+    console.log(`[Axe Batch] ${urls.length}件の診断開始 (Level ${level}, View ${preset})`);
     browser = await getBrowser();
 
     const tags = ['wcag2a', 'wcag21a', 'wcag22a'];
@@ -457,6 +475,7 @@ app.post('/api/batch-check', async (req, res) => {
       let page;
       try {
         page = await browser.newPage();
+        await applyViewportPreset(page, preset);
         if (basicAuth && basicAuth.user && basicAuth.pass) {
           await page.authenticate({ username: basicAuth.user, password: basicAuth.pass });
         }
@@ -2277,7 +2296,7 @@ async function check_aria_attributes(page) {
 const AAA_SC_LIST = new Set(['2.3.3','2.4.12','2.4.13','2.1.3','3.3.9','2.3.2','2.2.3','2.2.4','2.2.5','2.2.6','2.4.6','2.4.8','2.4.9','2.4.10','1.4.6','1.4.7','1.4.8','1.4.9','2.5.5','2.5.6','3.1.3','3.1.4','3.1.5','3.1.6','3.2.5','3.3.5','3.3.6','3.3.9']);
 
 app.post('/api/enhanced-check', async (req, res) => {
-  const { url, basicAuth, includeAAA } = req.body;
+  const { url, basicAuth, includeAAA, viewportPreset } = req.body;
   if (!url) return res.status(400).json({ error: 'URLを指定してください' });
 
   // リクエスト全体に8分のタイムアウトを設定
@@ -2292,10 +2311,11 @@ app.post('/api/enhanced-check', async (req, res) => {
 
   let browser;
   try {
-    console.log(`[Enhanced] Phase 1 検査開始: ${url}`);
+    const preset = normalizeViewportPreset(viewportPreset);
+    console.log(`[Enhanced] Phase 1 検査開始: ${url} (View ${preset})`);
     browser = await getBrowser();
     const page = await browser.newPage();
-    await page.setViewport({ width: 1280, height: 800 });
+    await applyViewportPreset(page, preset);
 
     if (basicAuth && basicAuth.user && basicAuth.pass) {
       await page.authenticate({ username: basicAuth.user, password: basicAuth.pass });
@@ -2315,7 +2335,7 @@ app.post('/api/enhanced-check', async (req, res) => {
     // 1-1
     results.push(await withTimeout(() => check_1_4_10_reflow(page)));
     // viewport リセット確認
-    await page.setViewport({ width: 1280, height: 800 }).catch(() => {});
+    await applyViewportPreset(page, preset).catch(() => {});
 
     // 1-2
     results.push(await withTimeout(() => check_2_5_8_target_size(page)));
@@ -2456,7 +2476,7 @@ app.post('/api/enhanced-check', async (req, res) => {
       : results.filter(r => !AAA_SC_LIST.has(r.sc));
 
     console.log(`[Enhanced] 完了: ${finalResults.length}基準を検査 (includeAAA:${!!includeAAA})`);
-    if (!handlerTimedOut) res.json({ success: true, url, results: finalResults, includeAAA: !!includeAAA, checkedAt: new Date().toISOString() });
+    if (!handlerTimedOut) res.json({ success: true, url, viewportPreset: preset, results: finalResults, includeAAA: !!includeAAA, checkedAt: new Date().toISOString() });
 
   } catch (error) {
     console.error('[Enhanced] Error:', error);
@@ -2471,7 +2491,7 @@ app.post('/api/enhanced-check', async (req, res) => {
  * AI評価 API
  */
 app.post('/api/ai-evaluate', async (req, res) => {
-  const { url, checkItems } = req.body;
+  const { url, checkItems, viewportPreset } = req.body;
   const safeCheckItems = Array.isArray(checkItems) ? checkItems : [];
   const fallbackSuggestion = 'Gemini API設定後に再実行してください';
   const makeFallbackResults = (reason) => {
@@ -2505,7 +2525,8 @@ app.post('/api/ai-evaluate', async (req, res) => {
   let browser;
 
   try {
-    console.log(`[${GEMINI_MODEL}] AI評価開始: ${url}`);
+    const preset = normalizeViewportPreset(viewportPreset);
+    console.log(`[${GEMINI_MODEL}] AI評価開始: ${url} (View ${preset})`);
     browser = await getBrowser();
     const page = await browser.newPage();
     
@@ -2513,7 +2534,7 @@ app.post('/api/ai-evaluate', async (req, res) => {
     page.setDefaultNavigationTimeout(90000);
     page.setDefaultTimeout(90000);
     
-    await page.setViewport({ width: 1280, height: 800 });
+    await applyViewportPreset(page, preset);
     
     // ページ読み込み（リトライ付き）
     let loaded = false;
