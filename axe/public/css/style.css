@@ -1008,7 +1008,7 @@ h1 {
 }
 .batch-textarea {
   width: 100%;
-  height: calc(10em * 1.8);
+  height: calc(11em * 1.8);
   background: var(--navy-200);
   border: 1px solid var(--navy-400);
   padding: var(--space-m);
