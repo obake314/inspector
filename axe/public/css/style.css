@@ -1140,7 +1140,7 @@ footer a:hover {
   display: none;
 }
 .login-box {
-  background: var(--color-white)
+  background: var(--color-white);
   border: 1px solid var(--navy-200);
   padding: 40px;
   width: 100%;
@@ -1173,7 +1173,7 @@ footer a:hover {
 .login-box button {
   width: 100%;
   background: var(--navy-700);
-  color: var(--color-white)
+  color: var(--color-white);
   border: none;
   padding: var(--space-m);
   font-size: var(--font-size-m);
@@ -1206,7 +1206,7 @@ footer a:hover {
   display: none;
 }
 .settings-box {
-  background: var(--color-white)
+  background: var(--color-white);
   border: 1px solid var(--navy-200);
   padding: var(--space-l);
   width: 100%;
@@ -1251,7 +1251,7 @@ footer a:hover {
 .settings-group label .beta{
   font-size:11px;
   background:var(--navy-400);
-  color:var(--color-white)
+  color:var(--color-white);
   padding:1px 7px;
   font-weight:600;
 }
@@ -1288,7 +1288,7 @@ footer a:hover {
 .settings-save-btn {
   width: 100%;
   background: var(--navy-700);
-  color: var(--color-white)
+  color: var(--color-white);
   border: none;
   padding: var(--space-m);
   font-size: var(--font-size-m);
