@@ -106,7 +106,7 @@
                 <div class="section-right section-right-btn">
                     <button type="button" class="level-select-btn" data-level="A">A</button>
                     <button type="button" class="level-select-btn active" data-level="AA">AA</button>
-                    <button type="button" style="display: none;" class="level-select-btn" data-level="AAA" id="levelBtnAAA">AAA</button>
+                    <button type="button" class="level-select-btn is-hidden" data-level="AAA" id="levelBtnAAA">AAA</button>
                 </div>
             </div>
             <div id="singleInput" class="section-column">
@@ -116,13 +116,13 @@
                         <input type="url" class="url-input" id="urlInput" placeholder="https://example.com" required >
                     </form>
                     <!-- 既存ボタンは非表示のまま内部利用 -->
-                    <div style="display:none;">
+                    <div class="hidden-controls">
                         <button type="button" id="checkBtn"><span class="btn-text"></span><div class="spinner"></div></button>
                         <button type="button" id="enhancedCheckBtn"><span id="enhancedBtnText"></span><span id="enhancedSpinner"></span></button>
                         <button type="button" id="aiEvaluateBtn"><span class="ai-btn-text"></span><span class="ai-spinner"></span></button>
                     </div>
-                    <div id="enhancedStatus" style="margin-top:8px;font-size:15px;color:var(--navy-500);display:none;"></div>
-                    <div id="aiStatus" style="margin-top:8px;font-size:15px;color:var(--navy-500);display:none;"></div>
+                    <div id="enhancedStatus" class="scan-status-text"></div>
+                    <div id="aiStatus" class="scan-status-text"></div>
                 </div>
             </div>
             <div id="batchInput" class="section-column">
@@ -188,11 +188,11 @@
                         </button>
                         <label class="scan-option" id="deepScanLabel">
                             <input type="checkbox" id="deepScanOpt" class="scan-option-checkbox" checked>
-                            <span style="color:#304C89;font-size:16px;">DEEP SCAN</span>
+                            <span class="scan-option-text scan-option-text-deep">DEEP SCAN</span>
                         </label>
                         <label class="scan-option" id="multiScanLabel">
                             <input type="checkbox" id="multiScanOpt" class="scan-option-checkbox" checked>
-                            <span style="color:#0D7A5F;font-size:16px;">MULTI SCAN</span>
+                            <span class="scan-option-text scan-option-text-multi">MULTI SCAN</span>
                         </label>
                     </div>
                     <div class="batch-progress" id="singleProgress">
@@ -202,18 +202,18 @@
                         <div class="batch-progress-track"><div class="batch-progress-fill" id="singleProgressFill"></div></div>
                         <div id="singlePhaseIndicator"></div>
                     </div>
-                    <div id="batchScanControls" class="scan-controls" style="display:none;">
+                    <div id="batchScanControls" class="scan-controls is-hidden">
                         <button type="button" class="check-btn" id="batchCheckBtn">
                             <span class="btn-text">BATCH SCAN</span>
                             <div class="spinner"></div>
                         </button>
                         <label class="scan-option" id="batchDeepLabel">
                             <input type="checkbox" id="batchEnhancedOpt" class="scan-option-checkbox" checked>
-                            <span style="color:#304C89;font-size:16px;">DEEP SCAN</span>
+                            <span class="scan-option-text scan-option-text-deep">DEEP SCAN</span>
                         </label>
                         <label class="scan-option" id="batchAILabel">
                             <input type="checkbox" id="batchAIOpt" class="scan-option-checkbox" checked>
-                            <span style="color:#0D7A5F;font-size:16px;">MULTI SCAN</span>
+                            <span class="scan-option-text scan-option-text-multi">MULTI SCAN</span>
                         </label>
                         <span class="batch-count" id="batchCount">0 / 10 URL</span>
                     </div>
@@ -274,7 +274,7 @@
                     <div class="tab-content" id="tab-na-pc"><div class="section"><div class="violation-list" id="list-na-pc"></div></div></div>
                     <div class="tab-content" id="tab-unverified-pc"><div class="section"><div class="violation-list" id="list-unverified-pc"></div></div></div>
                 </div>
-                <div class="scoretable-wrap" id="scoreBlockMobile" style="display:none;">
+                <div class="scoretable-wrap" id="scoreBlockMobile">
                     <div class="scoretable-title">SP VIEW（iPhone SE）</div>
                     <div class="scoretable" id="scanScoreTableMobile">
                         <table>
@@ -638,7 +638,10 @@
             const card = btnEl.closest('.item-card');
             card.querySelectorAll('.decision-btn').forEach(b => b.classList.remove('active-ok','active-ng','active-hold'));
             if (val) btnEl.classList.add('active-' + val);
-            card.style.borderLeftColor = val === 'ok' ? '#059669' : val === 'ng' ? '#dc2626' : val === 'hold' ? '#d97706' : '';
+            card.classList.remove('item-card-dec-ok', 'item-card-dec-ng', 'item-card-dec-hold');
+            if (val === 'ok') card.classList.add('item-card-dec-ok');
+            else if (val === 'ng') card.classList.add('item-card-dec-ng');
+            else if (val === 'hold') card.classList.add('item-card-dec-hold');
             renderAllTabs('pc');
             if (lastMobileScanSnapshot) {
                 const sp = lastMobileScanSnapshot;
@@ -870,7 +873,7 @@
                 <div class="violation-details">
                     <div class="element-list">
                         ${els.map(n => `<div class="element-item"><div class="element-target">${escapeHtml(Array.isArray(n.target) ? n.target.join(' > ') : n.target)}</div><div class="element-html">${escapeHtml((n.html || '').substring(0, 300))}${(n.html || '').length > 300 ? '...' : ''}</div></div>`).join('')}
-                        ${more > 0 ? `<div class="element-item" style="text-align:center">他${more}件</div>` : ''}
+                        ${more > 0 ? `<div class="element-item element-item-more">他${more}件</div>` : ''}
                     </div>
                     ${v.nodes[0]?.failureSummary ? `<div class="fix-suggestion"><div class="fix-suggestion-title">修正方法</div><div class="fix-suggestion-text">${escapeHtml(translateFailureSummary(v.nodes[0].failureSummary))}</div></div>` : ''}
                 </div>
@@ -1052,7 +1055,7 @@
                 });
 
                 if (!silent) {
-                    status.innerHTML = `評価完了 <span style="background: rgba(255,255,255,0.2); padding: 2px 8px; margin-left: 8px;">合格: ${passCount} / 不合格: ${failCount} / 要手動: ${manualCount} / 該当なし: ${naCount}</span>`;
+                    status.innerHTML = `評価完了 <span class="ai-status-badge">合格: ${passCount} / 不合格: ${failCount} / 要手動: ${manualCount} / 該当なし: ${naCount}</span>`;
                 }
             } catch (error) {
                 if (!silent) status.textContent = `エラー: ${error.message}`;
@@ -1218,21 +1221,19 @@
             if (!batchNavConsistency) return;
             const nc = batchNavConsistency;
             const isPas = nc.result === 'pass';
-            const badge = isPas
-                ? '<span style="color:#059669;font-weight:600;">合格</span>'
-                : '<span style="color:#dc2626;font-weight:600;">不合格</span>'; 
-            let html = `<div style="margin-top:16px;padding:12px 16px;border:1px solid ${isPas ? '#d1fae5' : '#fecaca'};background:${isPas ? '#f0fdf4' : '#fff1f2'};">
-                <div style="font-size:14px;font-weight:600;margin-bottom:6px;">SC ${nc.sc}　${nc.title}　${badge}</div>
-                <div style="font-size:13px;color:var(--navy-500);margin-bottom:8px;">比較URL: ${nc.comparedUrls.length}件</div>`;
+            const resultText = isPas ? '合格' : '不合格';
+            let html = `<div class="navc-summary ${isPas ? 'is-pass' : 'is-fail'}">
+                <div class="navc-summary-title">SC ${nc.sc}　${nc.title}　<span class="navc-pill ${isPas ? 'is-pass' : 'is-fail'}">${resultText}</span></div>
+                <div class="navc-summary-meta">比較URL: ${nc.comparedUrls.length}件</div>`;
             if (nc.issues.length === 0) {
-                html += `<div style="font-size:13px;color:#059669;">全ページでナビゲーション構造が一致しています</div>`;
+                html += `<div class="navc-summary-ok">全ページでナビゲーション構造が一致しています</div>`;
             } else {
                 html += nc.issues.map(iss => {
-                    let detail = `<div style="font-size:13px;margin-bottom:6px;padding:8px;background:white;border-left:3px solid #dc2626;">
-                        <div style="font-weight:500;">${escapeHtml(iss.message)}</div>
-                        <div style="color:#64748b;font-size:12px;margin-top:4px;">${iss.urls.map(u => escapeHtml(u)).join(' ↔ ')}</div>`;
-                    if (iss.missing && iss.missing.length > 0) detail += `<div style="color:#dc2626;font-size:12px;margin-top:2px;">消えたリンク: ${iss.missing.map(t => escapeHtml(t)).join(', ')}</div>`;
-                    if (iss.added && iss.added.length > 0) detail += `<div style="color:#d97706;font-size:12px;margin-top:2px;">追加リンク: ${iss.added.map(t => escapeHtml(t)).join(', ')}</div>`;
+                    let detail = `<div class="navc-issue">
+                        <div class="navc-issue-message">${escapeHtml(iss.message)}</div>
+                        <div class="navc-issue-urls">${iss.urls.map(u => escapeHtml(u)).join(' ↔ ')}</div>`;
+                    if (iss.missing && iss.missing.length > 0) detail += `<div class="navc-issue-missing">消えたリンク: ${iss.missing.map(t => escapeHtml(t)).join(', ')}</div>`;
+                    if (iss.added && iss.added.length > 0) detail += `<div class="navc-issue-added">追加リンク: ${iss.added.map(t => escapeHtml(t)).join(', ')}</div>`;
                     detail += `</div>`;
                     return detail;
                 }).join('');
@@ -1242,40 +1243,46 @@
         }
 
         function renderBatchSummary() {
-            const tdSt = 'padding:10px 12px;text-align:center;border:1px solid var(--navy-200);font-size:13px;';
             const rows = batchResultsData.map((r, i) => {
                 if (!r.success) {
-                    return `<tr><td style="${tdSt}text-align:left;" title="${r.url}">${r.url}</td><td colspan="8" style="${tdSt}color:#b91c1c;text-align:left;">${r.error}</td></tr>`;
+                    return `<tr>
+                        <td class="batchsum-td batchsum-url" title="${r.url}">${r.url}</td>
+                        <td colspan="8" class="batchsum-td batchsum-error">${r.error}</td>
+                    </tr>`;
                 }
                 const sc = computeBasicScore(r.results);
-                const scoreColor = sc.score >= 80 ? '#047857' : sc.score >= 50 ? '#b45309' : '#b91c1c';
-                const d = (n, col) => n > 0 ? `<span style="color:${col};font-weight:700;">${n}</span>` : `<span style="color:var(--navy-400);">-</span>`;
-                const cls = sc.critical + sc.serious > 0 ? ' class="has-violations"' : '';
-                return `<tr${cls} style="cursor:pointer;" onclick="showBatchDetail(${i})">
-                    <td style="${tdSt}text-align:left;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.url}">${r.url}</td>
-                    <td style="${tdSt}min-width:80px;line-height:1.3;"><div style="font-size:11px;color:var(--navy-400);">${sc.total}</div><div style="font-weight:700;color:${scoreColor};font-size:15px;">${sc.score ?? '-'}%</div></td>
-                    <td style="${tdSt}">${d(sc.critical,'#b91c1c')}</td>
-                    <td style="${tdSt}">${d(sc.serious,'#b91c1c')}</td>
-                    <td style="${tdSt}">${d(sc.moderate,'#b45309')}</td>
-                    <td style="${tdSt}">${d(sc.minor,'var(--navy-600)')}</td>
-                    <td style="${tdSt}">${d(sc.pass,'var(--navy-600)')}</td>
-                    <td style="${tdSt}">${d(sc.na||0,'var(--navy-400)')}</td>
-                    <td style="${tdSt}">${d(sc.unverified||0,'var(--navy-400)')}</td>
+                const scoreClass = sc.score >= 80 ? 'is-high' : sc.score >= 50 ? 'is-mid' : 'is-low';
+                const d = (n, tone) => n > 0
+                    ? `<span class="batchsum-num is-pos tone-${tone}">${n}</span>`
+                    : `<span class="batchsum-num is-zero">-</span>`;
+                const rowClass = `batchsum-row${sc.critical + sc.serious > 0 ? ' has-violations' : ''}`;
+                return `<tr class="${rowClass}" onclick="showBatchDetail(${i})">
+                    <td class="batchsum-td batchsum-url" title="${r.url}">${r.url}</td>
+                    <td class="batchsum-td batchsum-score">
+                        <div class="batchsum-total">${sc.total}</div>
+                        <div class="batchsum-score-value ${scoreClass}">${sc.score ?? '-'}%</div>
+                    </td>
+                    <td class="batchsum-td">${d(sc.critical,'critical')}</td>
+                    <td class="batchsum-td">${d(sc.serious,'serious')}</td>
+                    <td class="batchsum-td">${d(sc.moderate,'moderate')}</td>
+                    <td class="batchsum-td">${d(sc.minor,'minor')}</td>
+                    <td class="batchsum-td">${d(sc.pass,'pass')}</td>
+                    <td class="batchsum-td">${d(sc.na||0,'neutral')}</td>
+                    <td class="batchsum-td">${d(sc.unverified||0,'neutral')}</td>
                 </tr>`;
             }).join('');
 
-            const thSt = 'padding:11px 12px;text-align:center;background:var(--navy-100);font-size:12px;font-weight:600;border:1px solid var(--navy-200);text-transform:uppercase;letter-spacing:.04em;';
-            $('batchSummaryArea').innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px;background:#fff;">
+            $('batchSummaryArea').innerHTML = `<table class="batch-summary-table-generated">
                 <thead><tr>
-                    <th style="${thSt}text-align:left;">URL</th>
-                    <th style="${thSt}min-width:80px;">全項目<br><span style="font-weight:400;font-size:11px;">スコア</span></th>
-                    <th style="${thSt}color:#b91c1c;">緊急</th>
-                    <th style="${thSt}color:#b91c1c;">重大</th>
-                    <th style="${thSt}color:#b45309;">中程度</th>
-                    <th style="${thSt}color:var(--navy-600);">軽微</th>
-                    <th style="${thSt}color:var(--navy-600);">合格</th>
-                    <th style="${thSt}color:var(--navy-400);">該当なし</th>
-                    <th style="${thSt}color:var(--navy-400);">未検証</th>
+                    <th class="batchsum-th batchsum-th-url">URL</th>
+                    <th class="batchsum-th batchsum-th-score">全項目<br><span class="batchsum-th-sub">スコア</span></th>
+                    <th class="batchsum-th tone-critical">緊急</th>
+                    <th class="batchsum-th tone-serious">重大</th>
+                    <th class="batchsum-th tone-moderate">中程度</th>
+                    <th class="batchsum-th tone-minor">軽微</th>
+                    <th class="batchsum-th tone-pass">合格</th>
+                    <th class="batchsum-th tone-neutral">該当なし</th>
+                    <th class="batchsum-th tone-neutral">未検証</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>`;
@@ -1298,26 +1305,23 @@
             const nc = batchNavConsistency;
             if (!nc) return;
             const isPas = nc.result === 'pass';
-            const color = isPas ? '#059669' : '#b91c1c';
-            const bg    = isPas ? '#f0fdf4' : '#fff1f2';
-            const border= isPas ? '#bbf7d0' : '#fecaca';
             let issueHtml = '';
             if (!isPas && nc.issues && nc.issues.length > 0) {
                 issueHtml = nc.issues.map(iss =>
-                    `<div style="font-size:12px;color:var(--navy-600);margin-top:3px;padding-left:8px;border-left:2px solid ${color};">
+                    `<div class="nav-bar-issue">
                         ${escapeHtml(iss.message)}
-                        ${iss.missing && iss.missing.length ? `<span style="color:#b91c1c;"> 消えたリンク: ${iss.missing.map(t=>escapeHtml(t)).join(', ')}</span>` : ''}
-                        ${iss.added && iss.added.length ? `<span style="color:#d97706;"> 追加リンク: ${iss.added.map(t=>escapeHtml(t)).join(', ')}</span>` : ''}
+                        ${iss.missing && iss.missing.length ? `<span class="nav-bar-issue-missing"> 消えたリンク: ${iss.missing.map(t=>escapeHtml(t)).join(', ')}</span>` : ''}
+                        ${iss.added && iss.added.length ? `<span class="nav-bar-issue-added"> 追加リンク: ${iss.added.map(t=>escapeHtml(t)).join(', ')}</span>` : ''}
                     </div>`
                 ).join('');
             }
             const bar = document.createElement('div');
             bar.id = 'navConsistencyBar';
-            bar.style.cssText = `margin-bottom:12px;padding:10px 14px;background:${bg};border:1px solid ${border};font-size:13px;`;
-            bar.innerHTML = `<span style="font-weight:600;color:${color};">SC ${escapeHtml(nc.sc||'3.2.3/3.2.4')}　${escapeHtml(nc.title||'ナビゲーション一貫性')}</span>
-                <span style="margin-left:10px;color:${color};font-weight:600;">${isPas ? '合格' : '不合格'}</span>
-                <span style="margin-left:10px;color:var(--navy-500);font-size:12px;">比較URL: ${(nc.comparedUrls||[]).length}件</span>
-                ${isPas ? '<span style="margin-left:8px;font-size:12px;color:#059669;">全ページでナビゲーション構造が一致しています</span>' : issueHtml}`;
+            bar.className = `nav-bar ${isPas ? 'is-pass' : 'is-fail'}`;
+            bar.innerHTML = `<span class="nav-bar-main">SC ${escapeHtml(nc.sc||'3.2.3/3.2.4')}　${escapeHtml(nc.title||'ナビゲーション一貫性')}</span>
+                <span class="nav-bar-result">${isPas ? '合格' : '不合格'}</span>
+                <span class="nav-bar-meta">比較URL: ${(nc.comparedUrls||[]).length}件</span>
+                ${isPas ? '<span class="nav-bar-ok">全ページでナビゲーション構造が一致しています</span>' : issueHtml}`;
             const resultsEl = $('results');
             if (resultsEl) resultsEl.prepend(bar);
         }
@@ -1387,10 +1391,9 @@
                 phaseIndicator.innerHTML = phases.map(p => {
                     const done = p.id < activePhase;
                     const active = p.id === activePhase;
-                    const color = done ? '#16a34a' : active ? '#FFFFFF' : 'var(--navy-400)';
-                    const bg = done ? '#dcfce7' : active ? 'var(--navy-900)' : 'var(--navy-100)';
                     const prefix = done ? '✓ ' : active ? '▶ ' : '';
-                    return `<span style="padding:2px 8px;background:${bg};color:${color};font-weight:${active?'600':'400'};white-space:nowrap">${prefix}${p.label}</span>`;
+                    const stateClass = done ? 'is-done' : active ? 'is-active' : 'is-idle';
+                    return `<span class="phase-chip ${stateClass}">${prefix}${p.label}</span>`;
                 }).join('');
             }
 
@@ -1562,10 +1565,9 @@
                     const phaseId = idx + 1;
                     const done   = phaseId < activePhase;
                     const active = phaseId === activePhase;
-                    const color  = done ? '#16a34a' : active ? '#FFFFFF' : 'var(--navy-400)';
-                    const bg     = done ? '#dcfce7' : active ? 'var(--navy-900)' : 'var(--navy-100)';
                     const prefix = done ? '✓ ' : active ? '▶ ' : '';
-                    return `<span style="padding:2px 8px;background:${bg};color:${color};font-weight:${active?'600':'400'};white-space:nowrap">${prefix}${label}</span>`;
+                    const stateClass = done ? 'is-done' : active ? 'is-active' : 'is-idle';
+                    return `<span class="phase-chip ${stateClass}">${prefix}${label}</span>`;
                 }).join('');
             }
 
@@ -2087,13 +2089,12 @@
 
         function renderCardItem(no, src, impact, sc, level, title, summary, countText, locations, decisionKey) {
             const dec = decisionKey ? manualDecisions.get(decisionKey) : null;
-            const borderColor = dec === 'ok' ? '#059669' : dec === 'ng' ? '#dc2626' : dec === 'hold' ? '#d97706' : '';
-            const borderStyle = borderColor ? `style="border-left-color:${borderColor};"` : '';
+            const decisionClass = dec === 'ok' ? 'item-card-dec-ok' : dec === 'ng' ? 'item-card-dec-ng' : dec === 'hold' ? 'item-card-dec-hold' : '';
             const srcBadge = src ? `<span class="badge ${srcBadgeClasses[src] || ''}">${src}</span>` : '';
             const scBadge  = sc  ? `<span class="item-sc">${escapeHtml(sc)}</span>` : '';
             const lvBadge  = level ? `<span class="item-level">${escapeHtml(level)}</span>` : '';
             const locHtml  = locations && locations.length
-                ? `<div class="item-locations"><div style="font-size:11px;color:var(--navy-400);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">検出箇所</div>${locations.map(l => `<div class="location-row">${escapeHtml(String(l))}</div>`).join('')}</div>`
+                ? `<div class="item-locations"><div class="item-locations-title">検出箇所</div>${locations.map(l => `<div class="location-row">${escapeHtml(String(l))}</div>`).join('')}</div>`
                 : '';
             // 全カードにボタンを表示。decisionKey がない場合は一時キーを生成
             const dk = decisionKey || `tmp:${src||''}:${sc||''}:${no}`;
@@ -2102,13 +2103,13 @@
                     <button class="decision-btn${dec==='ng'?' active-ng':''}" onclick="setDecision('${escapeHtml(dk)}','ng',this)">NG</button>
                     <button class="decision-btn${dec==='hold'?' active-hold':''}" onclick="setDecision('${escapeHtml(dk)}','hold',this)">保留</button>
                    </div>`;
-            return `<div class="item-card" data-impact="${impact||''}" data-default-impact="${impact||'serious'}" ${borderStyle} onclick="this.classList.toggle('expanded')">
+            return `<div class="item-card ${decisionClass}" data-impact="${impact||''}" data-default-impact="${impact||'serious'}" onclick="this.classList.toggle('expanded')">
                 <div class="item-header">
                     ${srcBadge}
                     ${scBadge}${lvBadge}
                     <span class="item-title">${escapeHtml(title)}</span>
                     ${decBtns}
-                    <svg class="expand-icon" style="flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                    <svg class="expand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
                 </div>
                 ${summary ? `<div class="item-summary">${escapeHtml(summary)}</div>` : ''}
                 ${countText ? `<div class="item-count">${escapeHtml(countText)}</div>` : ''}
@@ -2234,7 +2235,7 @@
         }
 
         function renderScanScoreTable(basicScore, deepScore, multiScore, deepEnabled, multiEnabled, options = {}) {
-            const DASH = '<span style="color:var(--navy-400);;">—</span>';
+            const DASH = '<span class="score-dash">—</span>';
             const scoreBodyId = options.scoreBodyId || 'scanScoreBody';
             const scoreTableId = options.scoreTableId || 'scanScoreTable';
             const scoreBlockId = options.scoreBlockId || null;
@@ -2279,48 +2280,47 @@
 
             function scoreChip(score) {
                 if (score === null || score === undefined) return DASH;
-                const c = score >= 80 ? '#047857' : score >= 50 ? '#b45309' : '#b91c1c';
-                return `<span style="font-weight:700;color:${c};font-size:17px;font-family:'Poppins',monospace;">${score}%</span>`;
+                const cls = score >= 80 ? 'is-high' : score >= 50 ? 'is-mid' : 'is-low';
+                return `<span class="score-chip ${cls}">${score}%</span>`;
             }
-            function num(n, color) {
+            function num(n, tone) {
                 if (n === null || n === undefined) return DASH;
-                return `<span style="font-size:16px;font-weight:${n > 0 ? '700' : '400'};color:${n > 0 ? color : 'var(--navy-400)'};">${n}</span>`;
+                if (n > 0) return `<span class="score-num is-pos tone-${tone}">${n}</span>`;
+                return `<span class="score-num is-zero">${n}</span>`;
             }
-            function row(label, labelColor, data, enabled, isTotal) {
-                const topBorder = isTotal ? 'border-top:2px solid var(--navy-700);' : '';
-                const bg = isTotal ? 'var(--navy-50)' : 'white';
-                const fontW = isTotal ? '700' : '600';
-                const td = ``;
+            function row(labelHtml, labelClass, data, enabled, isTotal) {
+                const rowClass = `score-row${isTotal ? ' is-total' : ''}`;
                 if (!enabled || !data) {
-                    return `<tr style="${topBorder}background:${bg};border-bottom:1px solid var(--navy-200);">
-                        <td style="padding:14px 20px;font-weight:${fontW};white-space:nowrap;border-right:1px solid var(--navy-300);font-size:14px;letter-spacing:.06em;text-transform:uppercase;color:${labelColor};">${label}</td>
-                        <td colspan="8" style="${td}text-align:center;color:var(--navy-400);font-size:13px;">${isTotal ? '' : '— 未実行 —'}</td>
+                    return `<tr class="${rowClass}">
+                        <td class="score-cell score-label ${labelClass}">${labelHtml}</td>
+                        <td colspan="8" class="score-cell score-cell-empty">${isTotal ? '' : '— 未実行 —'}</td>
                     </tr>`;
                 }
-                return `<tr style="${topBorder}background:${bg};border-bottom:1px solid var(--navy-200);">
-                    <td style="padding:14px 20px;font-weight:${fontW};white-space:nowrap;border-right:1px solid var(--navy-300);font-size:14px;letter-spacing:.06em;text-transform:uppercase;color:${labelColor};">${label}</td>
-                    <td style="${td}min-width:90px;line-height:1.4;">
-                        <div style="font-size:12px;color:var(--navy-500);margin-bottom:2px;">${data.total}</div>
+                return `<tr class="${rowClass}">
+                    <td class="score-cell score-label ${labelClass}">${labelHtml}</td>
+                    <td class="score-cell score-main">
+                        <div class="score-total">${data.total}</div>
                         <div>${scoreChip(data.score)}</div>
                     </td>
-                    <td style="${td}">${num(data.critical, '#b91c1c')}</td>
-                    <td style="${td}">${num(data.serious,  '#b91c1c')}</td>
-                    <td style="${td}">${num(data.moderate, '#b45309')}</td>
-                    <td style="${td}">${num(data.minor,    'var(--navy-600)')}</td>
-                    <td style="${td}">${num(data.pass,     '#047857')}</td>
-                    <td style="${td}">${num(data.na,       'var(--navy-500)')}</td>
-                    <td style="padding:14px 14px;text-align:center;">${num(data.unverified,'var(--navy-500)')}</td>
+                    <td class="score-cell">${num(data.critical, 'critical')}</td>
+                    <td class="score-cell">${num(data.serious, 'serious')}</td>
+                    <td class="score-cell">${num(data.moderate, 'moderate')}</td>
+                    <td class="score-cell">${num(data.minor, 'minor')}</td>
+                    <td class="score-cell">${num(data.pass, 'pass')}</td>
+                    <td class="score-cell">${num(data.na, 'neutral')}</td>
+                    <td class="score-cell">${num(data.unverified, 'neutral')}</td>
                 </tr>`;
             }
 
             const body = $(scoreBodyId);
             if (!body) return;
-            const deepLabel = sessionAAABeta ? 'DEEP<br><span style="font-size:10px;font-weight:400;letter-spacing:0;text-transform:none;">A/AA/AAA β</span>' : 'DEEP<br><span style="font-size:10px;font-weight:400;letter-spacing:0;text-transform:none;">A/AA</span>';
+            const deepSub = sessionAAABeta ? 'A/AA/AAA β' : 'A/AA';
+            const deepLabel = `DEEP<br><span class="score-row-sub">${deepSub}</span>`;
             body.innerHTML =
-                row('BASIC', '#3581B8', nb, true, false) +
-                row(deepLabel,  '#304C89', nd, deepEnabled, false) +
-                row('MULTI', '#0D7A5F', nm, multiEnabled, false) +
-                row('TOTAL', 'var(--navy-900)', normalize(totalScore), true, true);
+                row('BASIC', 'label-basic', nb, true, false) +
+                row(deepLabel, 'label-deep', nd, deepEnabled, false) +
+                row('MULTI', 'label-multi', nm, multiEnabled, false) +
+                row('TOTAL', 'label-total', normalize(totalScore), true, true);
 
             const table = $(scoreTableId);
             if (table) table.style.display = 'block';
@@ -2582,7 +2582,7 @@
             }
             if (resultsEl) resultsEl.innerHTML = '';
 
-            document.getElementById('results').style.display = 'block';
+            document.getElementById('results').classList.add('visible');
 
             try {
                 const basicUser = document.getElementById('basicUser').value.trim();
@@ -2623,7 +2623,7 @@
                     : e.message;
                 if (!silent) {
                     status.textContent = 'エラー: ' + msg;
-                    if (resultsEl) resultsEl.innerHTML = `<div style="color:#dc2626;padding:16px;">${escapeHtml(msg)}</div>`;
+                    if (resultsEl) resultsEl.innerHTML = `<div class="enhanced-error">${escapeHtml(msg)}</div>`;
                 }
                 throw e;
             } finally {
@@ -2635,7 +2635,6 @@
 
         function renderEnhancedResults(results, includeAAA) {
             const el = document.getElementById('enhancedResults');
-            const statusColors = { pass: '#059669', fail: '#dc2626', error: '#d97706', not_applicable: 'var(--navy-500)', manual_required: '#7c3aed' };
             const statusLabels = { pass: '合格', fail: '不合格', error: 'エラー', not_applicable: '対象外', manual_required: '要手動確認' }; 
 
             // AAA SC セット（バッジ表示用）
@@ -2664,34 +2663,34 @@
                 else errCount++;
             }
 
-            let html = `<div style="display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap;">
-                <div style="background:#f0fdf4;border:1px solid #bbf7d0;padding:12px 20px;text-align:center;">
-                    <div style="font-size:24px;font-weight:700;color:#059669;">${passCount}</div>
-                    <div style="font-size:13px;color:#059669;">合格</div>
+            let html = `<div class="enhanced-stats">
+                <div class="enhanced-stat is-pass">
+                    <div class="enhanced-stat-count">${passCount}</div>
+                    <div class="enhanced-stat-label">合格</div>
                 </div>
-                <div style="background:#fef2f2;border:1px solid #fecaca;padding:12px 20px;text-align:center;">
-                    <div style="font-size:24px;font-weight:700;color:#dc2626;">${failCount}</div>
-                    <div style="font-size:13px;color:#dc2626;">不合格</div>
+                <div class="enhanced-stat is-fail">
+                    <div class="enhanced-stat-count">${failCount}</div>
+                    <div class="enhanced-stat-label">不合格</div>
                 </div>
-                <div style="background:var(--navy-50);border:1px solid var(--navy-200);padding:12px 20px;text-align:center;">
-                    <div style="font-size:24px;font-weight:700;color:var(--navy-500);">${naCount}</div>
-                    <div style="font-size:13px;color:var(--navy-500);">対象外</div>
+                <div class="enhanced-stat is-na">
+                    <div class="enhanced-stat-count">${naCount}</div>
+                    <div class="enhanced-stat-label">対象外</div>
                 </div>
-                ${manualCount > 0 ? `<div style="background:#f5f3ff;border:1px solid #ddd6fe;padding:12px 20px;text-align:center;">
-                    <div style="font-size:24px;font-weight:700;color:#7c3aed;">${manualCount}</div>
-                    <div style="font-size:13px;color:#7c3aed;">要手動確認</div>
+                ${manualCount > 0 ? `<div class="enhanced-stat is-manual">
+                    <div class="enhanced-stat-count">${manualCount}</div>
+                    <div class="enhanced-stat-label">要手動確認</div>
                 </div>` : ''}
-                ${errCount > 0 ? `<div style="background:#fffbeb;border:1px solid #fde68a;padding:12px 20px;text-align:center;">
-                    <div style="font-size:24px;font-weight:700;color:#d97706;">${errCount}</div>
-                    <div style="font-size:13px;color:#d97706;">エラー</div>
+                ${errCount > 0 ? `<div class="enhanced-stat is-error">
+                    <div class="enhanced-stat-count">${errCount}</div>
+                    <div class="enhanced-stat-label">エラー</div>
                 </div>` : ''}
             </div>`;
 
             const phaseLabels = {
-                1: { label: 'Phase 1 — 完全自動化・高精度（90-95%）', color: '#0d7a5f' },
-                2: { label: 'Phase 2 — 高自動化・中〜高精度（80-90%）', color: '#1a56db' },
-                3: { label: 'Phase 3 — ハイブリッド・自動解析（65-80%）', color: '#7c3aed' },
-                4: { label: 'Section A/B — 追加自動化（A/AA 新規・改善）', color: '#b45309' }
+                1: { label: 'Phase 1 — 完全自動化・高精度（90-95%）', className: 'phase-1' },
+                2: { label: 'Phase 2 — 高自動化・中〜高精度（80-90%）', className: 'phase-2' },
+                3: { label: 'Phase 3 — ハイブリッド・自動解析（65-80%）', className: 'phase-3' },
+                4: { label: 'Section A/B — 追加自動化（A/AA 新規・改善）', className: 'phase-4' }
             };
 
             let lastPhase = 0;
@@ -2699,24 +2698,30 @@
                 const phase = getPhase(r.sc);
                 if (phase !== lastPhase && phaseLabels[phase]) {
                     const ph = phaseLabels[phase];
-                    html += `<div style="margin:20px 0 10px;padding:8px 12px;background:${ph.color}15;border-left:4px solid ${ph.color};font-weight:600;font-size:13px;color:${ph.color};">${ph.label}</div>`;
+                    html += `<div class="enhanced-phase ${ph.className}">${ph.label}</div>`;
                     lastPhase = phase;
                 }
-                const color = statusColors[r.status] || '#6b7280';
                 const label = statusLabels[r.status] || r.status;
                 const violations = r.violations || [];
                 const isAAA = AAA_SCS.has(r.sc);
-                html += `<div style="background:white;border:1px solid var(--navy-200);border-left:4px solid ${color};margin-bottom:10px;padding:14px 16px;">
-                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
-                        <span style="background:${color};color:white;font-size:12px;font-weight:600;padding:2px 10px;">${label}</span>
-                        ${isAAA ? `<span style="background:#7c3aed;color:white;font-size:11px;font-weight:600;padding:1px 7px;">AAA β</span>` : ''}
-                        <span style="font-weight:600;font-size:14px;color:var(--navy-700);">SC ${r.sc} ${r.name}</span>
+                const statusClass = (
+                    r.status === 'pass' ? 'is-pass'
+                    : r.status === 'fail' ? 'is-fail'
+                    : r.status === 'not_applicable' ? 'is-na'
+                    : r.status === 'manual_required' ? 'is-manual'
+                    : 'is-error'
+                );
+                html += `<div class="enhanced-item ${statusClass}">
+                    <div class="enhanced-item-head">
+                        <span class="enhanced-item-status">${label}</span>
+                        ${isAAA ? `<span class="enhanced-item-aaa">AAA β</span>` : ''}
+                        <span class="enhanced-item-title">SC ${r.sc} ${r.name}</span>
                     </div>
-                    <div style="font-size:14px;color:var(--navy-600);margin-bottom:${violations.length > 0 ? '8px' : '0'};">${escapeHtml(r.message || '')}</div>
-                    ${violations.length > 0 ? `<details style="margin-top:4px;">
-                        <summary style="font-size:13px;color:${color};cursor:pointer;font-weight:500;">詳細 (${violations.length}件)</summary>
-                        <ul style="margin:8px 0 0 0;padding-left:18px;">
-                            ${violations.map(v => `<li style="font-size:13px;color:var(--navy-600);font-family:monospace;margin-bottom:4px;">${escapeHtml(v)}</li>`).join('')}
+                    <div class="enhanced-item-message${violations.length > 0 ? ' has-violations' : ''}">${escapeHtml(r.message || '')}</div>
+                    ${violations.length > 0 ? `<details class="enhanced-item-details">
+                        <summary>詳細 (${violations.length}件)</summary>
+                        <ul>
+                            ${violations.map(v => `<li>${escapeHtml(v)}</li>`).join('')}
                         </ul>
                     </details>` : ''}
                 </div>`;
