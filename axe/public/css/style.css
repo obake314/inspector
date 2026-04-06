@@ -343,7 +343,7 @@ h1 {
   border-color: var(--navy-700);
 }
 
-.scan-option-checkbox#multiScanLabel:checked {
+.scan-option-checkbox#multiScanOpt:checked {
   background: var(--color-multi);
   border-color: var(--navy-700);
 }
