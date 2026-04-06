@@ -1,6 +1,6 @@
 # SPEC_ENV
 
-最終更新: 2026-04-05
+最終更新: 2026-04-06
 
 ## 対象
 
@@ -12,6 +12,52 @@ AXE INSPECTOR の前提環境、配信パス、デプロイ手順を定義する
 - 実行方式: Express.js + Puppeteer + PM2
 - 配置先: `/var/www/inspector`（VPS）
 - 自動デプロイ: `.github/workflows/main.yml`
+
+## プロジェクトファイル役割一覧
+
+### ルート
+
+- `.github/workflows/main.yml`: `main` push / 手動実行で VPS 自動デプロイ（`git reset --hard origin/main`、`npm ci --omit=dev`、`pm2 restart`）
+- `.gitignore`: ルートで除外するファイル定義（macOSメタデータ、`axe/plan.md` など）
+- `axe/`: AXE INSPECTOR 本体
+
+### `axe/`（アプリ本体）
+
+- `axe/server.js`: Express サーバー本体。認証、設定保存、BASIC/DEEP/MULTI SCAN、Sheets 出力、静的配信 API を提供
+- `axe/public/index.html`: フロントエンドの画面構造とクライアントロジック
+- `axe/public/css/style.css`: 画面スタイル定義（`index.html` から分離済み）
+- `axe/package.json`: Node.js 実行定義（依存関係、`npm start`）
+- `axe/package-lock.json`: 依存バージョン固定
+- `axe/Dockerfile`: コンテナ実行用イメージ定義（Node + Chromium）
+- `axe/.dockerignore`: Docker build context から除外するファイル定義
+- `axe/.gitignore`: `axe` 配下で除外するファイル定義（`node_modules`, `.env`, `.settings.json`）
+- `axe/.settings.json`: 設定画面から保存される永続設定（Gemini/Google連携情報など、機密。Git管理外）
+- `axe/README.md`: セットアップと利用方法
+- `axe/plan.md`: 過去の改修計画メモ（実行時未使用の補助ドキュメント）
+
+### `axe/spec/`（仕様書）
+
+- `axe/spec/SPEC_ENV.md`: 環境構成、配信パス、デプロイ仕様
+- `axe/spec/SPEC_WEB.md`: スキャンツール本体（UI/API/スコア）の機能仕様
+- `axe/spec/SPEC_SHEET.md`: Google Sheets / GAS 連携仕様
+
+### `axe/test/`（テスト項目）
+
+- `axe/test/TEST_DEPLOY.md`: デプロイ後の確認項目
+- `axe/test/TEST_SETTING.md`: スキャン前の設定・接続確認項目
+- `axe/test/TEST_SCAN.md`: スキャン実行後の動作確認項目
+- `axe/test/TEST_OUTPUT.md`: Sheets 出力直後の確認項目
+- `axe/test/TEST_REPORT.md`: GAS での報告書生成確認項目
+
+### `axe/gas/`（Google Apps Script）
+
+- `axe/gas/ReportGenerator.gs`: スプレッドシート結果から Google Docs 報告書を生成する GAS 本体
+- `axe/gas/appsscript.json`: GAS マニフェスト（タイムゾーン、OAuth スコープ、ランタイム設定）
+
+### `seo/`（別プロダクト）
+
+- `seo/index.html`: SEO MOLE の単一HTMLアプリ
+- `seo/img/ogp.jpg`: SEO MOLE の OGP 画像
 
 ## 実行設定
 

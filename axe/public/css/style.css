@@ -117,7 +117,6 @@ h1 {
   padding: 4px;
   border: 1px solid var(--navy-200);
   background: #f8fafc;
-  border-radius: 999px;
 }
 .viewport-mode-title {
   font-size: 12px;
@@ -148,7 +147,6 @@ h1 {
   color: var(--navy-500);
   letter-spacing: 0.02em;
   border: 1px solid transparent;
-  border-radius: 999px;
   transition: all 0.2s ease;
 }
 .viewport-mode-option input:hover + span {
@@ -298,7 +296,6 @@ h1 {
   padding: 8px 12px;
   border: 1px solid var(--navy-200);
   background: var(--color-white)
-  border-radius: 999px;
   transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
 }
 .scan-option:hover {
@@ -328,7 +325,6 @@ h1 {
   display: inline-grid;
   place-content: center;
   margin: 0;
-  border-radius: 4px;
   transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
 }
 .scan-option-checkbox::after {
@@ -1383,7 +1379,6 @@ footer a:hover {
   .viewport-mode {
     flex-wrap: wrap;
     gap: 10px;
-    border-radius: 14px;
   }
   .url-form {
     flex-direction: column;
