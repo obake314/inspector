@@ -6,7 +6,7 @@
     <title>AXE INSPECTOR</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Noto+Sans+JP:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
-
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
     <!-- Login overlay -->
@@ -186,11 +186,11 @@
                             <span class="btn-text">SCAN</span>
                             <div class="spinner"></div>
                         </button>
-                        <label class="scan-option" id="deepScanLabel">
+                        <label class="scan-option" id="deepScanLabel" title="Puppeteerでページを操作し、WCAGの達成基準をSC（成功基準）ごとに個別検証します。&#10;axe-coreが自動検出できないキーボード操作・リフロー・テキスト間隔・フォーカス表示・認証方法など約30項目をPhase別に段階的に検査します。&#10;所要時間：2〜4分">
                             <input type="checkbox" id="deepScanOpt" class="scan-option-checkbox" checked>
                             <span class="scan-option-text scan-option-text-deep">DEEP SCAN</span>
                         </label>
-                        <label class="scan-option" id="multiScanLabel">
+                        <label class="scan-option" id="multiScanLabel" title="Gemini AIがページ全体のHTML・スクリーンショット・操作結果を解析し、メディア代替・フォーム設計・ナビゲーション一貫性・可読性など約70のWCAG達成基準を一括評価します。&#10;所要時間：1〜2分（Gemini APIキーが必要）">
                             <input type="checkbox" id="multiScanOpt" class="scan-option-checkbox" checked>
                             <span class="scan-option-text scan-option-text-multi">MULTI SCAN</span>
                         </label>
@@ -207,11 +207,11 @@
                             <span class="btn-text">BATCH SCAN</span>
                             <div class="spinner"></div>
                         </button>
-                        <label class="scan-option" id="batchDeepLabel">
+                        <label class="scan-option" id="batchDeepLabel" title="Puppeteerでページを操作し、WCAGの達成基準をSC（成功基準）ごとに個別検証します。&#10;axe-coreが自動検出できないキーボード操作・リフロー・テキスト間隔・フォーカス表示・認証方法など約30項目をPhase別に段階的に検査します。&#10;所要時間：2〜4分（URL1件あたり）">
                             <input type="checkbox" id="batchEnhancedOpt" class="scan-option-checkbox" checked>
                             <span class="scan-option-text scan-option-text-deep">DEEP SCAN</span>
                         </label>
-                        <label class="scan-option" id="batchAILabel">
+                        <label class="scan-option" id="batchAILabel" title="Gemini AIがページ全体のHTML・スクリーンショット・操作結果を解析し、メディア代替・フォーム設計・ナビゲーション一貫性・可読性など約70のWCAG達成基準を一括評価します。&#10;所要時間：1〜2分（URL1件あたり、Gemini APIキーが必要）">
                             <input type="checkbox" id="batchAIOpt" class="scan-option-checkbox" checked>
                             <span class="scan-option-text scan-option-text-multi">MULTI SCAN</span>
                         </label>
@@ -316,7 +316,7 @@
             <!-- エクスポートエリア -->
             <div id="exportArea">
                 Export to
-                <button class="export-btn" id="csvBtn" onclick="exportCSV()">CSV</button>
+                <button class="export-btn" id="csvBtn" onclick="exportExcel()">Excel</button>
                 <button class="export-btn" id="reportBtn" onclick="exportToSheets()">GoogleSheet</button>
                 <button class="export-btn clear-btn" id="clearBtn" onclick="clearScan()">クリア</button>
             </div>
@@ -947,46 +947,50 @@
             }
         }
 
-        function exportCSV() {
+        function exportExcel() {
             if (!lastResults) return;
             const header = ['No', '検査種別', 'SC', '検査項目', '適合レベル', '結果', '場所', '検出数', '重要度', '詳細', '改善案'];
-            const escapeCsv = (value) => {
-                const s = String(value ?? '');
-                if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-                return s;
-            };
 
+            const wb = XLSX.utils.book_new();
+
+            // PC シート
             const pcRows = buildReportRows(lastResults, lastResults.url, aiResults, lastEnhancedResults, batchNavConsistency);
             const pcStats = buildStats(lastResults, lastEnhancedResults, aiResults);
-            const scoreRow = ['スコア', `${pcStats.passRate ?? '—'}%`, `全${pcStats.total}項目`, `緊急:${pcStats.critical}`, `重大:${pcStats.serious}`, `中程度:${pcStats.moderate}`, `軽微:${pcStats.minor}`, `合格:${pcStats.pass}`, `該当なし:${pcStats.na}`, `未検証:${pcStats.unverified}`, ''];
-
-            const lines = [
-                ['# PC VIEW', '', '', '', '', '', '', '', '', '', ''],
-                scoreRow,
+            const pcMeta = [
+                ['URL', lastResults.url],
+                ['検査日時', new Date().toLocaleString('ja-JP')],
+                ['スコア', `${pcStats.passRate ?? '—'}% （全${pcStats.total}項目）`],
+                ['内訳', `緊急:${pcStats.critical} 重大:${pcStats.serious} 中程度:${pcStats.moderate} 軽微:${pcStats.minor} 合格:${pcStats.pass} 該当なし:${pcStats.na} 未検証:${pcStats.unverified}`],
+                [],
                 header,
                 ...pcRows
             ];
+            const pcWs = XLSX.utils.aoa_to_sheet(pcMeta);
+            pcWs['!cols'] = [4,8,6,30,6,8,20,6,8,30,20].map(w => ({ wch: w }));
+            XLSX.utils.book_append_sheet(wb, pcWs, 'PC VIEW');
 
+            // SP シート（存在する場合）
             if (lastMobileScanSnapshot) {
                 const sp = lastMobileScanSnapshot;
                 const spRows = buildReportRows(sp.basic, lastResults.url, sp.multi || {}, sp.deep || null, null);
                 const spStats = buildStats(sp.basic, sp.deep || null, sp.multi || {});
-                const spScoreRow = ['スコア', `${spStats.passRate ?? '—'}%`, `全${spStats.total}項目`, `緊急:${spStats.critical}`, `重大:${spStats.serious}`, `中程度:${spStats.moderate}`, `軽微:${spStats.minor}`, `合格:${spStats.pass}`, `該当なし:${spStats.na}`, `未検証:${spStats.unverified}`, ''];
-                lines.push(
-                    ['', '', '', '', '', '', '', '', '', '', ''],
-                    ['# SP VIEW (iPhone SE)', '', '', '', '', '', '', '', '', '', ''],
-                    spScoreRow,
+                const spMeta = [
+                    ['URL', lastResults.url],
+                    ['検査日時', new Date().toLocaleString('ja-JP')],
+                    ['ビュー', 'SP VIEW（iPhone SE）'],
+                    ['スコア', `${spStats.passRate ?? '—'}% （全${spStats.total}項目）`],
+                    ['内訳', `緊急:${spStats.critical} 重大:${spStats.serious} 中程度:${spStats.moderate} 軽微:${spStats.minor} 合格:${spStats.pass} 該当なし:${spStats.na} 未検証:${spStats.unverified}`],
+                    [],
                     header,
                     ...spRows
-                );
+                ];
+                const spWs = XLSX.utils.aoa_to_sheet(spMeta);
+                spWs['!cols'] = [4,8,6,30,6,8,20,6,8,30,20].map(w => ({ wch: w }));
+                XLSX.utils.book_append_sheet(wb, spWs, 'SP VIEW');
             }
 
-            const csv = lines.map(row => row.map(escapeCsv).join(',')).join('\r\n');
-            const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = `wcag-report-${new Date().toISOString().split('T')[0]}.csv`;
-            a.click();
+            const date = new Date().toISOString().split('T')[0];
+            XLSX.writeFile(wb, `wcag-report-${date}.xlsx`);
         }
 
         // AI評価結果を保存
@@ -2315,11 +2319,13 @@
             const body = $(scoreBodyId);
             if (!body) return;
             const deepSub = sessionAAABeta ? 'A/AA/AAA β' : 'A/AA';
-            const deepLabel = `DEEP<br><span class="score-row-sub">${deepSub}</span>`;
+            const basicLabel = `BASIC<br><span class="score-row-sub">axe-core 自動検査</span>`;
+            const deepLabel  = `DEEP<br><span class="score-row-sub">SC別ヒューリスティック検査 (${deepSub})</span>`;
+            const multiLabel = `MULTI<br><span class="score-row-sub">Gemini AI 総合評価</span>`;
             body.innerHTML =
-                row('BASIC', 'label-basic', nb, true, false) +
+                row(basicLabel, 'label-basic', nb, true, false) +
                 row(deepLabel, 'label-deep', nd, deepEnabled, false) +
-                row('MULTI', 'label-multi', nm, multiEnabled, false) +
+                row(multiLabel, 'label-multi', nm, multiEnabled, false) +
                 row('TOTAL', 'label-total', normalize(totalScore), true, true);
 
             const table = $(scoreTableId);

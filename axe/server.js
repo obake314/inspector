@@ -2823,7 +2823,7 @@ app.post('/api/export-report', async (req, res) => {
 
     const now = new Date();
     const dateStr = now.toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
-    const timeStr = now.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }).replace(/:/g, '');
+    const timeStr = now.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).replace(/:/g, '');
     const COL = 11; // 列数
 
     // --- 結果シートを順次作成 ---
@@ -2833,15 +2833,24 @@ app.post('/api/export-report', async (req, res) => {
       let tabLabel;
       try {
         const u = new URL(page.url);
-        tabLabel = (u.hostname + u.pathname).replace(/[\/\\?*[\]]/g, '_').substring(0, 55);
-      } catch { tabLabel = page.url.substring(0, 55); }
-      const sheetTitle = `${tabLabel}_${dateStr}_${timeStr}`;
+        tabLabel = (u.hostname + u.pathname).replace(/[\/\\?*[\]:]/g, '_').replace(/%20/g, '_').replace(/_+/g, '_').replace(/_$/, '').substring(0, 50);
+      } catch { tabLabel = page.url.replace(/[^\w.-]/g, '_').substring(0, 50); }
 
-      const addRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
-        method: 'POST', headers,
-        body: JSON.stringify({ requests: [{ addSheet: { properties: { title: sheetTitle } } }] })
-      });
-      const addData = await addRes.json();
+      // 同名シートが存在する場合は suffix を付けて回避
+      let sheetTitle = `${tabLabel}_${dateStr}_${timeStr}`;
+      let addData, addRes;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const candidateTitle = attempt === 0 ? sheetTitle : `${sheetTitle}_${attempt + 1}`;
+        addRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+          method: 'POST', headers,
+          body: JSON.stringify({ requests: [{ addSheet: { properties: { title: candidateTitle } } }] })
+        });
+        addData = await addRes.json();
+        if (addRes.ok) { sheetTitle = candidateTitle; break; }
+        const errMsg = addData.error?.message || '';
+        if (!errMsg.includes('already exists')) throw new Error(`シート追加失敗: ${errMsg}`);
+        console.warn(`[Report] シート名重複、リトライ (attempt ${attempt + 1}): "${candidateTitle}"`);
+      }
       if (!addRes.ok) throw new Error(`シート追加失敗: ${addData.error?.message}`);
       const newSheetId = addData.replies[0].addSheet.properties.sheetId;
 
