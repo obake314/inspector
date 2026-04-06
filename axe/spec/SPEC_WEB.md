@@ -11,14 +11,15 @@
 ### BASIC SCAN
 
 - API: `POST /api/check`
-- 入力: `{ url, level, basicAuth? }`
-- 出力: `{ success, results: { violations[], passes[], incomplete[] } }`
+- 入力: `{ url, level, basicAuth?, viewportPreset? }`
+- `viewportPreset`: `desktop` / `iphone-se`（省略時 `desktop`）
+- 出力: `{ success, viewportPreset, results: { violations[], passes[], incomplete[] } }`
 
 ### DEEP SCAN
 
 - API: `POST /api/enhanced-check`
-- 入力: `{ url, includeAAA?, basicAuth? }`
-- 出力: `{ success, results: [{ sc, name, status, message, violations[] }], includeAAA }`
+- 入力: `{ url, includeAAA?, basicAuth?, viewportPreset? }`
+- 出力: `{ success, viewportPreset, results: [{ sc, name, status, message, violations[] }], includeAAA }`
 - status: `pass` / `fail` / `not_applicable` / `manual_required` / `error`
 - タイムアウト仕様:
   - サーバー側: リクエスト受信から **8分** で 504 を返す
@@ -28,7 +29,7 @@
 ### MULTI SCAN
 
 - API: `POST /api/ai-evaluate`
-- 入力: `{ url, checkItems[] }`
+- 入力: `{ url, checkItems[], viewportPreset? }`
 - 出力: `{ success, model, results: [{ index, status, reason, suggestion, confidence? }] }`
 - status: `pass` / `fail` / `not_applicable` / `manual_required`
 - Gemini未設定/接続失敗時: `success: true` のまま `model: manual-fallback` で全項目 `manual_required` を返す
@@ -36,12 +37,18 @@
 ## UI構成
 
 - 単一チェック / 一括チェックのモード切替（初回スキャン後は切替禁止）
+- 単一チェック時のビュー選択（ラジオ）:
+  - `PCのみ`
+  - `SPのみ`（iPhone SE）
+  - `PC+SP`
+- 一括チェック時はビュー選択を無効化し、`PCのみ` 固定
 - レベル選択: A / AA / AAA（AAAは設定で表示）
 - 単一スキャン: URL + `DEEP SCAN` / `MULTI SCAN`
 - 一括スキャン: URL複数入力（最大10件）
 - Basic認証入力（BASIC/DEEPで利用）
 - 結果表示:
   - スコアテーブル（BASIC/DEEP/MULTI/TOTAL）
+  - ビューごとにスコアブロックを分離（`PC VIEW` / `SP VIEW`）
   - 詳細タブ（critical/serious/moderate/minor/pass/na/unverified）
 - クリアボタン（エクスポートエリア右端）:
   - スキャン結果・状態を全リセットして再検査可能状態に戻す
@@ -50,17 +57,29 @@
 
 ## スキャン実行フロー（単一）
 
-1. `check(url)`（BASIC）
-2. `runEnhancedCheck()`（DEEP、有効時）
-3. `runAIEvaluation()`（MULTI、有効時）
+選択されたビューごとに以下を実行する。
 
-都度 `renderAllTabs()` と `renderScanScoreTable()` を更新する。
+1. `check(url, { viewportPreset })`（BASIC）
+2. `runEnhancedCheck(true, { viewportPreset })`（DEEP、有効時）
+3. `runAIEvaluation(true, { viewportPreset })`（MULTI、有効時）
+
+ビュー選択別の動作:
+
+- `PCのみ`: Desktopのみ実行
+- `SPのみ`: iPhone SEのみ実行
+- `PC+SP`: Desktop → iPhone SE の順で両方実行
+
+結果反映:
+
+- スコアテーブルはビュー別ブロックに個別描画
+- 詳細タブ/エクスポート用の主データは `PC+SP` 時は PC 優先、`SPのみ` 時は SP を使用
 
 ## 一括検査（Batch）
 
 - API: `POST /api/batch-check`
 - 上限: 10 URL
 - フェーズ: BASIC → DEEP（任意）→ MULTI（任意）
+- 実行ビュー: `desktop` 固定（単一チェックのビュー選択は適用しない）
 - 結果格納:
   - `batchResultsData`
   - `batchEnhancedResults`
@@ -104,6 +123,7 @@
 
 - スキャン実行後は以下の全要素を操作不可にロック（`lockScanUI()` 呼び出し）
   - 単一/一括モード切替（`#modeToggle`）
+  - ビュー選択ラジオ（`PCのみ` / `SPのみ` / `PC+SP`）
   - 対象レベル切替（`.level-select-btn`）
   - DEEP SCAN / MULTI SCAN チェックボックス
   - オプション設定ブロック（`#optionsSection`）
