@@ -5,16 +5,18 @@
 ## T-SCAN-01: BASIC SCAN
 
 - 手順
-  1. `POST /axe/api/check` with `{url, level}`
+  1. `POST /axe/api/check` with `{url, level, viewportPreset}`
 - 期待結果
   - `success: true`
+  - `viewportPreset` がレスポンスに含まれる
   - `results.violations / passes / incomplete` を返す
 
 ## T-SCAN-02: DEEP SCAN
 
 - 手順
-  1. `POST /axe/api/enhanced-check` with `{url, includeAAA}`
+  1. `POST /axe/api/enhanced-check` with `{url, includeAAA, viewportPreset}`
 - 期待結果
+  - `viewportPreset` がレスポンスに含まれる
   - `results[]` を返す
   - `status` が `pass/fail/not_applicable/manual_required/error`
   - 正常完了時は UI に「検査完了: N基準を検査」と表示される
@@ -32,7 +34,7 @@
 ## T-SCAN-03: MULTI SCAN
 
 - 手順
-  1. `POST /axe/api/ai-evaluate` with `{url, checkItems}`
+  1. `POST /axe/api/ai-evaluate` with `{url, checkItems, viewportPreset}`
 - 期待結果
   - `success: true` で `results[]` を返す
   - Gemini未設定時は `model=manual-fallback` かつ `status=manual_required` で返る

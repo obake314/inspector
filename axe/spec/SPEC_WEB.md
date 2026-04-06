@@ -77,6 +77,7 @@
 ## 一括検査（Batch）
 
 - API: `POST /api/batch-check`
+- 入力: `{ urls[], level, basicAuth?, viewportPreset? }`
 - 上限: 10 URL
 - フェーズ: BASIC → DEEP（任意）→ MULTI（任意）
 - 実行ビュー: `desktop` 固定（単一チェックのビュー選択は適用しない）
