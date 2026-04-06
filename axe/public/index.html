@@ -256,6 +256,23 @@
                             <tbody id="scanScoreBody"></tbody>
                         </table>
                     </div>
+                    <!-- PCスコア詳細 -->
+                    <div class="tabs" id="resultTabs-pc">
+                        <button class="tab active" data-tab="critical">緊急 <span class="tab-num" id="badge-critical-pc">0</span></button>
+                        <button class="tab" data-tab="serious">重大 <span class="tab-num" id="badge-serious-pc">0</span></button>
+                        <button class="tab" data-tab="moderate">中程度 <span class="tab-num" id="badge-moderate-pc">0</span></button>
+                        <button class="tab" data-tab="minor">軽微 <span class="tab-num" id="badge-minor-pc">0</span></button>
+                        <button class="tab" data-tab="pass">合格 <span class="tab-num" id="badge-pass-pc">0</span></button>
+                        <button class="tab" data-tab="na">該当なし <span class="tab-num" id="badge-na-pc">0</span></button>
+                        <button class="tab" data-tab="unverified">未検証 <span class="tab-num" id="badge-unverified-pc">0</span></button>
+                    </div>
+                    <div class="tab-content active" id="tab-critical-pc"><div class="section"><div class="violation-list" id="list-critical-pc"></div></div></div>
+                    <div class="tab-content" id="tab-serious-pc"><div class="section"><div class="violation-list" id="list-serious-pc"></div></div></div>
+                    <div class="tab-content" id="tab-moderate-pc"><div class="section"><div class="violation-list" id="list-moderate-pc"></div></div></div>
+                    <div class="tab-content" id="tab-minor-pc"><div class="section"><div class="violation-list" id="list-minor-pc"></div></div></div>
+                    <div class="tab-content" id="tab-pass-pc"><div class="section"><div class="violation-list" id="list-pass-pc"></div></div></div>
+                    <div class="tab-content" id="tab-na-pc"><div class="section"><div class="violation-list" id="list-na-pc"></div></div></div>
+                    <div class="tab-content" id="tab-unverified-pc"><div class="section"><div class="violation-list" id="list-unverified-pc"></div></div></div>
                 </div>
                 <div class="scoretable-wrap" id="scoreBlockMobile" style="display:none;">
                     <div class="scoretable-title">SP VIEW（iPhone SE）</div>
@@ -277,24 +294,25 @@
                             <tbody id="scanScoreBodyMobile"></tbody>
                         </table>
                     </div>
+                    <!-- SPスコア詳細 -->
+                    <div class="tabs" id="resultTabs-sp">
+                        <button class="tab active" data-tab="critical">緊急 <span class="tab-num" id="badge-critical-sp">0</span></button>
+                        <button class="tab" data-tab="serious">重大 <span class="tab-num" id="badge-serious-sp">0</span></button>
+                        <button class="tab" data-tab="moderate">中程度 <span class="tab-num" id="badge-moderate-sp">0</span></button>
+                        <button class="tab" data-tab="minor">軽微 <span class="tab-num" id="badge-minor-sp">0</span></button>
+                        <button class="tab" data-tab="pass">合格 <span class="tab-num" id="badge-pass-sp">0</span></button>
+                        <button class="tab" data-tab="na">該当なし <span class="tab-num" id="badge-na-sp">0</span></button>
+                        <button class="tab" data-tab="unverified">未検証 <span class="tab-num" id="badge-unverified-sp">0</span></button>
+                    </div>
+                    <div class="tab-content active" id="tab-critical-sp"><div class="section"><div class="violation-list" id="list-critical-sp"></div></div></div>
+                    <div class="tab-content" id="tab-serious-sp"><div class="section"><div class="violation-list" id="list-serious-sp"></div></div></div>
+                    <div class="tab-content" id="tab-moderate-sp"><div class="section"><div class="violation-list" id="list-moderate-sp"></div></div></div>
+                    <div class="tab-content" id="tab-minor-sp"><div class="section"><div class="violation-list" id="list-minor-sp"></div></div></div>
+                    <div class="tab-content" id="tab-pass-sp"><div class="section"><div class="violation-list" id="list-pass-sp"></div></div></div>
+                    <div class="tab-content" id="tab-na-sp"><div class="section"><div class="violation-list" id="list-na-sp"></div></div></div>
+                    <div class="tab-content" id="tab-unverified-sp"><div class="section"><div class="violation-list" id="list-unverified-sp"></div></div></div>
                 </div>
             </div>
-            <div class="tabs" id="resultTabs">
-                <button class="tab active" data-tab="critical">緊急 <span class="tab-num" id="badge-critical">0</span></button>
-                <button class="tab" data-tab="serious">重大 <span class="tab-num" id="badge-serious">0</span></button>
-                <button class="tab" data-tab="moderate">中程度 <span class="tab-num" id="badge-moderate">0</span></button>
-                <button class="tab" data-tab="minor">軽微 <span class="tab-num" id="badge-minor">0</span></button>
-                <button class="tab" data-tab="pass">合格 <span class="tab-num" id="badge-pass">0</span></button>
-                <button class="tab" data-tab="na">該当なし <span class="tab-num" id="badge-na">0</span></button>
-                <button class="tab" data-tab="unverified">未検証 <span class="tab-num" id="badge-unverified">0</span></button>
-            </div>
-            <div class="tab-content active" id="tab-critical"><div class="section"><div class="violation-list" id="list-critical"></div></div></div>
-            <div class="tab-content" id="tab-serious"><div class="section"><div class="violation-list" id="list-serious"></div></div></div>
-            <div class="tab-content" id="tab-moderate"><div class="section"><div class="violation-list" id="list-moderate"></div></div></div>
-            <div class="tab-content" id="tab-minor"><div class="section"><div class="violation-list" id="list-minor"></div></div></div>
-            <div class="tab-content" id="tab-pass"><div class="section"><div class="violation-list" id="list-pass"></div></div></div>
-            <div class="tab-content" id="tab-na"><div class="section"><div class="violation-list" id="list-na"></div></div></div>
-            <div class="tab-content" id="tab-unverified"><div class="section"><div class="violation-list" id="list-unverified"></div></div></div>
             <!-- エクスポートエリア -->
             <div id="exportArea">
                 Export to
@@ -493,6 +511,25 @@
             return s;
         }
 
+        // SC単位で集計したスコアテーブルと一致するstatsを生成
+        function buildStats(basic, deep, multi) {
+            const ts = computeTotalScore(basic || null, deep || null, Object.keys(multi || {}).length > 0 ? multi : null);
+            return {
+                total: getTargetScList().length,
+                critical: ts.critical,
+                serious: ts.serious,
+                moderate: ts.moderate,
+                minor: ts.minor,
+                pass: ts.pass,
+                na: ts.na,
+                unverified: ts.unverified,
+                passRate: ts.score,
+                // 後方互換のため fail / incomplete も含める
+                fail: ts.critical + ts.serious + ts.moderate + ts.minor,
+                incomplete: 0
+            };
+        }
+
         // ルールIDから日本語名を取得
         function getJaRuleName(id) {
             return axeRulesJa[id]?.name || id;
@@ -581,13 +618,62 @@
 
         let lastResults = null;
         const manualDecisions = new Map(); // key → 'ok'|'ng'|'hold'
+        const manualImpacts   = new Map(); // key → 'critical'|'serious'|'moderate'|'minor'（NG時の重要度）
+
         window.setDecision = (key, val, btnEl) => {
-            manualDecisions.set(key, val);
+            // 同じボタン再クリックで解除
+            if (manualDecisions.get(key) === val) {
+                manualDecisions.delete(key);
+                manualImpacts.delete(key);
+                val = null;
+            } else {
+                manualDecisions.set(key, val);
+                if (val === 'ng') {
+                    const card = btnEl.closest('.item-card');
+                    manualImpacts.set(key, card?.dataset.defaultImpact || 'serious');
+                } else {
+                    manualImpacts.delete(key);
+                }
+            }
             const card = btnEl.closest('.item-card');
             card.querySelectorAll('.decision-btn').forEach(b => b.classList.remove('active-ok','active-ng','active-hold'));
-            btnEl.classList.add('active-' + val);
-            card.style.borderLeftColor = val === 'ok' ? '#059669' : val === 'ng' ? '#dc2626' : '#d97706';
+            if (val) btnEl.classList.add('active-' + val);
+            card.style.borderLeftColor = val === 'ok' ? '#059669' : val === 'ng' ? '#dc2626' : val === 'hold' ? '#d97706' : '';
+            renderAllTabs('pc');
+            if (lastMobileScanSnapshot) {
+                const sp = lastMobileScanSnapshot;
+                renderAllTabs('sp', sp.basic, sp.deep || null, sp.multi || {});
+            }
+            refreshScoreTable();
         };
+
+        function refreshScoreTable() {
+            if (!lastResults) return;
+            const doDeep  = !!lastEnhancedResults;
+            const doMulti = Object.keys(aiResults).length > 0;
+            // PC テーブル
+            renderScanScoreTable(
+                computeBasicScore(lastResults),
+                doDeep  ? computeDeepScore(lastEnhancedResults)  : null,
+                doMulti ? computeMultiScore(aiResults)           : null,
+                doDeep, doMulti,
+                { scoreBodyId: 'scanScoreBody', scoreTableId: 'scanScoreTable', scoreBlockId: 'scoreBlockDesktop' }
+            );
+            // SP テーブル（スナップショットがある場合のみ）
+            if (lastMobileScanSnapshot) {
+                const sp = lastMobileScanSnapshot;
+                const spDeep  = !!sp.deep;
+                const spMulti = sp.multi && Object.keys(sp.multi).length > 0;
+                renderScanScoreTable(
+                    computeBasicScore(sp.basic),
+                    spDeep  ? computeDeepScore(sp.deep)   : null,
+                    spMulti ? computeMultiScore(sp.multi) : null,
+                    spDeep, spMulti,
+                    { scoreBodyId: 'scanScoreBodyMobile', scoreTableId: 'scanScoreTableMobile', scoreBlockId: 'scoreBlockMobile',
+                      state: { basicResults: sp.basic, deepResults: sp.deep, multiAiData: sp.multi } }
+                );
+            }
+        }
         let targetLevel = 'AA';
         const $ = id => document.getElementById(id);
         // Production is served from /axe/, local dev from /.
@@ -748,13 +834,17 @@
             $('levelNote').textContent = levelNotes[targetLevel];
         }));
 
-        document.querySelectorAll('#resultTabs .tab').forEach(t => t.addEventListener('click', () => {
-            document.querySelectorAll('#resultTabs .tab').forEach(x => x.classList.remove('active'));
-            // hide all tab-content within #results
-            document.querySelectorAll('#results .tab-content').forEach(x => x.classList.remove('active'));
-            t.classList.add('active');
-            $(`tab-${t.dataset.tab}`).classList.add('active');
-        }));
+        ['pc', 'sp'].forEach(scope => {
+            const tabsEl = $(`resultTabs-${scope}`);
+            if (!tabsEl) return;
+            tabsEl.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+                tabsEl.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+                const block = tabsEl.closest('.scoretable-wrap');
+                if (block) block.querySelectorAll('.tab-content').forEach(x => x.classList.remove('active'));
+                t.classList.add('active');
+                $(`tab-${t.dataset.tab}-${scope}`).classList.add('active');
+            }));
+        });
         
 
         function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
@@ -791,7 +881,7 @@
             // axe-coreの生の結果を保存
             lastResults = { ...results, url, timestamp: new Date().toISOString(), level: targetLevel };
 
-            renderAllTabs();
+            renderAllTabs('pc');
             $('results').classList.add('visible');
             $('exportArea').classList.add('visible');
         }
@@ -856,16 +946,39 @@
 
         function exportCSV() {
             if (!lastResults) return;
-            const rows = buildReportRows(lastResults, lastResults.url, aiResults, lastEnhancedResults, batchNavConsistency);
             const header = ['No', '検査種別', 'SC', '検査項目', '適合レベル', '結果', '場所', '検出数', '重要度', '詳細', '改善案'];
-            const table = [header, ...rows];
-
             const escapeCsv = (value) => {
                 const s = String(value ?? '');
                 if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
                 return s;
             };
-            const csv = table.map(row => row.map(escapeCsv).join(',')).join('\r\n');
+
+            const pcRows = buildReportRows(lastResults, lastResults.url, aiResults, lastEnhancedResults, batchNavConsistency);
+            const pcStats = buildStats(lastResults, lastEnhancedResults, aiResults);
+            const scoreRow = ['スコア', `${pcStats.passRate ?? '—'}%`, `全${pcStats.total}項目`, `緊急:${pcStats.critical}`, `重大:${pcStats.serious}`, `中程度:${pcStats.moderate}`, `軽微:${pcStats.minor}`, `合格:${pcStats.pass}`, `該当なし:${pcStats.na}`, `未検証:${pcStats.unverified}`, ''];
+
+            const lines = [
+                ['# PC VIEW', '', '', '', '', '', '', '', '', '', ''],
+                scoreRow,
+                header,
+                ...pcRows
+            ];
+
+            if (lastMobileScanSnapshot) {
+                const sp = lastMobileScanSnapshot;
+                const spRows = buildReportRows(sp.basic, lastResults.url, sp.multi || {}, sp.deep || null, null);
+                const spStats = buildStats(sp.basic, sp.deep || null, sp.multi || {});
+                const spScoreRow = ['スコア', `${spStats.passRate ?? '—'}%`, `全${spStats.total}項目`, `緊急:${spStats.critical}`, `重大:${spStats.serious}`, `中程度:${spStats.moderate}`, `軽微:${spStats.minor}`, `合格:${spStats.pass}`, `該当なし:${spStats.na}`, `未検証:${spStats.unverified}`, ''];
+                lines.push(
+                    ['', '', '', '', '', '', '', '', '', '', ''],
+                    ['# SP VIEW (iPhone SE)', '', '', '', '', '', '', '', '', '', ''],
+                    spScoreRow,
+                    header,
+                    ...spRows
+                );
+            }
+
+            const csv = lines.map(row => row.map(escapeCsv).join(',')).join('\r\n');
             const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
@@ -1020,6 +1133,7 @@
             lastEnhancedResults = null;
             aiResults = {};
             manualDecisions.clear();
+            manualImpacts.clear();
             batchResultsData = [];
             batchNavConsistency = null;
             batchEnhancedResults = {};
@@ -1047,10 +1161,24 @@
 
             // --- タブ・リストクリア ---
             ['critical','serious','moderate','minor','pass','na','unverified'].forEach(k => {
-                const el = $('list-' + k);
-                if (el) el.innerHTML = '';
-                const badge = $('badge-' + k);
-                if (badge) badge.textContent = '0';
+                ['pc', 'sp'].forEach(scope => {
+                    const el = $(`list-${k}-${scope}`);
+                    if (el) el.innerHTML = '';
+                    const badge = $(`badge-${k}-${scope}`);
+                    if (badge) badge.textContent = '0';
+                    const tabContent = $(`tab-${k}-${scope}`);
+                    if (tabContent) { tabContent.classList.remove('active'); }
+                });
+                // Reset active tab to first tab in each set
+            });
+            ['pc', 'sp'].forEach(scope => {
+                const tabsEl = $(`resultTabs-${scope}`);
+                if (!tabsEl) return;
+                tabsEl.querySelectorAll('.tab').forEach((t, i) => {
+                    t.classList.toggle('active', i === 0);
+                });
+                const firstContent = $(`tab-critical-${scope}`);
+                if (firstContent) firstContent.classList.add('active');
             });
 
             // --- UIロック解除 ---
@@ -1219,7 +1347,7 @@
                 multiEnabled ? computeMultiScore(aiResults) : null,
                 deepEnabled, multiEnabled
             );
-            renderAllTabs();
+            renderAllTabs('pc');
             renderNavBar();
             const st = $('scanScoreTable');
             if (st) st.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1613,7 +1741,10 @@
                 aiResults = primarySnapshot?.multi ? cloneData(primarySnapshot.multi) : {};
                 lastMobileScanSnapshot = runMobile ? cloneData(mobileSnapshot) : null;
 
-                renderAllTabs();
+                renderAllTabs('pc');
+                if (runMobile && mobileSnapshot) {
+                    renderAllTabs('sp', mobileSnapshot.basic, mobileSnapshot.deep || null, mobileSnapshot.multi || {});
+                }
                 $('results').classList.add('visible');
                 $('exportArea').classList.add('visible');
                 if (runDesktop && runMobile) progressLabel.textContent = 'PC/SP 検査完了';
@@ -1761,6 +1892,17 @@
                 .filter(s => /^\d+\.\d+\.\d+$/.test(s));
         }
 
+        // decision を raw ステータスに上書き適用するヘルパー
+        // dkey: decisionのキー、rawStatus: 'fail'|'pass'|'na'|'unverified'
+        // impact: NG時に返す重要度（元のimpact）
+        function applyDecisionToStatus(dkey, rawStatus, rawImpact) {
+            const dec = dkey ? manualDecisions.get(dkey) : null;
+            if (dec === 'ok')   return { status: 'pass',       impact: null };
+            if (dec === 'ng')   return { status: 'fail',       impact: manualImpacts.get(dkey) || rawImpact || 'serious' };
+            if (dec === 'hold') return { status: 'unverified', impact: null };
+            return { status: rawStatus, impact: rawImpact };
+        }
+
         function computeBasicScore(results) {
             if (!results) return null;
             const scSet = new Set(getTargetScList());
@@ -1784,86 +1926,68 @@
                 }
             }
 
-            (results.violations || []).forEach(v => merge(extractSCFromTags(v.tags), 'fail', v.impact));
-            (results.incomplete || []).forEach(v => merge(extractSCFromTags(v.tags), 'unverified', v.impact));
-            (results.passes || []).forEach(v => merge(extractSCFromTags(v.tags), 'pass', null));
+            (results.violations || []).forEach(v => {
+                const d = applyDecisionToStatus(`BASIC:${v.id}`, 'fail', v.impact);
+                merge(extractSCFromTags(v.tags), d.status, d.impact);
+            });
+            (results.incomplete || []).forEach(v => {
+                const d = applyDecisionToStatus(`BASIC:${v.id}`, 'unverified', v.impact);
+                merge(extractSCFromTags(v.tags), d.status, d.impact);
+            });
+            (results.passes || []).forEach(v => {
+                const d = applyDecisionToStatus(`BASIC:pass:${v.id}`, 'pass', null);
+                merge(extractSCFromTags(v.tags), d.status, d.impact);
+            });
 
             let critical = 0, serious = 0, moderate = 0, minor = 0;
             let pass = 0, unverified = 0;
             Object.values(scMap).forEach(({ status, impact }) => {
-                if (status === 'pass') {
-                    pass++;
-                    return;
-                }
-                if (status === 'unverified') {
-                    unverified++;
-                    return;
-                }
+                if (status === 'pass')       { pass++; return; }
+                if (status === 'unverified') { unverified++; return; }
                 if (impact === 'critical') critical++;
                 else if (impact === 'moderate') moderate++;
                 else if (impact === 'minor') minor++;
                 else serious++;
             });
 
-            const total = critical + serious + moderate + minor + pass + unverified;
-            const checkable = pass + critical + serious + moderate + minor;
-            return {
-                total,
-                critical,
-                serious,
-                moderate,
-                minor,
-                pass,
-                na: 0,
-                unverified,
-                score: Math.round(pass / getTargetScList().length * 100)
-            };
+            return { total: critical+serious+moderate+minor+pass+unverified,
+                     critical, serious, moderate, minor, pass, na: 0, unverified,
+                     score: Math.round(pass / getTargetScList().length * 100) };
         }
 
         function computeDeepScore(results) {
             if (!results || !results.length) return null;
             const scSet = new Set(getTargetScList());
             const rank = { fail: 0, unverified: 1, pass: 2, na: 3 };
-            const scMap = {}; // sc -> result
+            const scMap = {}; // sc -> { status, impact }
 
-            function merge(sc, status) {
+            function merge(sc, status, impact) {
                 if (!sc || !scSet.has(sc)) return;
                 const cur = scMap[sc];
-                if (!cur || rank[status] < rank[cur]) scMap[sc] = status;
+                if (!cur || rank[status] < rank[cur.status]) scMap[sc] = { status, impact };
             }
 
             results.forEach(r => {
-                const status = r.status === 'fail'
-                    ? 'fail'
-                    : r.status === 'pass'
-                        ? 'pass'
-                        : r.status === 'not_applicable'
-                            ? 'na'
-                            : 'unverified';
-                splitCompositeSc(r.sc).forEach(sc => merge(sc, status));
+                const rawStatus = r.status === 'fail' ? 'fail'
+                    : r.status === 'pass' ? 'pass'
+                    : r.status === 'not_applicable' ? 'na' : 'unverified';
+                const d = applyDecisionToStatus(`DEEP:${r.sc}`, rawStatus, 'serious');
+                splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, d.impact));
             });
 
             let fail = 0, pass = 0, na = 0, unverified = 0;
-            Object.values(scMap).forEach(status => {
-                if (status === 'fail') fail++;
+            const imp = { critical: 0, serious: 0, moderate: 0, minor: 0 };
+            Object.values(scMap).forEach(({ status, impact }) => {
+                if (status === 'fail') { fail++; if (imp[impact] !== undefined) imp[impact]++; else imp.serious++; }
                 else if (status === 'pass') pass++;
                 else if (status === 'na') na++;
                 else unverified++;
             });
 
-            const total = fail + pass + na + unverified;
-            const checkable  = pass + fail;
-            return {
-                total,
-                critical: 0,
-                serious: fail,
-                moderate: 0,
-                minor: 0,
-                pass,
-                na,
-                unverified,
-                score: Math.round(pass / getTargetScList().length * 100)
-            };
+            return { total: fail+pass+na+unverified,
+                     critical: imp.critical, serious: imp.serious, moderate: imp.moderate, minor: imp.minor,
+                     pass, na, unverified,
+                     score: Math.round(pass / getTargetScList().length * 100) };
         }
 
         function computeMultiScore(aiData) {
@@ -1874,29 +1998,22 @@
             manualCheckItems.forEach((item, i) => {
                 if ((lo[item.level] || 2) > lim) return;
                 const r = aiData[i];
-                if (!r) { unverified++; return; }
-                if (r.status === 'pass') pass++;
-                else if (r.status === 'fail') fail++;
-                else if (r.status === 'not_applicable') na++;
+                const rawStatus = !r ? 'unverified' : r.status === 'pass' ? 'pass'
+                    : r.status === 'fail' ? 'fail'
+                    : r.status === 'not_applicable' ? 'na' : 'unverified';
+                const { status } = applyDecisionToStatus(`MULTI:${i}`, rawStatus, 'serious');
+                if (status === 'pass') pass++;
+                else if (status === 'fail') fail++;
+                else if (status === 'na') na++;
                 else unverified++;
             });
-            const total = fail + pass + na + unverified;
-            const checkable = pass + fail;
-            return {
-                total,
-                critical: 0,
-                serious: fail,
-                moderate: 0,
-                minor: 0,
-                pass,
-                na,
-                unverified,
-                score: Math.round(pass / getTargetScList().length * 100)
-            };
+            return { total: fail+pass+na+unverified,
+                     critical: 0, serious: fail, moderate: 0, minor: 0,
+                     pass, na, unverified,
+                     score: Math.round(pass / getTargetScList().length * 100) };
         }
 
         function computeTotalScore(basicResults, deepResults, multiAiData) {
-            // SC をキーにして worst result をマージ
             const rank = { fail: 0, unverified: 1, pass: 2, na: 3 };
             const scMap = {}; // sc → { result, impact }
             const lo = { 'A': 1, 'AA': 2, 'AAA': 3 };
@@ -1912,25 +2029,36 @@
             }
 
             if (basicResults) {
-                (basicResults.violations || []).forEach(v => merge(extractSCFromTags(v.tags), 'fail', v.impact));
-                (basicResults.passes    || []).forEach(v => merge(extractSCFromTags(v.tags), 'pass', null));
-                (basicResults.incomplete|| []).forEach(v => merge(extractSCFromTags(v.tags), 'unverified', v.impact));
+                (basicResults.violations || []).forEach(v => {
+                    const d = applyDecisionToStatus(`BASIC:${v.id}`, 'fail', v.impact);
+                    merge(extractSCFromTags(v.tags), d.status, d.impact);
+                });
+                (basicResults.passes    || []).forEach(v => {
+                    const d = applyDecisionToStatus(`BASIC:pass:${v.id}`, 'pass', null);
+                    merge(extractSCFromTags(v.tags), d.status, d.impact);
+                });
+                (basicResults.incomplete|| []).forEach(v => {
+                    const d = applyDecisionToStatus(`BASIC:${v.id}`, 'unverified', v.impact);
+                    merge(extractSCFromTags(v.tags), d.status, d.impact);
+                });
             }
             if (deepResults) {
                 deepResults.forEach(r => {
-                    const res = r.status === 'fail' ? 'fail' : r.status === 'pass' ? 'pass'
+                    const rawStatus = r.status === 'fail' ? 'fail' : r.status === 'pass' ? 'pass'
                                : r.status === 'not_applicable' ? 'na' : 'unverified';
-                    splitCompositeSc(r.sc).forEach(sc => merge(sc, res, null));
+                    const d = applyDecisionToStatus(`DEEP:${r.sc}`, rawStatus, 'serious');
+                    splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, d.impact));
                 });
             }
             if (multiAiData) {
                 manualCheckItems.forEach((item, i) => {
                     if ((lo[item.level] || 2) > lim) return;
                     const r = multiAiData[i];
-                    const res = !r ? 'unverified' : r.status === 'pass' ? 'pass'
+                    const rawStatus = !r ? 'unverified' : r.status === 'pass' ? 'pass'
                                : r.status === 'fail' ? 'fail'
                                : r.status === 'not_applicable' ? 'na' : 'unverified';
-                    merge(item.ref, res, null);
+                    const d = applyDecisionToStatus(`MULTI:${i}`, rawStatus, 'serious');
+                    merge(item.ref, d.status, d.impact);
                 });
             }
 
@@ -1942,9 +2070,8 @@
                 else if (result === 'na')   na++;
                 else unverified++;
             });
-            const total = fail + pass + na + unverified;
-            const checkable = pass + fail;
-            return { total, critical: imp.critical, serious: imp.serious, moderate: imp.moderate, minor: imp.minor,
+            return { total: fail+pass+na+unverified,
+                     critical: imp.critical, serious: imp.serious, moderate: imp.moderate, minor: imp.minor,
                      pass, na, unverified, score: Math.round(pass / getTargetScList().length * 100) };
         }
 
@@ -1968,13 +2095,14 @@
             const locHtml  = locations && locations.length
                 ? `<div class="item-locations"><div style="font-size:11px;color:var(--navy-400);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">検出箇所</div>${locations.map(l => `<div class="location-row">${escapeHtml(String(l))}</div>`).join('')}</div>`
                 : '';
-            const decBtns = decisionKey
-                ? `<div class="decision-btns">
-                    <button class="decision-btn${dec==='ok'?' active-ok':''}" onclick="event.stopPropagation();setDecision('${escapeHtml(decisionKey)}','ok',this)">OK</button>
-                    <button class="decision-btn${dec==='ng'?' active-ng':''}" onclick="event.stopPropagation();setDecision('${escapeHtml(decisionKey)}','ng',this)">NG</button> 
-                    <button class="decision-btn${dec==='hold'?' active-hold':''}" onclick="event.stopPropagation();setDecision('${escapeHtml(decisionKey)}','hold',this)">保留</button>
-                   </div>` : '';
-            return `<div class="item-card" data-impact="${impact||''}" ${borderStyle} onclick="this.classList.toggle('expanded')">
+            // 全カードにボタンを表示。decisionKey がない場合は一時キーを生成
+            const dk = decisionKey || `tmp:${src||''}:${sc||''}:${no}`;
+            const decBtns = `<div class="decision-btns" onclick="event.stopPropagation()">
+                    <button class="decision-btn${dec==='ok'?' active-ok':''}" onclick="setDecision('${escapeHtml(dk)}','ok',this)">OK</button>
+                    <button class="decision-btn${dec==='ng'?' active-ng':''}" onclick="setDecision('${escapeHtml(dk)}','ng',this)">NG</button>
+                    <button class="decision-btn${dec==='hold'?' active-hold':''}" onclick="setDecision('${escapeHtml(dk)}','hold',this)">保留</button>
+                   </div>`;
+            return `<div class="item-card" data-impact="${impact||''}" data-default-impact="${impact||'serious'}" ${borderStyle} onclick="this.classList.toggle('expanded')">
                 <div class="item-header">
                     ${srcBadge}
                     ${scBadge}${lvBadge}
@@ -1992,33 +2120,51 @@
         // ============================================================
         // 全タブ再描画（BASIC + DEEP + MULTI の結果をマージ）
         // ============================================================
-        function renderAllTabs() {
-            const basic = lastResults;
-            const deep  = lastEnhancedResults;
-            const multi = aiResults;
+        function renderAllTabs(suffix = 'pc', basic = lastResults, deep = lastEnhancedResults, multi = aiResults) {
             const lo    = { 'A': 1, 'AA': 2, 'AAA': 3 };
             const lim   = lo[targetLevel] || 2;
 
+            // decisionを適用してバケットを決定するヘルパー
+            // defaultBucket: 元の振り分け先('critical'/'serious'/'moderate'/'minor'/'pass'/'na'/'unverified')
+            // defaultImpact: NG時に入る重要度列（defaultBucketが違反列の場合その列、そうでなければ'serious'）
+            function applyDecision(dkey, defaultBucket, defaultImpact) {
+                const dec = dkey ? manualDecisions.get(dkey) : null;
+                if (dec === 'ok')   return 'pass';
+                if (dec === 'ng')   return manualImpacts.get(dkey) || defaultImpact || 'serious';
+                if (dec === 'hold') return 'unverified';
+                return defaultBucket;
+            }
+
             const buckets = { critical: [], serious: [], moderate: [], minor: [], pass: [], na: [], unverified: [] };
 
-            // BASIC violations → impact bucket
+            // BASIC violations
             if (basic) {
                 (basic.violations || []).forEach(v => {
-                    const b = buckets[v.impact] || buckets.serious;
-                    b.push({ src: 'BASIC', type: 'violation', data: v });
+                    const dkey = `BASIC:${v.id}`;
+                    const dest = applyDecision(dkey, v.impact || 'serious', v.impact || 'serious');
+                    (buckets[dest] || buckets.serious).push({ src: 'BASIC', type: 'violation', data: v, dkey });
                 });
-                (basic.passes || []).forEach(p => buckets.pass.push({ src: 'BASIC', type: 'pass', data: p }));
-                (basic.incomplete || []).forEach(i => buckets.unverified.push({ src: 'BASIC', type: 'incomplete', data: i }));
+                (basic.passes || []).forEach(p => {
+                    const dkey = `BASIC:pass:${p.id}`;
+                    const dest = applyDecision(dkey, 'pass', 'serious');
+                    (buckets[dest] || buckets.serious).push({ src: 'BASIC', type: 'pass', data: p, dkey });
+                });
+                (basic.incomplete || []).forEach(i => {
+                    const dkey = `BASIC:${i.id}`;
+                    const dest = applyDecision(dkey, 'unverified', 'serious');
+                    (buckets[dest] || buckets.unverified).push({ src: 'BASIC', type: 'incomplete', data: i, dkey });
+                });
             }
 
             // DEEP results
             if (deep) {
                 deep.forEach(r => {
-                    const item = { src: 'DEEP', type: 'deep', data: r };
-                    if (r.status === 'fail')           buckets.serious.push(item);
-                    else if (r.status === 'pass')      buckets.pass.push(item);
-                    else if (r.status === 'not_applicable') buckets.na.push(item);
-                    else                               buckets.unverified.push(item);
+                    const dkey = `DEEP:${r.sc}`;
+                    const defaultBucket = r.status === 'fail' ? 'serious'
+                        : r.status === 'pass' ? 'pass'
+                        : r.status === 'not_applicable' ? 'na' : 'unverified';
+                    const dest = applyDecision(dkey, defaultBucket, 'serious');
+                    (buckets[dest] || buckets.unverified).push({ src: 'DEEP', type: 'deep', data: r, dkey });
                 });
             }
 
@@ -2026,66 +2172,64 @@
             manualCheckItems.forEach((item, i) => {
                 if ((lo[item.level] || 2) > lim) return;
                 const r = multi[i];
-                const card = { src: 'MULTI', type: 'multi', data: { ...item, idx: i, aiResult: r } };
-                if (!r)                              buckets.unverified.push(card);
-                else if (r.status === 'fail')        buckets.serious.push(card);
-                else if (r.status === 'pass')        buckets.pass.push(card);
-                else if (r.status === 'not_applicable') buckets.na.push(card);
-                else                                 buckets.unverified.push(card);
+                const dkey = `MULTI:${i}`;
+                const defaultBucket = !r ? 'unverified'
+                    : r.status === 'fail' ? 'serious'
+                    : r.status === 'pass' ? 'pass'
+                    : r.status === 'not_applicable' ? 'na' : 'unverified';
+                const dest = applyDecision(dkey, defaultBucket, 'serious');
+                (buckets[dest] || buckets.unverified).push({ src: 'MULTI', type: 'multi', data: { ...item, idx: i, aiResult: r }, dkey });
             });
 
-            // SC 3.2.3/3.2.4 ナビゲーション一貫性はカード表示せず情報バーで表示（showBatchDetail参照）
+            // SC 3.2.3/3.2.4 ナビゲーション一貫性はカード表示せず情報バーで表示
 
-            // 各タブを描画
+            // 各タブを描画（バッジ数はSC単位のTOTALスコアに合わせる）
+            const ts = computeTotalScore(basic, deep || null, Object.keys(multi || {}).length > 0 ? multi : null);
+            const badgeMap = { critical: ts.critical, serious: ts.serious, moderate: ts.moderate, minor: ts.minor, pass: ts.pass, na: ts.na, unverified: ts.unverified };
             const EMPTY = '<div class="empty-state">項目はありません</div>';
             ['critical','serious','moderate','minor','pass','na','unverified'].forEach(key => {
                 const items = buckets[key];
-                const el = $('list-' + key);
+                const el = $(`list-${key}-${suffix}`);
                 if (!el) return;
-                const isUnverified = (key === 'unverified');
                 el.innerHTML = items.length
-                    ? items.map(({ src, type, data }, idx) => {
+                    ? items.map(({ src, type, data, dkey }, idx) => {
                         const no = idx + 1;
                         if (type === 'violation' || type === 'incomplete') {
-                            const sc    = extractSCFromTags(data.tags);
-                            const level = getWcagLevel(data.tags);
-                            const title = getJaRuleName(data.id);
-                            const summary = getJaRuleDesc(data.id, data.description || data.help);
-                            const locs  = (data.nodes || []).slice(0, 8).map(n =>
+                            const sc       = extractSCFromTags(data.tags);
+                            const level    = getWcagLevel(data.tags);
+                            const title    = getJaRuleName(data.id);
+                            const summary  = getJaRuleDesc(data.id, data.description || data.help);
+                            const locs     = (data.nodes || []).slice(0, 8).map(n =>
                                 Array.isArray(n.target) ? n.target.join(' > ') : (n.target || ''));
                             const countText = data.nodes ? `検出件数：${data.nodes.length}件` : '';
-                            const dkey = isUnverified ? `BASIC:${data.id}` : null;
-                            return renderCardItem(no, isUnverified ? null : src, data.impact, sc, level, title, summary, countText, locs, dkey);
+                            return renderCardItem(no, src, data.impact, sc, level, title, summary, countText, locs, dkey);
                         }
                         if (type === 'pass') {
-                            const sc    = extractSCFromTags(data.tags);
-                            const level = getWcagLevel(data.tags);
-                            const title = getJaRuleName(data.id);
-                            const summary = getJaRuleDesc(data.id, data.description || data.help);
-                            const locs  = (data.nodes || []).slice(0, 5).map(n =>
+                            const sc       = extractSCFromTags(data.tags);
+                            const level    = getWcagLevel(data.tags);
+                            const title    = getJaRuleName(data.id);
+                            const summary  = getJaRuleDesc(data.id, data.description || data.help);
+                            const locs     = (data.nodes || []).slice(0, 5).map(n =>
                                 Array.isArray(n.target) ? n.target.join(' > ') : (n.target || ''));
                             const countText = `合格：${(data.nodes||[]).length}件`;
-                            return renderCardItem(no, src, 'pass', sc, level, title, summary, countText, locs, null);
+                            return renderCardItem(no, src, 'pass', sc, level, title, summary, countText, locs, dkey);
                         }
                         if (type === 'deep') {
-                            const r = data;
-                            const locs = (r.violations || []).slice(0, 8).map(v => String(v));
+                            const r        = data;
+                            const locs     = (r.violations || []).slice(0, 8).map(v => String(v));
                             const countText = r.violations && r.violations.length ? `検出件数：${r.violations.length}件` : '';
-                            const dkey = isUnverified ? `DEEP:${r.sc}` : null;
-                            return renderCardItem(no, isUnverified ? null : src, r.status === 'fail' ? 'serious' : null, r.sc, null, r.name || '', r.message || '', countText, locs, dkey);
+                            return renderCardItem(no, src, r.status === 'fail' ? 'serious' : null, r.sc, null, r.name || '', r.message || '', countText, locs, dkey);
                         }
                         if (type === 'multi') {
-                            const r   = data.aiResult;
-                            const locs = r && r.reason ? [r.reason] : [];
-                            const countText = '';
-                            const dkey = isUnverified ? `MULTI:${data.idx}` : null;
-                            return renderCardItem(no, isUnverified ? null : src, null, data.ref, data.level, data.text || '', data.category || '', countText, locs, dkey);
+                            const r        = data.aiResult;
+                            const locs     = r && r.reason ? [r.reason] : [];
+                            return renderCardItem(no, src, null, data.ref, data.level, data.text || '', data.category || '', '', locs, dkey);
                         }
                         return '';
                     }).join('')
                     : EMPTY;
-                const badge = $('badge-' + key);
-                if (badge) badge.textContent = items.length;
+                const badge = $(`badge-${key}-${suffix}`);
+                if (badge) badge.textContent = badgeMap[key] ?? items.length;
             });
         }
 
@@ -2171,9 +2315,10 @@
 
             const body = $(scoreBodyId);
             if (!body) return;
+            const deepLabel = sessionAAABeta ? 'DEEP<br><span style="font-size:10px;font-weight:400;letter-spacing:0;text-transform:none;">A/AA/AAA β</span>' : 'DEEP<br><span style="font-size:10px;font-weight:400;letter-spacing:0;text-transform:none;">A/AA</span>';
             body.innerHTML =
                 row('BASIC', '#3581B8', nb, true, false) +
-                row('DEEP',  '#304C89', nd, deepEnabled, false) +
+                row(deepLabel,  '#304C89', nd, deepEnabled, false) +
                 row('MULTI', '#0D7A5F', nm, multiEnabled, false) +
                 row('TOTAL', 'var(--navy-900)', normalize(totalScore), true, true);
 
@@ -2333,17 +2478,35 @@
             btn.disabled = true;
             btn.textContent = 'Export中...';
             try {
-                const url = lastResults.url;
-                const rows = buildReportRows(lastResults, url);
-                const stats = computeStats(rows);
+                const baseUrl = lastResults.url;
                 const timestamp = lastResults.timestamp || new Date().toISOString();
+                const pages = [];
+
+                // PC page
+                const pcRows = buildReportRows(lastResults, baseUrl, aiResults, lastEnhancedResults, batchNavConsistency);
+                pages.push({
+                    url: lastMobileScanSnapshot ? baseUrl + ' [PC]' : baseUrl,
+                    rows: pcRows,
+                    timestamp,
+                    stats: buildStats(lastResults, lastEnhancedResults, aiResults)
+                });
+
+                // SP page (if exists)
+                if (lastMobileScanSnapshot) {
+                    const sp = lastMobileScanSnapshot;
+                    const spRows = buildReportRows(sp.basic, baseUrl, sp.multi || {}, sp.deep || null, null);
+                    pages.push({
+                        url: baseUrl + ' [SP]',
+                        rows: spRows,
+                        timestamp: sp.basic?.timestamp || timestamp,
+                        stats: buildStats(sp.basic, sp.deep || null, sp.multi || {})
+                    });
+                }
 
                 const { response: res, data } = await fetchApiJson(apiUrl('/api/export-report'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        pages: [{ url, rows, timestamp, stats }]
-                    })
+                    body: JSON.stringify({ pages })
                 }, '/api/export-report');
                 if (!res.ok) throw new Error(data.error || '保存失敗');
                 window.open(data.url, '_blank');

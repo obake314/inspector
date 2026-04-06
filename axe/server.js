@@ -2921,37 +2921,49 @@ app.post('/api/export-report', async (req, res) => {
     if (!addCoverRes.ok) throw new Error(`表紙シート追加失敗: ${addCoverData.error?.message}`);
     const coverSheetId = addCoverData.replies[0].addSheet.properties.sheetId;
 
-    // 全体集計
-    const totalStats = { pass: 0, fail: 0, incomplete: 0, na: 0, unverified: 0 };
+    // 全体集計（新形式: critical/serious/moderate/minor/pass/na/unverified）
+    const totalStats = { critical: 0, serious: 0, moderate: 0, minor: 0, pass: 0, na: 0, unverified: 0, fail: 0 };
     pageTabInfo.forEach(p => {
-      totalStats.pass += p.stats.pass || 0;
-      totalStats.fail += p.stats.fail || 0;
-      totalStats.incomplete += p.stats.incomplete || 0;
-      totalStats.na += p.stats.na || 0;
-      totalStats.unverified += p.stats.unverified || 0;
+      const s = p.stats;
+      // 新形式（buildStats）のフィールドを使用。旧形式フォールバックあり
+      if (s.critical !== undefined) {
+        totalStats.critical += s.critical || 0;
+        totalStats.serious  += s.serious  || 0;
+        totalStats.moderate += s.moderate || 0;
+        totalStats.minor    += s.minor    || 0;
+      } else {
+        totalStats.serious += s.fail || 0; // 旧形式のfailはseriousに
+      }
+      totalStats.pass       += s.pass       || 0;
+      totalStats.na         += s.na         || 0;
+      totalStats.unverified += s.unverified || 0;
     });
-    const totalCheckable = totalStats.pass + totalStats.fail;
-    const overallRate = totalCheckable > 0 ? Math.round(totalStats.pass / totalCheckable * 100) : null;
+    totalStats.fail = totalStats.critical + totalStats.serious + totalStats.moderate + totalStats.minor;
+    // 単ページの場合は passRate をそのまま使用、複数ページは pass/total で算出
+    const firstStats = pageTabInfo[0]?.stats || {};
+    const totalSC = firstStats.total || (totalStats.pass + totalStats.fail + totalStats.na + totalStats.unverified);
+    const overallRate = totalSC > 0 ? Math.round(totalStats.pass / totalSC * 100) : null;
     const inspectionTime = pages[0].timestamp
       ? new Date(pages[0].timestamp).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
       : now.toLocaleString('ja-JP');
 
     const coverRows = [
-      ['アクセシビリティ検査レポート', '', '', '', '', '', '', '', ''],
-      ['作成日時', inspectionTime, '', '', '', '', '', '', ''],
-      ['', '', '', '', '', '', '', '', ''],
-      ['■ 全体スコア', '', '', '', '', '', '', '', ''],
-      ['全体合格率', overallRate !== null ? `${overallRate}%` : '—', '', '', '', '', '', '', ''],
-      ['合格', totalStats.pass, '不合格', totalStats.fail, '判定不能', totalStats.incomplete, '未検証', totalStats.unverified, ''],
-      ['', '', '', '', '', '', '', '', ''],
-      ['■ ページ別スコア', '', '', '', '', '', '', '', ''],
-      ['No', 'URL', '合格', '不合格', '判定不能', '該当なし', '未検証', '合格率', '結果シート'],
+      ['アクセシビリティ検査レポート', '', '', '', '', '', '', '', '', ''],
+      ['作成日時', inspectionTime, '', '', '', '', '', '', '', ''],
+      ['', '', '', '', '', '', '', '', '', ''],
+      ['■ 全体スコア', '', '', '', '', '', '', '', '', ''],
+      ['スコア', overallRate !== null ? `${overallRate}%` : '—', '', '', '', '', '', '', '', ''],
+      ['緊急', totalStats.critical, '重大', totalStats.serious, '中程度', totalStats.moderate, '軽微', totalStats.minor, '合格', totalStats.pass],
+      ['該当なし', totalStats.na, '未検証', totalStats.unverified, '', '', '', '', '', '', ''],
+      ['', '', '', '', '', '', '', '', '', ''],
+      ['■ ページ別スコア', '', '', '', '', '', '', '', '', ''],
+      ['No', 'URL', '緊急', '重大', '中程度', '軽微', '合格', '該当なし', '未検証', 'スコア', '結果シート'],
       ...pageTabInfo.map((p, idx) => {
         const s = p.stats;
-        const ch = (s.pass || 0) + (s.fail || 0);
-        const rate = ch > 0 ? `${Math.round((s.pass || 0) / ch * 100)}%` : '—';
+        const rate = s.passRate !== undefined ? `${s.passRate}%`
+          : (() => { const ch = (s.pass || 0) + (s.fail || 0); return ch > 0 ? `${Math.round((s.pass || 0) / ch * 100)}%` : '—'; })();
         const link = `=HYPERLINK("https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit#gid=${p.sheetId}","${p.title.replace(/"/g, '""')}")`;
-        return [String(idx + 1), p.url, s.pass || 0, s.fail || 0, s.incomplete || 0, s.na || 0, s.unverified || 0, rate, link];
+        return [String(idx + 1), p.url, s.critical || 0, s.serious || 0, s.moderate || 0, s.minor || 0, s.pass || 0, s.na || 0, s.unverified || 0, rate, link];
       })
     ];
 
@@ -2964,18 +2976,18 @@ app.post('/api/export-report', async (req, res) => {
     const coverFormatReqs = [
       // タイトル行（青背景）
       { repeatCell: {
-        range: { sheetId: coverSheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 9 },
+        range: { sheetId: coverSheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 11 },
         cell: { userEnteredFormat: {
           textFormat: { bold: true, fontSize: 14, foregroundColor: { red: 1, green: 1, blue: 1 } },
           backgroundColor: { red: 0.102, green: 0.451, blue: 0.91 }
         }},
         fields: 'userEnteredFormat(textFormat,backgroundColor)'
       }},
-      { mergeCells: { range: { sheetId: coverSheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 9 }, mergeType: 'MERGE_ALL' }},
-      // ■見出し行（セクション）
-      ...([3, 7].map(rowIdx => ({
+      { mergeCells: { range: { sheetId: coverSheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 11 }, mergeType: 'MERGE_ALL' }},
+      // ■見出し行（セクション）: ■全体スコア=row3, ■ページ別スコア=row8
+      ...([3, 8].map(rowIdx => ({
         repeatCell: {
-          range: { sheetId: coverSheetId, startRowIndex: rowIdx, endRowIndex: rowIdx + 1, startColumnIndex: 0, endColumnIndex: 9 },
+          range: { sheetId: coverSheetId, startRowIndex: rowIdx, endRowIndex: rowIdx + 1, startColumnIndex: 0, endColumnIndex: 11 },
           cell: { userEnteredFormat: {
             textFormat: { bold: true, foregroundColor: { red: 0.1, green: 0.3, blue: 0.6 } },
             backgroundColor: { red: 0.9, green: 0.93, blue: 0.99 }
@@ -2983,9 +2995,9 @@ app.post('/api/export-report', async (req, res) => {
           fields: 'userEnteredFormat(textFormat,backgroundColor)'
         }
       }))),
-      // ページ別ヘッダー行（行9 = index 8）
+      // ページ別ヘッダー行（row10 = index 9）
       { repeatCell: {
-        range: { sheetId: coverSheetId, startRowIndex: 8, endRowIndex: 9, startColumnIndex: 0, endColumnIndex: 9 },
+        range: { sheetId: coverSheetId, startRowIndex: 9, endRowIndex: 10, startColumnIndex: 0, endColumnIndex: 11 },
         cell: { userEnteredFormat: {
           textFormat: { bold: true, fontSize: 10, foregroundColor: { red: 1, green: 1, blue: 1 } },
           backgroundColor: { red: 0.2, green: 0.2, blue: 0.2 },
@@ -2993,16 +3005,16 @@ app.post('/api/export-report', async (req, res) => {
         }},
         fields: 'userEnteredFormat(textFormat,backgroundColor,horizontalAlignment)'
       }},
-      // 列幅: No, URL, 合格, 不合格, 判定不能, 該当なし, 未検証, 合格率, リンク
-      ...[40, 320, 60, 60, 70, 70, 60, 60, 250].map((px, i) => ({
+      // 列幅: No, URL, 緊急, 重大, 中程度, 軽微, 合格, 該当なし, 未検証, スコア, 結果シート
+      ...[40, 300, 55, 55, 65, 55, 55, 65, 65, 60, 240].map((px, i) => ({
         updateDimensionProperties: {
           range: { sheetId: coverSheetId, dimension: 'COLUMNS', startIndex: i, endIndex: i + 1 },
           properties: { pixelSize: px }, fields: 'pixelSize'
         }
       })),
-      // フリーズ（9行目まで）
+      // フリーズ（10行目まで）
       { updateSheetProperties: {
-        properties: { sheetId: coverSheetId, gridProperties: { frozenRowCount: 9 } },
+        properties: { sheetId: coverSheetId, gridProperties: { frozenRowCount: 10 } },
         fields: 'gridProperties.frozenRowCount'
       }}
     ];
