@@ -2191,7 +2191,7 @@
                 const modeLabel = sessionAAABeta ? 'A/AA/AAA（β）' : 'A/AA';
                 status.textContent = `DEEP SCAN実行中（${modeLabel}、2〜4分かかります）...`;
             }
-            resultsEl.innerHTML = '';
+            if (resultsEl) resultsEl.innerHTML = '';
 
             document.getElementById('results').style.display = 'block';
 
@@ -2230,7 +2230,7 @@
                     : e.message;
                 if (!silent) {
                     status.textContent = 'エラー: ' + msg;
-                    resultsEl.innerHTML = `<div style="color:#dc2626;padding:16px;">${escapeHtml(msg)}</div>`;
+                    if (resultsEl) resultsEl.innerHTML = `<div style="color:#dc2626;padding:16px;">${escapeHtml(msg)}</div>`;
                 }
                 throw e;
             } finally {
@@ -2328,7 +2328,7 @@
                     </details>` : ''}
                 </div>`;
             }
-            el.innerHTML = html;
+            if (el) el.innerHTML = html;
         }
 
         function escapeHtml(str) {

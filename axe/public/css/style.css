@@ -1188,7 +1188,9 @@ footer a:hover {
   border: 1px solid var(--navy-300);
   color: var(--navy-400);
   flex-direction: column;
+  width: 90px;
 }
+
 .config-status-item .st {
   font-weight: 600;
 }
