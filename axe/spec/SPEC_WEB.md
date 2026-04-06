@@ -1,6 +1,6 @@
 # SPEC_WEB
 
-最終更新: 2026-04-06（PC/SP詳細タブ分離・バッジ数SC単位化・エクスポートPC/SP分離対応）
+最終更新: 2026-04-06（一括スキャンSPビュー対応・スキャン説明UI改善・ExcelエクスポートへのCSV置換）
 
 ## 対象
 
@@ -37,11 +37,10 @@
 ## UI構成
 
 - 単一チェック / 一括チェックのモード切替（初回スキャン後は切替禁止）
-- 単一チェック時のビュー選択（ラジオ）:
+- ビュー選択（ラジオ）は単一・一括の両モードで使用可能:
   - `PCのみ`
   - `SPのみ`（iPhone SE）
   - `PC+SP`
-- 一括チェック時はビュー選択を無効化し、`PCのみ` 固定
 - レベル選択: A / AA / AAA（AAAは設定で表示）
 - 単一スキャン: URL + `DEEP SCAN` / `MULTI SCAN`
 - 一括スキャン: URL複数入力（最大10件）
@@ -81,14 +80,36 @@
 - 入力: `{ urls[], level, basicAuth?, viewportPreset? }`
 - 上限: 10 URL
 - フェーズ: BASIC → DEEP（任意）→ MULTI（任意）
-- 実行ビュー: `desktop` 固定（単一チェックのビュー選択は適用しない）
+- ビュー選択（`viewportModeWrap`）は単一チェックと共通。選択値に応じて以下のビューで実行:
+  - `PCのみ`: `desktop` 固定
+  - `SPのみ`: `mobile`（iphone-se）固定
+  - `PC+SP`: デスクトップパイプライン完了後、モバイルパイプラインを連続実行
+- 進捗チップ（`PC+SP` 時）: `PC BASIC → PC DEEP → PC MULTI → SP BASIC → SP DEEP → SP MULTI`
 - 結果格納:
-  - `batchResultsData`
-  - `batchEnhancedResults`
-  - `batchAIResults`
-  - `batchNavConsistency`（SC 3.2.3/3.2.4）
+  - `batchResultsData`: PCデータ（SPのみ時はSPデータ）
+  - `batchEnhancedResults`: `url → DEEP results`
+  - `batchAIResults`: `url → MULTI results`
+  - `batchNavConsistency`: SC 3.2.3/3.2.4
+  - `batchMobileResultsData`: SPデータ（`PC+SP` 時のみ使用）
+  - `batchMobileEnhancedResults`: `url → SP DEEP results`
+  - `batchMobileAIResults`: `url → SP MULTI results`
+  - `batchViewportMode`: 実行時の viewportMode 値
 
 ## スコアテーブル仕様
+
+### 行ラベルとサブテキスト
+
+| 行 | ラベル | サブテキスト（`.score-row-sub`） |
+|---|---|---|
+| BASIC | `BASIC` | `axe-core 自動検査` |
+| DEEP  | `DEEP`  | `SC別ヒューリスティック検査 (A/AA)` または `(A/AA/AAA β)` |
+| MULTI | `MULTI` | `Gemini AI 総合評価` |
+| TOTAL | `TOTAL` | なし |
+
+### DEEP / MULTI チェックボックス tooltip
+
+- `deepScanLabel` / `batchDeepLabel`: `title` 属性にDEEP SCANの検査内容・所要時間を記載
+- `multiScanLabel` / `batchAILabel`: `title` 属性にMULTI SCANの評価内容・所要時間・Gemini必須を記載
 
 ### 列
 
@@ -176,19 +197,24 @@
 
 ## エクスポート仕様
 
-### CSV エクスポート
+### Excel エクスポート（クライアント側）
 
+- ライブラリ: SheetJS（xlsx 0.20.3、CDN読み込み）
+- ファイル名: `wcag-report-YYYY-MM-DD.xlsx`
+- シート構成:
+  - `PC VIEW` シート: URL・検査日時・スコアメタ行 → ヘッダー行 → 行データ
+  - `SP VIEW` シート: SP結果が存在する場合のみ追加
 - ヘッダー列: `No` / `検査種別` / `SC` / `検査項目` / `適合レベル` / `結果` / `場所` / `検出数` / `重要度` / `詳細` / `改善案`
-- PC VIEW セクションを先に出力し、SP VIEW が存在する場合は空行区切りで続けて出力
-- 各セクション先頭にスコア行（スコア% / 全N項目 / 緊急:n / 重大:n / ... / 未検証:n）を付与
-- スコアは SC 単位集計（全項目数基準）
+- 列幅（`wch`）: No=4, 検査種別=8, SC=6, 検査項目=30, 適合レベル=6, 結果=8, 場所=20, 検出数=6, 重要度=8, 詳細=30, 改善案=20
+- 旧 CSV エクスポートボタン（`#csvBtn`）を `Excel` ボタンに置換済み
 
 ### Google Sheets エクスポート
 
 - PC と SP は別シートとして出力（例: `example.com/ [PC]`, `example.com/ [SP]`）
 - 表紙シートに全体集計（緊急/重大/中程度/軽微/合格/該当なし/未検証 列）とページ別スコア一覧
 - スコア（`passRate`）= `pass / 全項目数 × 100`（全項目数基準、`pass / checkable` ではない）
-- 一括検査は各 URL × PC の結果をページとして出力（SP は一括検査では非対象）
+- 一括検査（`PC+SP` モード）は各 URL に対して `[PC]` / `[SP]` の2ページを交互に出力
+- 一括検査（PCのみ / SPのみ）は各 URL を1ページとして出力
 
 ## 既知の実装差異
 

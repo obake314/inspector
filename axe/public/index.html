@@ -1094,15 +1094,10 @@
             const viewportWrap = $('viewportModeWrap');
             const viewportOptions = Array.from(document.querySelectorAll('input[name="viewportMode"]'));
             if (viewportWrap && viewportOptions.length) {
-                const enabledInMode = currentMode === 'single';
-                if (!enabledInMode) {
-                    const desktopOnly = $('viewportModeDesktop');
-                    if (desktopOnly) desktopOnly.checked = true;
-                }
-                viewportOptions.forEach(opt => { opt.disabled = !enabledInMode || scanExecuted; });
-                viewportWrap.style.opacity = enabledInMode ? '' : '0.4';
-                viewportWrap.style.pointerEvents = enabledInMode ? '' : 'none';
-                viewportWrap.title = enabledInMode ? '' : 'ビュー選択は単一チェックで利用できます';
+                viewportOptions.forEach(opt => { opt.disabled = scanExecuted; });
+                viewportWrap.style.opacity = '';
+                viewportWrap.style.pointerEvents = '';
+                viewportWrap.title = '';
             }
         }
         modeButtons.forEach(btn => btn.addEventListener('click', () => {
@@ -1145,6 +1140,10 @@
             batchNavConsistency = null;
             batchEnhancedResults = {};
             batchAIResults = {};
+            batchMobileResultsData = [];
+            batchMobileEnhancedResults = {};
+            batchMobileAIResults = {};
+            batchViewportMode = 'desktop';
             lastMobileScanSnapshot = null;
             scanExecuted = false;
 
@@ -1219,6 +1218,10 @@
         let batchNavConsistency = null;
         let batchEnhancedResults = {}; // url → enhanced results array
         let batchAIResults = {};       // url → processed aiResults object
+        let batchMobileResultsData = [];          // SP用（PC+SP時のみ使用）
+        let batchMobileEnhancedResults = {};      // url → SP enhanced results
+        let batchMobileAIResults = {};            // url → SP AI results
+        let batchViewportMode = 'desktop';        // 実行時のviewportMode
 
         function renderNavConsistency() {
             const area = $('batchSummaryArea');
@@ -1332,30 +1335,55 @@
 
         window.showBatchDetail = function(idx) {
             renderBatchNav(idx);
-            const mobileBlock = $('scoreBlockMobile');
-            if (mobileBlock) mobileBlock.style.display = 'none';
-            const mobileBody = $('scanScoreBodyMobile');
-            if (mobileBody) mobileBody.innerHTML = '';
-            const mobileTable = $('scanScoreTableMobile');
-            if (mobileTable) mobileTable.style.display = 'none';
             const r = batchResultsData[idx];
             if (!r.success) {
                 $('batchDetailArea').innerHTML = `<div class="error-message visible"><h4>エラー</h4><p>${r.url}: ${r.error}</p></div>`;
+                // SP ブロックを隠す
+                const mb = $('scoreBlockMobile');
+                if (mb) mb.style.display = 'none';
                 return;
             }
+
+            // --- PC ---
             lastEnhancedResults = batchEnhancedResults[r.url] || null;
             aiResults = batchAIResults[r.url] || {};
             displayResults(r.results, r.url);
             $('results').classList.add('visible');
-            const deepEnabled = !!lastEnhancedResults;
+            const deepEnabled  = !!lastEnhancedResults;
             const multiEnabled = Object.keys(aiResults).length > 0;
             renderScanScoreTable(
                 computeBasicScore(lastResults),
-                deepEnabled ? computeDeepScore(lastEnhancedResults) : null,
+                deepEnabled  ? computeDeepScore(lastEnhancedResults) : null,
                 multiEnabled ? computeMultiScore(aiResults) : null,
-                deepEnabled, multiEnabled
+                deepEnabled, multiEnabled,
+                { scoreBodyId: 'scanScoreBody', scoreTableId: 'scanScoreTable', scoreBlockId: 'scoreBlockDesktop' }
             );
             renderAllTabs('pc');
+
+            // --- SP（PC+SP モード時のみ） ---
+            const mobileR = batchMobileResultsData[idx];
+            if (mobileR?.success) {
+                const mobileEnhanced = batchMobileEnhancedResults[mobileR.url] || null;
+                const mobileAI       = batchMobileAIResults[mobileR.url] || {};
+                const mDeepEnabled   = !!mobileEnhanced;
+                const mMultiEnabled  = Object.keys(mobileAI).length > 0;
+                renderScanScoreTable(
+                    computeBasicScore(mobileR.results),
+                    mDeepEnabled  ? computeDeepScore(mobileEnhanced) : null,
+                    mMultiEnabled ? computeMultiScore(mobileAI) : null,
+                    mDeepEnabled, mMultiEnabled,
+                    { scoreBodyId: 'scanScoreBodyMobile', scoreTableId: 'scanScoreTableMobile', scoreBlockId: 'scoreBlockMobile' }
+                );
+                renderAllTabs('sp', mobileR.results, mobileEnhanced, mobileAI);
+            } else {
+                const mb = $('scoreBlockMobile');
+                if (mb) mb.style.display = 'none';
+                const mt = $('scanScoreTableMobile');
+                if (mt) mt.style.display = 'none';
+                const mBody = $('scanScoreBodyMobile');
+                if (mBody) mBody.innerHTML = '';
+            }
+
             renderNavBar();
             const st = $('scanScoreTable');
             if (st) st.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1385,19 +1413,42 @@
 
             const doEnhanced = $('batchEnhancedOpt').checked;
             const doAI = $('batchAIOpt').checked;
-            const totalPhases = 1 + (doEnhanced ? 1 : 0) + (doAI ? 1 : 0);
+            const viewportMode = getViewportMode();
+            const runDesktop = viewportMode !== 'mobile';
+            const runMobile  = viewportMode !== 'desktop';
+            const viewCount  = (runDesktop ? 1 : 0) + (runMobile ? 1 : 0);
+            const phasesPerView = 1 + (doEnhanced ? 1 : 0) + (doAI ? 1 : 0);
+            const totalPhases = phasesPerView * viewCount;
+            batchViewportMode = viewportMode;
 
-            function renderPhases(activePhase) {
-                let phaseId = 1;
-                const phases = [{ id: phaseId++, label: 'BASIC' }];
-                if (doEnhanced) phases.push({ id: phaseId++, label: 'DEEP' });
-                if (doAI) phases.push({ id: phaseId++, label: 'MULTI' });
-                phaseIndicator.innerHTML = phases.map(p => {
-                    const done = p.id < activePhase;
-                    const active = p.id === activePhase;
+            // フェーズチップを描画
+            function buildPhaseLabels() {
+                const labels = [];
+                const prefixes = [];
+                if (runDesktop && runMobile) { prefixes.push('PC'); }
+                if (runMobile && runDesktop) { prefixes.push('SP'); }
+                if (!runDesktop || !runMobile) { prefixes.push(''); }
+                // viewports × phases
+                const viewports = [];
+                if (runDesktop) viewports.push(runMobile ? 'PC' : '');
+                if (runMobile)  viewports.push(runDesktop ? 'SP' : '');
+                for (const vp of viewports) {
+                    labels.push(vp ? `${vp} BASIC` : 'BASIC');
+                    if (doEnhanced) labels.push(vp ? `${vp} DEEP` : 'DEEP');
+                    if (doAI)       labels.push(vp ? `${vp} MULTI` : 'MULTI');
+                }
+                return labels;
+            }
+            const phaseLabels = buildPhaseLabels();
+
+            function renderPhases(activePhaseId) {
+                phaseIndicator.innerHTML = phaseLabels.map((label, idx) => {
+                    const id = idx + 1;
+                    const done   = id < activePhaseId;
+                    const active = id === activePhaseId;
                     const prefix = done ? '✓ ' : active ? '▶ ' : '';
                     const stateClass = done ? 'is-done' : active ? 'is-active' : 'is-idle';
-                    return `<span class="phase-chip ${stateClass}">${prefix}${p.label}</span>`;
+                    return `<span class="phase-chip ${stateClass}">${prefix}${label}</span>`;
                 }).join('');
             }
 
@@ -1412,103 +1463,139 @@
 
             try {
                 const basicUser = $('basicUser')?.value?.trim() || '';
-                const basicPass = $('basicPass')?.value || '';
-                const basicAuth = (basicUser && basicPass) ? { user: basicUser, pass: basicPass } : null;
-                const viewportPreset = 'desktop';
+                const basicPassVal = $('basicPass')?.value || '';
+                const basicAuth = (basicUser && basicPassVal) ? { user: basicUser, pass: basicPassVal } : null;
+                const levelOrder = { 'A': 1, 'AA': 2, 'AAA': 3 };
+                const filteredItems = manualCheckItems.map((item, index) => ({ ...item, index }))
+                    .filter(item => levelOrder[item.level] <= levelOrder[targetLevel]);
 
-                // Phase 1: axe-core — animate while waiting
-                let progressVal = 0;
-                const progressTimer = setInterval(() => {
-                    if (progressVal < 0.9) {
-                        progressVal += (0.9 - progressVal) * 0.05;
-                        setPhaseProgress(0, progressVal);
+                // ビュー1件分のパイプライン（BASIC → DEEP → MULTI）を実行
+                async function runBatchViewport(viewportPreset, viewLabel, phaseOffset) {
+                    const vPrefix = viewLabel ? `[${viewLabel}] ` : '';
+
+                    // BASIC
+                    renderPhases(phaseOffset + 1);
+                    let progressVal = 0;
+                    const progressTimer = setInterval(() => {
+                        if (progressVal < 0.9) {
+                            progressVal += (0.9 - progressVal) * 0.05;
+                            setPhaseProgress(phaseOffset, progressVal);
+                        }
+                    }, 300);
+                    progressLabel.textContent = `${vPrefix}${raw.length}件のURLを検査中...`;
+
+                    const { response, data } = await fetchApiJson(apiUrl('/api/batch-check'), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ urls: raw, level: targetLevel, basicAuth, viewportPreset })
+                    }, '/api/batch-check');
+                    clearInterval(progressTimer);
+                    setPhaseProgress(phaseOffset, 1);
+                    if (!response.ok) throw new Error(data.error || '一括チェックに失敗しました');
+
+                    const resultsData = data.results;
+                    const navConsistency = data.navConsistency || null;
+                    const succeededCount = resultsData.filter(r => r.success).length;
+                    progressLabel.textContent = `${vPrefix}axe-core完了: ${succeededCount}/${resultsData.length}件 成功`;
+                    progressSub.textContent = '';
+
+                    const successUrls = resultsData.filter(r => r.success).map(r => r.url);
+                    const enhancedResults = {};
+                    const aiResultsMap = {};
+                    let localPhase = phaseOffset + 1;
+
+                    // DEEP
+                    if (doEnhanced && successUrls.length > 0) {
+                        renderPhases(localPhase + 1);
+                        for (let i = 0; i < successUrls.length; i++) {
+                            const shortUrl = successUrls[i].replace(/^https?:\/\//, '').substring(0, 40);
+                            progressLabel.textContent = `${vPrefix}DEEP SCANNING: ${shortUrl}`;
+                            progressSub.textContent = `${i + 1} / ${successUrls.length} URL`;
+                            setPhaseProgress(localPhase, i / successUrls.length);
+                            try {
+                                const { response: er, data: ed } = await fetchApiJson(apiUrl('/api/enhanced-check'), {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ url: successUrls[i], includeAAA: sessionAAABeta, basicAuth, viewportPreset })
+                                }, '/api/enhanced-check');
+                                if (er.ok) enhancedResults[successUrls[i]] = ed.results;
+                            } catch (e) {}
+                            setPhaseProgress(localPhase, (i + 1) / successUrls.length);
+                        }
+                        localPhase++;
                     }
-                }, 300);
 
-                const { response, data } = await fetchApiJson(apiUrl('/api/batch-check'), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ urls: raw, level: targetLevel, basicAuth, viewportPreset })
-                }, '/api/batch-check');
-
-                clearInterval(progressTimer);
-                setPhaseProgress(0, 1);
-
-                if (!response.ok) throw new Error(data.error || '一括チェックに失敗しました');
-
-                batchResultsData = data.results;
-                batchNavConsistency = data.navConsistency || null;
-                batchEnhancedResults = {};
-                batchAIResults = {};
-                const succeededCount = batchResultsData.filter(r => r.success).length;
-                progressLabel.textContent = `axe-core完了: ${succeededCount}/${batchResultsData.length}件 成功`;
-                progressSub.textContent = '';
-
-                renderBatchSummary();
-                renderBatchNav(0);
-                $('batchResults').style.display = 'block';
-
-                const successUrls = batchResultsData.filter(r => r.success).map(r => r.url);
-                let currentPhaseIdx = 1;
-
-                // 高精度検査を順次実行
-                if (doEnhanced && successUrls.length > 0) {
-                    renderPhases(currentPhaseIdx + 1);
-                    for (let i = 0; i < successUrls.length; i++) {
-                        const shortUrl = successUrls[i].replace(/^https?:\/\//, '').substring(0, 45);
-                        progressLabel.textContent = `DEEP SCANNING: ${shortUrl}`;
-                        progressSub.textContent = `${i + 1} / ${successUrls.length} URL`;
-                        setPhaseProgress(currentPhaseIdx, i / successUrls.length);
-                        try {
-                            const { response: er, data: ed } = await fetchApiJson(apiUrl('/api/enhanced-check'), {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ url: successUrls[i], includeAAA: sessionAAABeta, basicAuth, viewportPreset })
-                            }, '/api/enhanced-check');
-                            if (er.ok) batchEnhancedResults[successUrls[i]] = ed.results;
-                        } catch (e) {}
-                        setPhaseProgress(currentPhaseIdx, (i + 1) / successUrls.length);
+                    // MULTI
+                    if (doAI && successUrls.length > 0) {
+                        renderPhases(localPhase + 1);
+                        for (let i = 0; i < successUrls.length; i++) {
+                            const shortUrl = successUrls[i].replace(/^https?:\/\//, '').substring(0, 40);
+                            progressLabel.textContent = `${vPrefix}MULTI SCANNING: ${shortUrl}`;
+                            progressSub.textContent = `${i + 1} / ${successUrls.length} URL`;
+                            setPhaseProgress(localPhase, i / successUrls.length);
+                            try {
+                                const { response: ar, data: ad } = await fetchApiJson(apiUrl('/api/ai-evaluate'), {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ url: successUrls[i], checkItems: filteredItems, viewportPreset })
+                                }, '/api/ai-evaluate');
+                                if (ar.ok) {
+                                    const processed = {};
+                                    ad.results.forEach(result => {
+                                        const orig = filteredItems[result.index]?.index;
+                                        if (orig !== undefined) processed[orig] = result;
+                                    });
+                                    aiResultsMap[successUrls[i]] = processed;
+                                }
+                            } catch (e) {}
+                            setPhaseProgress(localPhase, (i + 1) / successUrls.length);
+                        }
                     }
-                    currentPhaseIdx++;
+
+                    return { resultsData, navConsistency, enhancedResults, aiResultsMap, succeededCount };
                 }
 
-                // AI評価を順次実行
-                if (doAI && successUrls.length > 0) {
-                    renderPhases(currentPhaseIdx + 1);
-                    const levelOrder = { 'A': 1, 'AA': 2, 'AAA': 3 };
-                    const filteredItems = manualCheckItems.map((item, index) => ({ ...item, index }))
-                        .filter(item => levelOrder[item.level] <= levelOrder[targetLevel]);
-                    for (let i = 0; i < successUrls.length; i++) {
-                        const shortUrl = successUrls[i].replace(/^https?:\/\//, '').substring(0, 45);
-                        progressLabel.textContent = `MULTI SCANNING: ${shortUrl}`;
-                        progressSub.textContent = `${i + 1} / ${successUrls.length} URL`;
-                        setPhaseProgress(currentPhaseIdx, i / successUrls.length);
-                        try {
-                            const { response: ar, data: ad } = await fetchApiJson(apiUrl('/api/ai-evaluate'), {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ url: successUrls[i], checkItems: filteredItems, viewportPreset })
-                            }, '/api/ai-evaluate');
-                            if (ar.ok) {
-                                const processed = {};
-                                ad.results.forEach(result => {
-                                    const orig = filteredItems[result.index]?.index;
-                                    if (orig !== undefined) processed[orig] = result;
-                                });
-                                batchAIResults[successUrls[i]] = processed;
-                            }
-                        } catch (e) {}
-                        setPhaseProgress(currentPhaseIdx, (i + 1) / successUrls.length);
+                // --- PC（デスクトップ） ---
+                if (runDesktop) {
+                    const pc = await runBatchViewport('desktop', runMobile ? 'PC' : '', 0);
+                    batchResultsData       = pc.resultsData;
+                    batchNavConsistency    = pc.navConsistency;
+                    batchEnhancedResults   = pc.enhancedResults;
+                    batchAIResults         = pc.aiResultsMap;
+                    renderBatchSummary();
+                    renderBatchNav(0);
+                    $('batchResults').style.display = 'block';
+                }
+
+                // --- SP（モバイル） ---
+                if (runMobile) {
+                    const spOffset = runDesktop ? phasesPerView : 0;
+                    const sp = await runBatchViewport('mobile', runDesktop ? 'SP' : '', spOffset);
+                    if (runDesktop) {
+                        // PC+SP両方: SPデータを専用変数に格納
+                        batchMobileResultsData     = sp.resultsData;
+                        batchMobileEnhancedResults = sp.enhancedResults;
+                        batchMobileAIResults       = sp.aiResultsMap;
+                    } else {
+                        // SPのみ: メイン変数として扱う
+                        batchResultsData       = sp.resultsData;
+                        batchNavConsistency    = sp.navConsistency;
+                        batchEnhancedResults   = sp.enhancedResults;
+                        batchAIResults         = sp.aiResultsMap;
+                        renderBatchSummary();
+                        renderBatchNav(0);
+                        $('batchResults').style.display = 'block';
                     }
                 }
 
                 progressFill.style.width = '100%';
-                const phasesDone = [doEnhanced ? '高精度' : null, doAI ? 'AI' : null].filter(Boolean).join('/');
-                progressLabel.textContent = `完了${phasesDone ? `（axe-core/${phasesDone}）` : ''}: ${succeededCount}/${batchResultsData.length}件`;
+                const phasesDone = [doEnhanced ? 'DEEP' : null, doAI ? 'MULTI' : null].filter(Boolean).join('/');
+                const viewLabel  = viewportMode === 'both' ? 'PC+SP' : viewportMode === 'mobile' ? 'SP' : 'PC';
+                const succeededCount = batchResultsData.filter(r => r.success).length;
+                progressLabel.textContent = `完了（${viewLabel}${phasesDone ? ` / ${phasesDone}` : ''}）: ${succeededCount}/${batchResultsData.length}件`;
                 progressSub.textContent = '';
                 renderPhases(totalPhases + 1);
 
-                // Show first successful result detail
                 const firstOk = batchResultsData.findIndex(r => r.success);
                 if (firstOk >= 0) showBatchDetail(firstOk);
 
@@ -2531,14 +2618,30 @@
             btn.disabled = true;
             btn.textContent = 'Export中...';
             try {
-                const pages = batchResultsData.filter(r => r.success).map(r => {
+                const pages = [];
+                const hasMobile = batchMobileResultsData.length > 0;
+
+                batchResultsData.filter(r => r.success).forEach((r, i) => {
+                    const urlLabel = hasMobile ? r.url + ' [PC]' : r.url;
                     const rows = buildReportRows(r.results, r.url, batchAIResults[r.url] || {}, batchEnhancedResults[r.url] || null, batchNavConsistency);
-                    return {
-                        url: r.url,
+                    pages.push({
+                        url: urlLabel,
                         rows,
                         timestamp: r.results.timestamp || new Date().toISOString(),
                         stats: computeStats(rows)
-                    };
+                    });
+
+                    // SP データ（PC+SP モード時）
+                    const mobileR = batchMobileResultsData[i];
+                    if (hasMobile && mobileR?.success) {
+                        const spRows = buildReportRows(mobileR.results, mobileR.url, batchMobileAIResults[mobileR.url] || {}, batchMobileEnhancedResults[mobileR.url] || null, null);
+                        pages.push({
+                            url: mobileR.url + ' [SP]',
+                            rows: spRows,
+                            timestamp: mobileR.results.timestamp || new Date().toISOString(),
+                            stats: computeStats(spRows)
+                        });
+                    }
                 });
                 if (pages.length === 0) { alert('成功した検査結果がありません'); return; }
 

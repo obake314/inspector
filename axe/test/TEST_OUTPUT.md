@@ -40,3 +40,30 @@
   1. `GET /axe/api/sheets-status`
 - 期待結果
   - `configured`, `geminiConfigured`, `aaaBeta` 等を返す
+
+## T-OUT-06: Excel エクスポート（PCのみ）
+
+- 手順
+  1. `PCのみ` でSCAN実行後、`Excel` ボタンをクリック
+- 期待結果
+  - `wcag-report-YYYY-MM-DD.xlsx` がダウンロードされる
+  - ワークブックに `PC VIEW` シートのみ存在する
+  - 先頭行にURL、2行目に検査日時、3行目にスコアのメタ情報が記載される
+  - 6行目（メタ行の後）以降に11列のヘッダーとデータが存在する
+
+## T-OUT-07: Excel エクスポート（PC+SP）
+
+- 手順
+  1. `PC+SP` でSCAN実行後、`Excel` ボタンをクリック
+- 期待結果
+  - `PC VIEW` と `SP VIEW` の2シートが存在する
+  - 各シートに対応するスコアメタ行とデータが含まれる
+
+## T-OUT-08: GoogleSheet シートタブ名形式
+
+- 手順
+  1. GoogleSheet エクスポートを実行してスプレッドシートを開く
+- 期待結果
+  - シートタブ名が `{hostname}_{path}_{YYYY-MM-DD}_{HHMMSS}` 形式である（秒6桁）
+  - `%20` や `[PC]` の角括弧が `_` に変換されている
+  - 連続する `_` が1つに正規化されている
