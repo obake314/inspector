@@ -1999,7 +1999,7 @@
         function computeBasicScore(results) {
             if (!results) return null;
             const scSet = new Set(getTargetScList());
-            const rank = { fail: 0, unverified: 1, pass: 2 };
+            const rank = { fail: 0, pass: 1, unverified: 2 };
             const impactRank = { critical: 0, serious: 1, moderate: 2, minor: 3 };
             const scMap = {}; // sc -> { status, impact }
 
@@ -2051,7 +2051,7 @@
         function computeDeepScore(results) {
             if (!results || !results.length) return null;
             const scSet = new Set(getTargetScList());
-            const rank = { fail: 0, unverified: 1, pass: 2, na: 3 };
+            const rank = { fail: 0, pass: 1, unverified: 2, na: 3 };
             const scMap = {}; // sc -> { status, impact }
 
             function merge(sc, status, impact) {
@@ -2107,7 +2107,7 @@
         }
 
         function computeTotalScore(basicResults, deepResults, multiAiData) {
-            const rank = { fail: 0, unverified: 1, pass: 2, na: 3 };
+            const rank = { fail: 0, pass: 1, unverified: 2, na: 3 };
             const scMap = {}; // sc → { result, impact }
             const lo = { 'A': 1, 'AA': 2, 'AAA': 3 };
             const lim = lo[targetLevel] || 2;

@@ -1,6 +1,6 @@
 # SPEC_WEB
 
-最終更新: 2026-04-06（一括スキャンSPビュー対応・スキャン説明UI改善・ExcelエクスポートへのCSV置換）
+最終更新: 2026-04-10（TOTALスコア優先順位バグ修正: pass が unverified より優先）
 
 ## 対象
 
@@ -131,8 +131,11 @@
 
 ### TOTAL算出
 
-- SC単位で重複除去し worst result を採用
-- 優先順位: `fail > unverified > pass > na`
+- SC単位で重複除去し、以下の優先順位でマージ
+- 優先順位: `fail > pass > unverified > na`
+  - `fail` が最優先（1つでも違反があればfail）
+  - `pass` は `unverified` より優先（BASIC の incomplete が DEEP の pass を打ち消さない）
+  - `na` は他のいずれの結果も存在しない場合のみ
 
 ## Web系API一覧
 

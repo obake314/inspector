@@ -278,6 +278,17 @@
   - スコアテーブルの DEEP 行に `SC別ヒューリスティック検査 (A/AA)` のサブテキストが表示される
   - スコアテーブルの MULTI 行に `Gemini AI 総合評価` のサブテキストが表示される
 
+## T-SCAN-31: TOTALスコアの合格数がDEEP合格数を下回らない
+
+- 手順
+  1. DEEP SCAN を実行し、合格（pass）が出ている SC を確認する
+  2. BASIC SCAN の incomplete（判定不能）が同 SC に存在することを確認する
+  3. スコアテーブルの TOTAL 行の「合格」列を確認する
+- 期待結果
+  - TOTAL行の合格数 ≥ DEEP行の合格数（BASIC の incomplete に DEEP の pass が打ち消されない）
+  - 例: DEEP合格15件なら TOTAL合格 ≥ 15件
+  - `computeBasicScore / computeDeepScore / computeTotalScore` の `rank` 定義は `{ fail:0, pass:1, unverified:2, na:3 }`
+
 ## T-SCAN-30: GoogleSheet シート名重複回避
 
 - 手順
