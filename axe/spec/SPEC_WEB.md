@@ -1,6 +1,6 @@
 # SPEC_WEB
 
-最終更新: 2026-04-10（TOTALスコア優先順位バグ修正: pass が unverified より優先）
+最終更新: 2026-04-10（TOTALスコア優先順位バグ修正・対象レベル外SC除外）
 
 ## 対象
 
@@ -128,6 +128,17 @@
 
 この整合式はスコアテーブルの各行だけでなく、詳細タブ横のバッジ数でも同様に成立する。
 バッジ数は SC 単位の TOTAL スコア（`computeTotalScore` 出力）を使用する。
+
+### 対象レベルによるフィルタリング
+
+- スコアテーブル・詳細カード・レポート出力のいずれも `targetLevel` に基づき SC をフィルタリングする
+- レベル `A` 選択時: `WCAG_SC.A` に属するSCのみ表示（AA/AAA項目は除外）
+- レベル `AA` 選択時: `WCAG_SC.A + WCAG_SC.AA` のみ（AAAは除外）
+- レベル `AAA` 選択時: すべて表示
+- フィルタリング対象:
+  - BASIC violations / incomplete / passes: `getWcagLevel(tags)` でレベル判定
+  - DEEP results: `splitCompositeSc(r.sc).some(sc => scSet.has(sc))` で判定
+  - MULTI items: `levelOrder[item.level] <= lim` で判定（従来から変更なし）
 
 ### TOTAL算出
 

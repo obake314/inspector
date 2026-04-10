@@ -2228,20 +2228,24 @@
             }
 
             const buckets = { critical: [], serious: [], moderate: [], minor: [], pass: [], na: [], unverified: [] };
+            const scSet = new Set(getTargetScList());
 
             // BASIC violations
             if (basic) {
                 (basic.violations || []).forEach(v => {
+                    if ((lo[getWcagLevel(v.tags)] || 1) > lim) return;
                     const dkey = `BASIC:${v.id}`;
                     const dest = applyDecision(dkey, v.impact || 'serious', v.impact || 'serious');
                     (buckets[dest] || buckets.serious).push({ src: 'BASIC', type: 'violation', data: v, dkey });
                 });
                 (basic.passes || []).forEach(p => {
+                    if ((lo[getWcagLevel(p.tags)] || 1) > lim) return;
                     const dkey = `BASIC:pass:${p.id}`;
                     const dest = applyDecision(dkey, 'pass', 'serious');
                     (buckets[dest] || buckets.serious).push({ src: 'BASIC', type: 'pass', data: p, dkey });
                 });
                 (basic.incomplete || []).forEach(i => {
+                    if ((lo[getWcagLevel(i.tags)] || 1) > lim) return;
                     const dkey = `BASIC:${i.id}`;
                     const dest = applyDecision(dkey, 'unverified', 'serious');
                     (buckets[dest] || buckets.unverified).push({ src: 'BASIC', type: 'incomplete', data: i, dkey });
@@ -2251,6 +2255,7 @@
             // DEEP results
             if (deep) {
                 deep.forEach(r => {
+                    if (!splitCompositeSc(r.sc).some(sc => scSet.has(sc))) return;
                     const dkey = `DEEP:${r.sc}`;
                     const defaultBucket = r.status === 'fail' ? 'serious'
                         : r.status === 'pass' ? 'pass'
@@ -2460,6 +2465,7 @@
 
             // --- 自動検査: violations → 不合格 ---
             (results.violations || []).forEach(v => {
+                if ((levelOrder[getWcagLevelFromTags(v.tags)] || 1) > targetLevelNum) return;
                 const targets = v.nodes.slice(0, 5).map(n =>
                     Array.isArray(n.target) ? n.target.join(' > ') : n.target
                 );
@@ -2477,6 +2483,7 @@
 
             // --- 自動検査: incomplete → 判定不能（手動決定で上書き可） ---
             (results.incomplete || []).forEach(v => {
+                if ((levelOrder[getWcagLevelFromTags(v.tags)] || 1) > targetLevelNum) return;
                 const targets = v.nodes.slice(0, 5).map(n =>
                     Array.isArray(n.target) ? n.target.join(' > ') : n.target
                 );
@@ -2495,6 +2502,7 @@
 
             // --- 自動検査: passes → 合格 ---
             (results.passes || []).forEach(v => {
+                if ((levelOrder[getWcagLevelFromTags(v.tags)] || 1) > targetLevelNum) return;
                 rows.push([
                     String(itemNo++), '自動', extractSCFromTags(v.tags),
                     `${getJaRuleName(v.id)}（${v.id}）`,
@@ -2528,11 +2536,15 @@
 
             // --- 高精度検査（Puppeteer）結果 ---
             if (enhancedData && enhancedData.length > 0) {
-                const enhancedAaaScs = new Set(['2.3.3','2.4.12','2.4.13','2.1.3','3.3.9']);
+                const reportScSet = new Set(getTargetScList());
+                const scLevelMap = {};
+                Object.entries({ A: WCAG_SC.A, AA: WCAG_SC.AA, AAA: WCAG_SC.AAA }).forEach(([lv, list]) => {
+                    list.forEach(sc => { scLevelMap[sc] = lv; });
+                });
                 const enhancedStatusMap = { pass: '合格', fail: '不合格', error: 'エラー', not_applicable: '対象外', manual_required: '要手動確認' };
                 enhancedData.forEach(r => {
-                    if (enhancedAaaScs.has(r.sc) && targetLevelNum < 3) return;
-                    const level = enhancedAaaScs.has(r.sc) ? 'AAA' : 'AA';
+                    if (!splitCompositeSc(r.sc).some(sc => reportScSet.has(sc))) return;
+                    const level = scLevelMap[r.sc] || (splitCompositeSc(r.sc).map(sc => scLevelMap[sc]).find(Boolean) || 'AA');
                     const violations = r.violations || [];
                     // 手動決定（未検証タブでのOK/NG/保留）で上書き
                     const decD = manualDecisions.get(`DEEP:${r.sc}`);
