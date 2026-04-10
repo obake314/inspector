@@ -2282,7 +2282,18 @@
 
             // 各タブを描画（バッジ数はSC単位のTOTALスコアに合わせる）
             const ts = computeTotalScore(basic, deep || null, Object.keys(multi || {}).length > 0 ? multi : null);
-            const badgeMap = { critical: ts.critical, serious: ts.serious, moderate: ts.moderate, minor: ts.minor, pass: ts.pass, na: ts.na, unverified: ts.unverified };
+            // スコア表のTOTAL行と同じ正規化（未カバーSCをunverifiedに補完）
+            const _fixedTotal = getTargetScList().length;
+            const _tsUsed = (ts.critical||0) + (ts.serious||0) + (ts.moderate||0) + (ts.minor||0) + (ts.pass||0) + (ts.na||0);
+            const badgeMap = {
+                critical:   ts.critical   || 0,
+                serious:    ts.serious    || 0,
+                moderate:   ts.moderate   || 0,
+                minor:      ts.minor      || 0,
+                pass:       ts.pass       || 0,
+                na:         ts.na         || 0,
+                unverified: Math.max(0, _fixedTotal - _tsUsed)
+            };
             const EMPTY = '<div class="empty-state">項目はありません</div>';
             ['critical','serious','moderate','minor','pass','na','unverified'].forEach(key => {
                 const items = buckets[key];
