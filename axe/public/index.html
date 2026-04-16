@@ -112,8 +112,8 @@
         </header>
 
         <!-- ヘルプモーダル -->
-        <div id="helpModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeHelp()">
-            <div class="modal-content help-modal-content">
+        <div id="helpOverlay" class="settings-overlay hidden" onclick="if(event.target===this)closeHelp()">
+            <div class="settings-box help-modal-content">
                 <h2>AIモデル比較 <button type="button" onclick="closeHelp()">&times;</button></h2>
                 <div class="help-body">
                     <table class="help-model-table">
@@ -844,10 +844,10 @@
         }
 
         function openHelp() {
-            $('helpModal').style.display = 'flex';
+            $('helpOverlay').classList.remove('hidden');
         }
         function closeHelp() {
-            $('helpModal').style.display = 'none';
+            $('helpOverlay').classList.add('hidden');
         }
 
         async function saveSettings() {
@@ -890,9 +890,12 @@
             }
         }
 
-        // ESCで設定を閉じる
+        // ESCでモーダルを閉じる
         document.addEventListener('keydown', e => {
-            if (e.key === 'Escape' && !$('settingsOverlay').classList.contains('hidden')) closeSettings();
+            if (e.key === 'Escape') {
+                if (!$('settingsOverlay').classList.contains('hidden')) closeSettings();
+                if (!$('helpOverlay').classList.contains('hidden')) closeHelp();
+            }
         });
 
         const levelNotes = {

@@ -1397,6 +1397,8 @@ footer a:hover {
 .help-modal-content {
   max-width: 720px;
   width: 95vw;
+  max-height: 90vh;
+  overflow-y: auto;
 }
 .help-body {
   padding: 8px 0 4px;

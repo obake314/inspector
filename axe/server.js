@@ -350,11 +350,16 @@ async function callOpenAIAPI(prompt, imageBase64 = null, modelKey = 'gpt-4o') {
   }
   userContent.push({ type: 'text', text: prompt });
 
+  // o3はmax_completion_tokens、それ以外はmax_tokens
+  const isReasoningModel = modelId === 'o3' || modelId.startsWith('o1');
+  const tokenParam = isReasoningModel ? { max_completion_tokens: 8192 } : { max_tokens: 4096 };
+
   const completion = await openaiClient.chat.completions.create({
     model: modelId,
-    max_tokens: 4096,
-    messages: [{ role: 'user', content: userContent }],
-    response_format: { type: 'json_object' }
+    ...tokenParam,
+    messages: [{ role: 'user', content: userContent }]
+    // response_format は使わない: プロンプトがJSON配列を要求しており
+    // json_object モードと不整合になるため省略し、パース側で対応する
   });
 
   return completion.choices[0].message.content;
@@ -2773,7 +2778,14 @@ ${itemsList}
     let results = [];
     try {
       // まず直接パースを試す
-      results = JSON.parse(aiResponse);
+      const parsed = JSON.parse(aiResponse);
+      // 配列なら直接使用、オブジェクトラップ（{ results:[...] } 等）の場合は中の配列を取り出す
+      if (Array.isArray(parsed)) {
+        results = parsed;
+      } else if (parsed && typeof parsed === 'object') {
+        const inner = Object.values(parsed).find(v => Array.isArray(v));
+        if (inner) results = inner;
+      }
     } catch (e) {
       console.log('直接パース失敗、JSON抽出を試行...');
       try {
