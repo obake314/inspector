@@ -6,6 +6,7 @@ const path = require('path');
 const crypto = require('crypto');
 const fs = require('fs');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const Anthropic = require("@anthropic-ai/sdk");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -34,11 +35,22 @@ function hashPassword(pw) {
 // 起動時設定ロード
 const savedSettings = loadSettings();
 
-// Gemini API設定（設定ファイル → 環境変数の優先順位）
+// AI プロバイダー設定（設定ファイル → 環境変数の優先順位）
+// aiProvider: 'gemini' | 'claude-opus' | 'claude-sonnet'
+let AI_PROVIDER = savedSettings.aiProvider || process.env.AI_PROVIDER || 'gemini';
+
+// Gemini API設定
 let GEMINI_API_KEY = savedSettings.geminiApiKey || process.env.GEMINI_API_KEY || '';
 const GEMINI_MODEL = 'gemini-2.5-flash';
+let genAI = new GoogleGenerativeAI(GEMINI_API_KEY || 'placeholder');
 
-let genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+// Anthropic API設定
+let ANTHROPIC_API_KEY = savedSettings.anthropicApiKey || process.env.ANTHROPIC_API_KEY || '';
+const CLAUDE_MODELS = {
+  'claude-opus':   'claude-opus-4-6',
+  'claude-sonnet': 'claude-sonnet-4-6'
+};
+let anthropicClient = new Anthropic({ apiKey: ANTHROPIC_API_KEY || 'placeholder' });
 
 // Google Sheets設定
 const GOOGLE_SERVICE_ACCOUNT_KEY_PATH = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH || '';
@@ -263,12 +275,12 @@ async function applyViewportPreset(page, presetRaw) {
 }
 
 /**
- * Gemini 2.5 APIを呼び出す関数
+ * Gemini 2.5 Flash APIを呼び出す関数
  */
 async function callGeminiAPI(prompt, imageBase64 = null) {
   if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY が設定されていません');
 
-  const model = genAI.getGenerativeModel({ 
+  const model = genAI.getGenerativeModel({
     model: GEMINI_MODEL,
     generationConfig: { responseMimeType: "application/json" }
   });
@@ -283,6 +295,46 @@ async function callGeminiAPI(prompt, imageBase64 = null) {
   const result = await model.generateContent({ contents: [{ role: "user", parts }] });
   const response = await result.response;
   return response.text();
+}
+
+/**
+ * Claude Opus / Sonnet APIを呼び出す関数
+ */
+async function callClaudeAPI(prompt, imageBase64 = null, modelKey = 'claude-sonnet') {
+  if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY が設定されていません');
+  const modelId = CLAUDE_MODELS[modelKey] || CLAUDE_MODELS['claude-sonnet'];
+
+  const contentParts = [];
+  if (imageBase64) {
+    contentParts.push({
+      type: 'image',
+      source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 }
+    });
+  }
+  contentParts.push({ type: 'text', text: prompt });
+
+  const message = await anthropicClient.messages.create({
+    model: modelId,
+    max_tokens: 4096,
+    messages: [{ role: 'user', content: contentParts }]
+  });
+
+  return message.content[0].text;
+}
+
+/**
+ * 現在のAIプロバイダー設定に応じてAPIを呼び出す統合関数
+ * @returns { text: string, modelName: string }
+ */
+async function callAI(prompt, imageBase64 = null) {
+  const provider = AI_PROVIDER || 'gemini';
+  if (provider === 'claude-opus' || provider === 'claude-sonnet') {
+    const text = await callClaudeAPI(prompt, imageBase64, provider);
+    return { text, modelName: CLAUDE_MODELS[provider] };
+  }
+  // デフォルト: Gemini
+  const text = await callGeminiAPI(prompt, imageBase64);
+  return { text, modelName: GEMINI_MODEL };
 }
 
 app.use(express.json({ limit: '50mb' }));
@@ -318,6 +370,8 @@ app.post('/api/settings-get', (req, res) => {
   const saved = loadSettings();
   res.json({
     geminiApiKey: saved.geminiApiKey ? '********' + (saved.geminiApiKey.slice(-4)) : '',
+    anthropicApiKey: saved.anthropicApiKey ? '********' + (saved.anthropicApiKey.slice(-4)) : '',
+    aiProvider: saved.aiProvider || AI_PROVIDER || 'gemini',
     serviceAccountKey: saved.serviceAccountKey ? '(設定済み)' : '',
     driveFolderId: saved.driveFolderId || GOOGLE_DRIVE_FOLDER_ID || '',
     reportFolderId: saved.reportFolderId || REPORT_FOLDER_ID || '',
@@ -325,6 +379,7 @@ app.post('/api/settings-get', (req, res) => {
     aaaBeta: saved.aaaBeta || false,
     // 環境変数フォールバックの表示
     envGemini: !!process.env.GEMINI_API_KEY,
+    envAnthropic: !!process.env.ANTHROPIC_API_KEY,
     envServiceAccount: !!(process.env.GOOGLE_SERVICE_ACCOUNT_KEY || GOOGLE_SERVICE_ACCOUNT_KEY_PATH),
     envFolder: !!process.env.GOOGLE_DRIVE_FOLDER_ID
   });
@@ -334,7 +389,7 @@ app.post('/api/settings-get', (req, res) => {
  * 設定保存API
  */
 app.post('/api/settings-save', (req, res) => {
-  const { password, geminiApiKey, serviceAccountKey, driveFolderId, reportFolderId, newPassword, aaaBeta } = req.body;
+  const { password, geminiApiKey, anthropicApiKey, aiProvider, serviceAccountKey, driveFolderId, reportFolderId, newPassword, aaaBeta } = req.body;
   // パスワード認証
   if (APP_PASSWORD_HASH && hashPassword(password || '') !== APP_PASSWORD_HASH) {
     return res.status(401).json({ error: '認証エラー' });
@@ -342,11 +397,24 @@ app.post('/api/settings-save', (req, res) => {
 
   const saved = loadSettings();
 
+  // AI プロバイダー選択
+  if (aiProvider && ['gemini', 'claude-opus', 'claude-sonnet'].includes(aiProvider)) {
+    saved.aiProvider = aiProvider;
+    AI_PROVIDER = aiProvider;
+  }
+
   // Gemini API Key（マスク値でなければ更新）
   if (geminiApiKey && !geminiApiKey.startsWith('********')) {
     saved.geminiApiKey = geminiApiKey;
     GEMINI_API_KEY = geminiApiKey;
     genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+  }
+
+  // Anthropic API Key（マスク値でなければ更新）
+  if (anthropicApiKey && !anthropicApiKey.startsWith('********')) {
+    saved.anthropicApiKey = anthropicApiKey;
+    ANTHROPIC_API_KEY = anthropicApiKey;
+    anthropicClient = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
   }
 
   // Service Account Key
@@ -2493,7 +2561,8 @@ app.post('/api/enhanced-check', async (req, res) => {
 app.post('/api/ai-evaluate', async (req, res) => {
   const { url, checkItems, viewportPreset } = req.body;
   const safeCheckItems = Array.isArray(checkItems) ? checkItems : [];
-  const fallbackSuggestion = 'Gemini API設定後に再実行してください';
+  const provider = AI_PROVIDER || 'gemini';
+  const fallbackSuggestion = 'AI API設定後に再実行してください';
   const makeFallbackResults = (reason) => {
     return safeCheckItems.map((_, index) => ({
       index,
@@ -2514,10 +2583,13 @@ app.post('/api/ai-evaluate', async (req, res) => {
     return res.status(400).json({ error: 'URLを指定してください' });
   }
   if (safeCheckItems.length === 0) {
-    return res.json({ success: true, model: GEMINI_MODEL, results: [] });
+    return res.json({ success: true, model: provider, results: [] });
   }
-  if (!GEMINI_API_KEY) {
-    const reason = 'GEMINI_API_KEY が未設定のため自動評価をスキップしました';
+  // プロバイダーに応じたAPIキー確認
+  const activeApiKey = (provider === 'claude-opus' || provider === 'claude-sonnet') ? ANTHROPIC_API_KEY : GEMINI_API_KEY;
+  if (!activeApiKey) {
+    const keyName = (provider === 'claude-opus' || provider === 'claude-sonnet') ? 'ANTHROPIC_API_KEY' : 'GEMINI_API_KEY';
+    const reason = `${keyName} が未設定のため自動評価をスキップしました`;
     console.warn('[AI] ' + reason);
     return res.json({ success: true, model: 'manual-fallback', fallback: true, reason, results: makeFallbackResults(reason) });
   }
@@ -2526,7 +2598,8 @@ app.post('/api/ai-evaluate', async (req, res) => {
 
   try {
     const preset = normalizeViewportPreset(viewportPreset);
-    console.log(`[${GEMINI_MODEL}] AI評価開始: ${url} (View ${preset})`);
+    const activeModel = (provider === 'claude-opus' || provider === 'claude-sonnet') ? CLAUDE_MODELS[provider] : GEMINI_MODEL;
+    console.log(`[${activeModel}] AI評価開始: ${url} (View ${preset})`);
     browser = await getBrowser();
     const page = await browser.newPage();
     
@@ -2622,10 +2695,13 @@ ${itemsList}
 
 全${safeCheckItems.length}項目を評価してください。`;
 
-    console.log('Gemini API 呼び出し中...');
+    console.log(`[${provider}] AI API 呼び出し中...`);
     let aiResponse = '';
+    let usedModel = provider;
     try {
-      aiResponse = await callGeminiAPI(prompt, screenshot);
+      const aiResult = await callAI(prompt, screenshot);
+      aiResponse = aiResult.text;
+      usedModel = aiResult.modelName;
     } catch (apiError) {
       const reason = `AIサービスに接続できないため手動確認へフォールバックしました: ${apiError.message}`;
       console.warn('[AI] ' + reason);
@@ -2696,7 +2772,7 @@ ${itemsList}
       };
     });
 
-    res.json({ success: true, model: GEMINI_MODEL, results: normalizedResults });
+    res.json({ success: true, model: usedModel, results: normalizedResults });
 
   } catch (error) {
     console.error('AI評価エラー発生:', error.message);
@@ -2932,49 +3008,48 @@ app.post('/api/export-report', async (req, res) => {
     if (!addCoverRes.ok) throw new Error(`表紙シート追加失敗: ${addCoverData.error?.message}`);
     const coverSheetId = addCoverData.replies[0].addSheet.properties.sheetId;
 
-    // 全体集計（新形式: critical/serious/moderate/minor/pass/na/unverified）
-    const totalStats = { critical: 0, serious: 0, moderate: 0, minor: 0, pass: 0, na: 0, unverified: 0, fail: 0 };
-    pageTabInfo.forEach(p => {
-      const s = p.stats;
-      // 新形式（buildStats）のフィールドを使用。旧形式フォールバックあり
-      if (s.critical !== undefined) {
-        totalStats.critical += s.critical || 0;
-        totalStats.serious  += s.serious  || 0;
-        totalStats.moderate += s.moderate || 0;
-        totalStats.minor    += s.minor    || 0;
-      } else {
-        totalStats.serious += s.fail || 0; // 旧形式のfailはseriousに
-      }
-      totalStats.pass       += s.pass       || 0;
-      totalStats.na         += s.na         || 0;
-      totalStats.unverified += s.unverified || 0;
-    });
-    totalStats.fail = totalStats.critical + totalStats.serious + totalStats.moderate + totalStats.minor;
-    // 単ページの場合は passRate をそのまま使用、複数ページは pass/total で算出
-    const firstStats = pageTabInfo[0]?.stats || {};
-    const totalSC = firstStats.total || (totalStats.pass + totalStats.fail + totalStats.na + totalStats.unverified);
-    const overallRate = totalSC > 0 ? Math.round(totalStats.pass / totalSC * 100) : null;
     const inspectionTime = pages[0].timestamp
       ? new Date(pages[0].timestamp).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
       : now.toLocaleString('ja-JP');
+
+    const quoteSheetNameForFormula = (title) => `'${String(title).replace(/'/g, "''")}'`;
+    const sheetColumnRange = (title, col) => `${quoteSheetNameForFormula(title)}!${col}2:${col}`;
+    const pageStartRow = 11;
+    const pageEndRow = pageStartRow + pageTabInfo.length - 1;
+    const coverSum = (col) => `=SUM(${col}${pageStartRow}:${col}${pageEndRow})`;
+    const coverOverallScoreFormula = '=IFERROR(ROUND(J6/(B6+D6+F6+H6+J6+B7+D7)*100)&"%","—")';
+
+    function buildPageSummaryFormulas(sheetTitle, coverRowNo) {
+      const resultRange = sheetColumnRange(sheetTitle, 'F');
+      const impactRange = sheetColumnRange(sheetTitle, 'I');
+      return {
+        critical: `=COUNTIFS(${resultRange},"不合格",${impactRange},"緊急")`,
+        serious: `=COUNTIFS(${resultRange},"不合格",${impactRange},"重大")+COUNTIFS(${resultRange},"不合格",${impactRange},"<>緊急",${impactRange},"<>重大",${impactRange},"<>中程度",${impactRange},"<>軽微")`,
+        moderate: `=COUNTIFS(${resultRange},"不合格",${impactRange},"中程度")`,
+        minor: `=COUNTIFS(${resultRange},"不合格",${impactRange},"軽微")`,
+        pass: `=COUNTIF(${resultRange},"合格")`,
+        na: `=COUNTIF(${resultRange},"該当なし")+COUNTIF(${resultRange},"対象外")`,
+        unverified: `=MAX(0,COUNTA(${resultRange})-COUNTIF(${resultRange},"合格")-COUNTIF(${resultRange},"不合格")-COUNTIF(${resultRange},"該当なし")-COUNTIF(${resultRange},"対象外"))`,
+        score: `=IFERROR(ROUND(G${coverRowNo}/SUM(C${coverRowNo}:G${coverRowNo})*100)&"%","—")`
+      };
+    }
 
     const coverRows = [
       ['アクセシビリティ検査レポート', '', '', '', '', '', '', '', '', ''],
       ['作成日時', inspectionTime, '', '', '', '', '', '', '', ''],
       ['', '', '', '', '', '', '', '', '', ''],
       ['■ 全体スコア', '', '', '', '', '', '', '', '', ''],
-      ['スコア', overallRate !== null ? `${overallRate}%` : '—', '', '', '', '', '', '', '', ''],
-      ['緊急', totalStats.critical, '重大', totalStats.serious, '中程度', totalStats.moderate, '軽微', totalStats.minor, '合格', totalStats.pass],
-      ['該当なし', totalStats.na, '未検証', totalStats.unverified, '', '', '', '', '', '', ''],
+      ['スコア', coverOverallScoreFormula, '', '', '', '', '', '', '', ''],
+      ['緊急', coverSum('C'), '重大', coverSum('D'), '中程度', coverSum('E'), '軽微', coverSum('F'), '合格', coverSum('G')],
+      ['該当なし', coverSum('H'), '未検証', coverSum('I'), '', '', '', '', '', '', ''],
       ['', '', '', '', '', '', '', '', '', ''],
       ['■ ページ別スコア', '', '', '', '', '', '', '', '', ''],
       ['No', 'URL', '緊急', '重大', '中程度', '軽微', '合格', '該当なし', '未検証', 'スコア', '結果シート'],
       ...pageTabInfo.map((p, idx) => {
-        const s = p.stats;
-        const rate = s.passRate !== undefined ? `${s.passRate}%`
-          : (() => { const ch = (s.pass || 0) + (s.fail || 0); return ch > 0 ? `${Math.round((s.pass || 0) / ch * 100)}%` : '—'; })();
+        const rowNo = pageStartRow + idx;
+        const formulas = buildPageSummaryFormulas(p.title, rowNo);
         const link = `=HYPERLINK("https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit#gid=${p.sheetId}","${p.title.replace(/"/g, '""')}")`;
-        return [String(idx + 1), p.url, s.critical || 0, s.serious || 0, s.moderate || 0, s.minor || 0, s.pass || 0, s.na || 0, s.unverified || 0, rate, link];
+        return [String(idx + 1), p.url, formulas.critical, formulas.serious, formulas.moderate, formulas.minor, formulas.pass, formulas.na, formulas.unverified, formulas.score, link];
       })
     ];
 
@@ -3049,7 +3124,12 @@ app.post('/api/export-report', async (req, res) => {
  */
 app.get('/api/sheets-status', async (req, res) => {
   const saved = loadSettings();
+  const provider = AI_PROVIDER || 'gemini';
   const geminiKey = GEMINI_API_KEY || saved.geminiApiKey || '';
+  const anthropicKey = ANTHROPIC_API_KEY || saved.anthropicApiKey || '';
+  const aiConfigured = provider === 'gemini' ? !!geminiKey
+    : (provider === 'claude-opus' || provider === 'claude-sonnet') ? !!anthropicKey
+    : false;
   try {
     const status = await getSheetsConnectivityStatus();
     res.json({
@@ -3065,7 +3145,8 @@ app.get('/api/sheets-status', async (req, res) => {
       driveFolderStatus: status.driveFolderStatus,
       serviceAccountError: status.serviceAccountError,
       driveFolderError: status.driveFolderError,
-      geminiConfigured: !!geminiKey,
+      geminiConfigured: aiConfigured,
+      aiProvider: provider,
       aaaBeta: saved.aaaBeta || false
     });
   } catch (e) {

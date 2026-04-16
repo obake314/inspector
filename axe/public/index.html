@@ -25,9 +25,23 @@
         <div class="settings-box">
             <h2>設定 <button type="button" onclick="closeSettings()">&times;</button></h2>
             <div class="settings-group">
+                <label>MULTI SCAN AIプロバイダー</label>
+                <select id="settAIProvider">
+                    <option value="gemini">Gemini 2.5 Flash（推奨・低コスト）</option>
+                    <option value="claude-sonnet">Claude Sonnet 4.6（高精度・標準コスト）</option>
+                    <option value="claude-opus">Claude Opus 4.6（最高精度・高コスト）</option>
+                </select>
+                <div class="hint">使用するAIモデルを選択してください</div>
+            </div>
+            <div class="settings-group">
                 <label>Gemini API Key</label>
                 <input type="password" id="settGeminiKey" placeholder="Gemini APIキーを入力してください">
-                <div class="hint">Gemini AI評価に使用</div>
+                <div class="hint">Gemini選択時に使用</div>
+            </div>
+            <div class="settings-group">
+                <label>Anthropic API Key</label>
+                <input type="password" id="settAnthropicKey" placeholder="Anthropic APIキーを入力してください">
+                <div class="hint">Claude Opus / Sonnet選択時に使用</div>
             </div>
             <div class="settings-group">
                 <label>Google Service Account Key (JSON)</label>
@@ -69,7 +83,7 @@
                     <p class="subtitle">アクセシビリティ監査ツール</p>
                 </div>
                 <div class="config-status" id="configStatus">
-                    <span class="config-status-item" id="statusGemini">Gemini <span class="st" id="stGemini">NONE</span></span>
+                    <span class="config-status-item" id="statusGemini">AI <span class="st" id="stGemini">NONE</span></span>
                     <span class="config-status-item" id="statusServiceAccount">ServiceKey <span class="st" id="stServiceAccount">NONE</span></span>
                     <span class="config-status-item" id="statusDriveFolder">DriveFolder <span class="st" id="stDriveFolder">NONE</span></span>
                     <span class="config-status-item" id="statusSheets">Sheets <span class="st" id="stSheets">NONE</span></span>
@@ -759,7 +773,9 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ password: sessionPassword })
                 }, '/api/settings-get');
+                $('settAIProvider').value = data.aiProvider || 'gemini';
                 $('settGeminiKey').value = data.geminiApiKey || '';
+                $('settAnthropicKey').value = data.anthropicApiKey || '';
                 $('settServiceAccount').value = data.serviceAccountKey || '';
                 $('settFolderId').value = data.driveFolderId || '';
                 $('settReportFolderId').value = data.reportFolderId || '';
@@ -767,6 +783,7 @@
                 $('settAAABeta').checked = !!data.aaaBeta;
                 // 環境変数フォールバックの表示
                 $('settGeminiKey').placeholder = data.envGemini ? '設定済み（変更する場合のみ入力）' : 'Gemini APIキーを入力してください';
+                $('settAnthropicKey').placeholder = data.envAnthropic ? '設定済み（変更する場合のみ入力）' : 'Anthropic APIキーを入力してください';
                 $('settServiceAccount').placeholder = data.envServiceAccount ? '設定済み（変更する場合のみ入力）' : 'Service Account JSONを貼り付けてください';
                 $('settFolderId').placeholder = data.envFolder ? '設定済み（変更する場合のみ入力）' : 'Google DriveフォルダIDを入力してください';
             } catch (e) {}
@@ -787,7 +804,9 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         password: sessionPassword,
+                        aiProvider: $('settAIProvider').value,
                         geminiApiKey: $('settGeminiKey').value,
+                        anthropicApiKey: $('settAnthropicKey').value,
                         serviceAccountKey: $('settServiceAccount').value,
                         driveFolderId: $('settFolderId').value,
                         reportFolderId: $('settReportFolderId').value,
@@ -1834,6 +1853,7 @@
                 aiResults = primarySnapshot?.multi ? cloneData(primarySnapshot.multi) : {};
                 lastMobileScanSnapshot = runMobile ? cloneData(mobileSnapshot) : null;
 
+                refreshScoreTable();
                 renderAllTabs('pc');
                 if (runMobile && mobileSnapshot) {
                     renderAllTabs('sp', mobileSnapshot.basic, mobileSnapshot.deep || null, mobileSnapshot.multi || {});
@@ -1877,28 +1897,31 @@
                         el.classList.add('ng');
                     }
                 };
-                const geminiStatus = data.geminiConfigured ? 'OK' : 'NONE';
+                const aiStatus = data.geminiConfigured ? 'OK' : 'NONE';
+                const aiProviderLabel = { gemini: 'Gemini', 'claude-sonnet': 'Sonnet', 'claude-opus': 'Opus' }[data.aiProvider || 'gemini'] || 'AI';
+                const aiStatusEl = $('statusGemini');
+                if (aiStatusEl) aiStatusEl.firstChild.textContent = aiProviderLabel + ' ';
                 const serviceAccountStatus = data.serviceAccountStatus || (data.serviceAccountConfigured ? 'NG' : 'NONE');
                 const driveFolderStatus = data.driveFolderStatus || (data.driveFolderConfigured ? 'NG' : 'NONE');
                 const sheetsStatus = data.sheetsStatus || (data.configured ? 'OK' : 'NG');
-                setStatus('Gemini', 'stGemini', geminiStatus);
+                setStatus('Gemini', 'stGemini', aiStatus);
                 setStatus('ServiceAccount', 'stServiceAccount', serviceAccountStatus);
                 setStatus('DriveFolder', 'stDriveFolder', driveFolderStatus);
                 setStatus('Sheets', 'stSheets', sheetsStatus);
 
-                // Gemini未設定時はMULTI SCANチェックボックスを無効化
-                const geminiOk = geminiStatus === 'OK';
+                // AI未設定時はMULTI SCANチェックボックスを無効化
+                const aiOk = aiStatus === 'OK';
                 ['multiScanOpt','batchAIOpt'].forEach(id => {
                     const el = $(id);
                     if (!el) return;
-                    el.disabled = !geminiOk;
-                    if (!geminiOk) el.checked = false;
+                    el.disabled = !aiOk;
+                    if (!aiOk) el.checked = false;
                 });
                 ['multiScanLabel','batchAILabel'].forEach(id => {
                     const el = $(id);
                     if (!el) return;
-                    el.style.opacity = geminiOk ? '' : '0.35';
-                    el.title = geminiOk ? '' : 'Gemini APIキーが未設定のため使用できません';
+                    el.style.opacity = aiOk ? '' : '0.35';
+                    el.title = aiOk ? '' : 'AI APIキーが未設定のため使用できません';
                 });
 
                 // Sheets未設定時はエクスポートボタンを無効化（表示は常にする）
