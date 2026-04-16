@@ -1355,23 +1355,14 @@ footer a:hover {
 .settings-msg.ng {
   color: var(--color-serious);
 }
-.settings-gear {
-  background: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--navy-400);
-  font-size: 36px;
-  border: none;
-  align-self: flex-start;
-}
-.settings-gear:hover {
-  border-color: var(--navy-400);
-  color: var(--navy-700);
+
+.help-btn{
+      display: flex;
+    align-items: center;
+    gap:14px;
 }
 
-.help-btn {
+.help-btn button{
   background: none;
   border: 2px solid var(--navy-400);
   border-radius: 50%;
@@ -1388,7 +1379,7 @@ footer a:hover {
   margin-left: 4px;
   line-height: 1;
 }
-.help-btn:hover {
+.help-btn button:hover {
   background: var(--navy-400);
   color: #fff;
 }
