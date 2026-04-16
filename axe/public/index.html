@@ -38,6 +38,7 @@
                     <optgroup label="OpenAI">
                         <option value="gpt-4o">GPT-4o　約6〜9円/ページ　画像込み総合診断</option>
                         <option value="o3">o3　約5〜7円/ページ　推論特化・難しい判定に強い</option>
+                        <option value="gpt-5">GPT-5　約18〜29円/ページ　最高峰・複雑な推論・精密判断</option>
                     </optgroup>
                 </select>
                 <div class="hint">使用するAIモデルを選択してください</div>
@@ -1925,7 +1926,8 @@
                     'claude-sonnet': 'Claude Sonnet 4.6',
                     'claude-opus':   'Claude Opus 4.6',
                     'gpt-4o':        'GPT-4o',
-                    'o3':            'o3'
+                    'o3':            'o3',
+                    'gpt-5':         'GPT-5'
                 };
                 const aiModelEl = $('stAIModel');
                 if (aiModelEl) aiModelEl.textContent = aiModelNames[data.aiProvider || 'gemini'] || 'Gemini 2.5 Flash';

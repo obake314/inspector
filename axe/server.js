@@ -37,7 +37,7 @@ function hashPassword(pw) {
 const savedSettings = loadSettings();
 
 // AI プロバイダー設定（設定ファイル → 環境変数の優先順位）
-// aiProvider: 'gemini' | 'gemini-pro' | 'claude-sonnet' | 'claude-opus' | 'gpt-4o' | 'o3'
+// aiProvider: 'gemini' | 'gemini-pro' | 'claude-sonnet' | 'claude-opus' | 'gpt-4o' | 'o3' | 'gpt-5'
 let AI_PROVIDER = savedSettings.aiProvider || process.env.AI_PROVIDER || 'gemini';
 
 // 全モデルマップ
@@ -48,6 +48,7 @@ const AI_MODEL_MAP = {
   'claude-opus':   'claude-opus-4-6',
   'gpt-4o':        'gpt-4o',
   'o3':            'o3',
+  'gpt-5':         'gpt-5',
 };
 
 // Gemini API設定
@@ -371,7 +372,7 @@ async function callAI(prompt, imageBase64 = null) {
     const text = await callClaudeAPI(prompt, imageBase64, provider);
     return { text, modelName };
   }
-  if (provider === 'gpt-4o' || provider === 'o3') {
+  if (provider === 'gpt-4o' || provider === 'o3' || provider === 'gpt-5') {
     const text = await callOpenAIAPI(prompt, imageBase64, provider);
     return { text, modelName };
   }
@@ -2639,13 +2640,13 @@ app.post('/api/ai-evaluate', async (req, res) => {
   }
   // プロバイダーに応じたAPIキー確認
   const activeApiKey =
-    (provider === 'claude-sonnet' || provider === 'claude-opus') ? ANTHROPIC_API_KEY
-    : (provider === 'gpt-4o' || provider === 'o3')               ? OPENAI_API_KEY
+    (provider === 'claude-sonnet' || provider === 'claude-opus')          ? ANTHROPIC_API_KEY
+    : (provider === 'gpt-4o' || provider === 'o3' || provider === 'gpt-5') ? OPENAI_API_KEY
     : GEMINI_API_KEY;
   const keyNameMap = {
     'gemini': 'GEMINI_API_KEY', 'gemini-pro': 'GEMINI_API_KEY',
     'claude-sonnet': 'ANTHROPIC_API_KEY', 'claude-opus': 'ANTHROPIC_API_KEY',
-    'gpt-4o': 'OPENAI_API_KEY', 'o3': 'OPENAI_API_KEY'
+    'gpt-4o': 'OPENAI_API_KEY', 'o3': 'OPENAI_API_KEY', 'gpt-5': 'OPENAI_API_KEY'
   };
   if (!activeApiKey) {
     const keyName = keyNameMap[provider] || 'AI_API_KEY';
@@ -2658,7 +2659,7 @@ app.post('/api/ai-evaluate', async (req, res) => {
 
   try {
     const preset = normalizeViewportPreset(viewportPreset);
-    const activeModel = (provider === 'claude-opus' || provider === 'claude-sonnet') ? CLAUDE_MODELS[provider] : GEMINI_MODEL;
+    const activeModel = AI_MODEL_MAP[provider] || provider;
     console.log(`[${activeModel}] AI評価開始: ${url} (View ${preset})`);
     browser = await getBrowser();
     const page = await browser.newPage();
@@ -3191,7 +3192,7 @@ app.get('/api/sheets-status', async (req, res) => {
   const aiConfigured =
     (provider === 'gemini' || provider === 'gemini-pro')            ? !!geminiKey
     : (provider === 'claude-sonnet' || provider === 'claude-opus')  ? !!anthropicKey
-    : (provider === 'gpt-4o' || provider === 'o3')                  ? !!openaiKey
+    : (provider === 'gpt-4o' || provider === 'o3' || provider === 'gpt-5') ? !!openaiKey
     : false;
   try {
     const status = await getSheetsConnectivityStatus();
