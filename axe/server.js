@@ -2789,8 +2789,10 @@ app.post('/api/export-sheets', async (req, res) => {
 /**
  * GoogleSheetExport API
  * body: { pages: [{ url, rows, timestamp, stats }] }
- * 構成: 表紙シート + 1URLあたり1シート
+ * 構成: 表紙シート + 1URLあたり1シート（PC+SP 統合済み）
  * 列(11列): No, 検査種別, SC, 検査項目, 適合レベル, 結果, 場所, 検出数, 重要度, 詳細, 改善案
+ * PC+SP 時は rows に「＜PC VIEW＞」「＜SP VIEW＞」区切り行が含まれる
+ * stats は computeRowStats() によるレポート行の実数値（表紙集計と一致）
  */
 app.post('/api/export-report', async (req, res) => {
   const { pages } = req.body;

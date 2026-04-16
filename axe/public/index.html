@@ -2588,6 +2588,26 @@
         }
 
         // 単一ページGoogleSheetExport
+        // 行データからサーバー側表紙集計用の stats を生成（結果列・重要度列を集計）
+        function computeRowStats(rows) {
+            const impactMap = { '緊急': 'critical', '重大': 'serious', '中程度': 'moderate', '軽微': 'minor' };
+            const s = { critical: 0, serious: 0, moderate: 0, minor: 0, pass: 0, na: 0, unverified: 0, fail: 0, total: 0 };
+            rows.forEach(row => {
+                const result = row[5]; // 結果列
+                if (!result) return;   // セクション区切り行をスキップ
+                s.total++;
+                if (result === '合格') s.pass++;
+                else if (result === '不合格') { const k = impactMap[row[8]] || 'serious'; s[k]++; }
+                else if (result === '判定不能' || result === '要手動確認') s.unverified++;
+                else if (result === '該当なし' || result === '対象外') s.na++;
+                else s.unverified++;
+            });
+            s.fail = s.critical + s.serious + s.moderate + s.minor;
+            const checkable = s.fail + s.pass;
+            s.passRate = checkable > 0 ? Math.round(s.pass / checkable * 100) : null;
+            return s;
+        }
+
         async function exportToSheets() {
             if (!lastResults) { alert('先にチェックを実行してください'); return; }
             const btn = $('reportBtn');
@@ -2598,26 +2618,31 @@
                 const timestamp = lastResults.timestamp || new Date().toISOString();
                 const pages = [];
 
-                // PC page
+                // PC rows
                 const pcRows = buildReportRows(lastResults, baseUrl, aiResults, lastEnhancedResults, batchNavConsistency);
-                pages.push({
-                    url: lastMobileScanSnapshot ? baseUrl + ' [PC]' : baseUrl,
-                    rows: pcRows,
-                    timestamp,
-                    stats: buildStats(lastResults, lastEnhancedResults, aiResults)
-                });
 
-                // SP page (if exists)
+                let mergedRows;
                 if (lastMobileScanSnapshot) {
+                    // SP rows を結合し 1 URL = 1 シートに統合
                     const sp = lastMobileScanSnapshot;
                     const spRows = buildReportRows(sp.basic, baseUrl, sp.multi || {}, sp.deep || null, null);
-                    pages.push({
-                        url: baseUrl + ' [SP]',
-                        rows: spRows,
-                        timestamp: sp.basic?.timestamp || timestamp,
-                        stats: buildStats(sp.basic, sp.deep || null, sp.multi || {})
-                    });
+                    const sep = Array(11).fill('');
+                    mergedRows = [
+                        Object.assign([...sep], { 0: '＜PC VIEW＞' }),
+                        ...pcRows,
+                        Object.assign([...sep], { 0: '＜SP VIEW＞' }),
+                        ...spRows
+                    ];
+                } else {
+                    mergedRows = pcRows;
                 }
+
+                pages.push({
+                    url: baseUrl,
+                    rows: mergedRows,
+                    timestamp,
+                    stats: computeRowStats(mergedRows)
+                });
 
                 const { response: res, data } = await fetchApiJson(apiUrl('/api/export-report'), {
                     method: 'POST',
@@ -2645,26 +2670,30 @@
                 const hasMobile = batchMobileResultsData.length > 0;
 
                 batchResultsData.filter(r => r.success).forEach((r, i) => {
-                    const urlLabel = hasMobile ? r.url + ' [PC]' : r.url;
-                    const rows = buildReportRows(r.results, r.url, batchAIResults[r.url] || {}, batchEnhancedResults[r.url] || null, batchNavConsistency);
-                    pages.push({
-                        url: urlLabel,
-                        rows,
-                        timestamp: r.results.timestamp || new Date().toISOString(),
-                        stats: computeStats(rows)
-                    });
+                    const pcRows = buildReportRows(r.results, r.url, batchAIResults[r.url] || {}, batchEnhancedResults[r.url] || null, batchNavConsistency);
 
-                    // SP データ（PC+SP モード時）
-                    const mobileR = batchMobileResultsData[i];
-                    if (hasMobile && mobileR?.success) {
+                    // SP データ（PC+SP モード時）は同一シートに統合
+                    const mobileR = hasMobile ? batchMobileResultsData[i] : null;
+                    let mergedRows;
+                    if (mobileR?.success) {
                         const spRows = buildReportRows(mobileR.results, mobileR.url, batchMobileAIResults[mobileR.url] || {}, batchMobileEnhancedResults[mobileR.url] || null, null);
-                        pages.push({
-                            url: mobileR.url + ' [SP]',
-                            rows: spRows,
-                            timestamp: mobileR.results.timestamp || new Date().toISOString(),
-                            stats: computeStats(spRows)
-                        });
+                        const sep = Array(11).fill('');
+                        mergedRows = [
+                            Object.assign([...sep], { 0: '＜PC VIEW＞' }),
+                            ...pcRows,
+                            Object.assign([...sep], { 0: '＜SP VIEW＞' }),
+                            ...spRows
+                        ];
+                    } else {
+                        mergedRows = pcRows;
                     }
+
+                    pages.push({
+                        url: r.url,
+                        rows: mergedRows,
+                        timestamp: r.results.timestamp || new Date().toISOString(),
+                        stats: computeRowStats(mergedRows)
+                    });
                 });
                 if (pages.length === 0) { alert('成功した検査結果がありません'); return; }
 
