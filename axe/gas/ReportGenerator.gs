@@ -9,13 +9,10 @@
  *   5. appsscript.json を開き中身を差し替えて保存
  *   6. スプレッドシートをリロード → メニュー「報告書」が表示される
  *
- * ■ スプレッドシート構成（8列）
- *   行1: アクセシビリティ検査レポート（タイトル、セル結合）
- *   行2: 検査対象URL | URL
- *   行3: 検査日時     | 日時
- *   行4: （空行）
- *   行5: 検査項目番号 | 検査項目 | 適合レベル | 結果 | 場所 | 検出数 | 詳細 | 改善案
- *   行6～: データ行
+ * ■ 対応スプレッドシート構成
+ *   現行11列: No | 検査種別 | SC | 検査項目 | 適合レベル | 結果 | 場所 | 検出数 | 重要度 | 詳細 | 改善案
+ *   旧8列:   検査項目番号 | 検査項目 | 適合レベル | 結果 | 場所 | 検出数 | 詳細 | 改善案
+ *   旧7列:   検査項目番号 | 検査項目 | 結果 | 場所 | 検出数 | 詳細 | 改善案
  */
 
 /* ============================================================
@@ -66,9 +63,12 @@ function showReportDialog() {
     'var N=new Date();',
     'document.getElementById("v_date").value=N.getFullYear()+"-"+P(N.getMonth()+1)+"-"+P(N.getDate());',
 
-    'google.script.run.withSuccessHandler(function(list){',
+    'google.script.run.withFailureHandler(function(e){',
+    '  var el=document.getElementById("chips");',
+    '  el.innerHTML="<span style=\\"color:#d32f2f\\">読込エラー: "+(e&&e.message?e.message:e)+"</span>";',
+    '}).withSuccessHandler(function(list){',
     '  var el=document.getElementById("chips");el.innerHTML="";',
-    '  if(!list.length){el.innerHTML="<span style=color:#d32f2f>対象タブなし</span>";return}',
+    '  if(!list.length){el.innerHTML="<span style=\\"color:#d32f2f\\">対象タブなし</span>";return}',
     '  list.forEach(function(t){',
     '    var c=document.createElement("span");c.className="chip on";c.textContent=t;c.dataset.n=t;',
     '    c.onclick=function(){this.classList.toggle("on")};el.appendChild(c);',
@@ -99,7 +99,7 @@ function getReportTabs() {
   var out = [];
   SpreadsheetApp.getActiveSpreadsheet().getSheets().forEach(function(s) {
     var v = s.getDataRange().getValues();
-    if (v.length >= 6 && String(v[4][0]).trim() === '検査項目番号') out.push(s.getName());
+    if (detectReportSheet_(v)) out.push(s.getName());
   });
   return out;
 }
@@ -329,24 +329,36 @@ function generateReport(info) {
 }
 
 /* ============================================================
-   シートデータ読み取り（8列対応）
+   シートデータ読み取り（現行11列 / 旧8列 / 旧7列対応）
    ============================================================ */
 function readPages_(ss, selectedTabs) {
   var pages = [];
+  var coverUrlMap = getCoverUrlMap_(ss);
   ss.getSheets().forEach(function(sheet) {
     var name = sheet.getName();
     if (selectedTabs.length && selectedTabs.indexOf(name) === -1) return;
     var v = sheet.getDataRange().getValues();
-    if (v.length < 6 || String(v[4][0]).trim() !== '検査項目番号') return;
+    var detected = detectReportSheet_(v);
+    if (!detected) return;
 
-    var url  = String(v[1][1] || name);
-    var time = String(v[2][1] || '');
+    var url  = coverUrlMap[name] || String(v[1] && v[1][1] || name);
+    var time = String(v[2] && v[2][1] || '');
+
+    if (detected.format === 'current11') {
+      pages.push({
+        url: url,
+        time: time,
+        rows: readCurrentRows_(v, detected.headerRow)
+      });
+      return;
+    }
 
     // ヘッダー行から列構成を判定（8列: 適合レベルあり / 7列: 旧形式）
-    var hasLevelCol = (String(v[4][2]).trim() === '適合レベル');
+    var headerRow = detected.headerRow;
+    var hasLevelCol = detected.format === 'legacy8';
 
     var rows = [];
-    for (var i = 5; i < v.length; i++) {
+    for (var i = headerRow + 1; i < v.length; i++) {
       var r = v[i];
       if (!r[0] && !r[1]) continue;
 
@@ -378,6 +390,77 @@ function readPages_(ss, selectedTabs) {
   return pages;
 }
 
+function detectReportSheet_(values) {
+  if (!values || !values.length) return null;
+
+  // 現行フォーマット: 1行目に 11列ヘッダー
+  for (var i = 0; i < Math.min(values.length, 8); i++) {
+    var r = values[i] || [];
+    if (String(r[0]).trim() === 'No' &&
+        String(r[1]).trim() === '検査種別' &&
+        String(r[2]).trim() === 'SC' &&
+        String(r[3]).trim() === '検査項目' &&
+        String(r[5]).trim() === '結果') {
+      return {format: 'current11', headerRow: i};
+    }
+  }
+
+  // 旧フォーマット: 5行目に 検査項目番号 ヘッダー
+  for (var j = 0; j < Math.min(values.length, 8); j++) {
+    var row = values[j] || [];
+    if (String(row[0]).trim() !== '検査項目番号') continue;
+    return {
+      format: String(row[2]).trim() === '適合レベル' ? 'legacy8' : 'legacy7',
+      headerRow: j
+    };
+  }
+
+  return null;
+}
+
+function readCurrentRows_(values, headerRow) {
+  var rows = [];
+  for (var i = headerRow + 1; i < values.length; i++) {
+    var r = values[i] || [];
+    var no = String(r[0] || '').trim();
+    var result = String(r[5] || '').trim();
+
+    // PC/SP 区切り行や空行はDocsの達成基準表には出さない
+    if (!result) continue;
+    if (!no || /^＜.*＞$/.test(no)) continue;
+
+    rows.push({
+      no: no,
+      item: [String(r[2] || '').trim(), String(r[3] || '').trim()].filter(Boolean).join(' '),
+      level: String(r[4] || ''),
+      result: result,
+      location: String(r[6] || ''),
+      count: String(r[7] || ''),
+      detail: String(r[9] || ''),
+      suggestion: String(r[10] || '')
+    });
+  }
+  return rows;
+}
+
+function getCoverUrlMap_(ss) {
+  var map = {};
+  ss.getSheets().forEach(function(sheet) {
+    var v = sheet.getDataRange().getDisplayValues();
+    if (!v.length || String(v[0][0]).trim() !== 'アクセシビリティ検査レポート') return;
+    for (var i = 0; i < v.length; i++) {
+      if (String(v[i][0]).trim() !== 'No' || String(v[i][1]).trim() !== 'URL') continue;
+      for (var r = i + 1; r < v.length; r++) {
+        var url = String(v[r][1] || '').trim();
+        var tabName = String(v[r][10] || '').trim();
+        if (url && tabName) map[tabName] = url;
+      }
+      return;
+    }
+  });
+  return map;
+}
+
 /* ============================================================
    スコア計算
    ============================================================ */
@@ -389,7 +472,10 @@ function calcScore_(pg) {
       case '合格':     s.pass++; break;
       case '不合格':   s.fail++; break;
       case '判定不能': s.unknown++; break;
+      case '要手動確認': s.unknown++; break;
+      case 'エラー':   s.unknown++; break;
       case '該当なし': s.na++; break;
+      case '対象外':   s.na++; break;
       default:         s.unverified++; break;
     }
   });
@@ -406,20 +492,26 @@ function mapResult_(result) {
     case '合格':     return '○';
     case '不合格':   return '×';
     case '判定不能': return '△';
+    case '要手動確認': return '△';
+    case 'エラー':   return '△';
     case '該当なし': return '○';
+    case '対象外':   return '○';
     case '未検証':   return 'ー';
     default:         return 'ー';
   }
 }
 
 function mapApplicable_(result) {
-  return result === '該当なし' ? 'ー' : '○';
+  return (result === '該当なし' || result === '対象外') ? 'ー' : '○';
 }
 
 function buildNote_(r) {
   if (r.result === '該当なし') return '該当箇所なし';
+  if (r.result === '対象外') return '対象外';
   if (r.result === '未検証')   return '要目視確認';
   if (r.result === '判定不能') return 'AI判定: 確信度低' + (r.detail ? ' / ' + cut_(r.detail, 60) : '');
+  if (r.result === '要手動確認') return '要目視確認' + (r.detail ? ' / ' + cut_(r.detail, 60) : '');
+  if (r.result === 'エラー') return '検査エラー' + (r.detail ? ' / ' + cut_(r.detail, 60) : '');
   if (r.result === '不合格') {
     var parts = [];
     if (r.count && r.count !== '—') parts.push(r.count + '件検出');

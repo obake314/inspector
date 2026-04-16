@@ -25,23 +25,37 @@
         <div class="settings-box">
             <h2>設定 <button type="button" onclick="closeSettings()">&times;</button></h2>
             <div class="settings-group">
-                <label>MULTI SCAN AIプロバイダー</label>
+                <label>MULTI SCAN AIモデル</label>
                 <select id="settAIProvider">
-                    <option value="gemini">Gemini 2.5 Flash（推奨・低コスト）</option>
-                    <option value="claude-sonnet">Claude Sonnet 4.6（高精度・標準コスト）</option>
-                    <option value="claude-opus">Claude Opus 4.6（最高精度・高コスト）</option>
+                    <optgroup label="Google Gemini">
+                        <option value="gemini">Gemini 2.5 Flash　約1〜2円/ページ　低コスト・高速（デフォルト）</option>
+                        <option value="gemini-pro">Gemini 2.5 Pro　約5〜8円/ページ　高精度・大量処理向き</option>
+                    </optgroup>
+                    <optgroup label="Anthropic Claude">
+                        <option value="claude-sonnet">Claude Sonnet 4.6　約8〜13円/ページ　実務主力・改善提案の質が高い</option>
+                        <option value="claude-opus">Claude Opus 4.6　約14〜22円/ページ　最高精度・複合判断に強い</option>
+                    </optgroup>
+                    <optgroup label="OpenAI">
+                        <option value="gpt-4o">GPT-4o　約6〜9円/ページ　画像込み総合診断</option>
+                        <option value="o3">o3　約5〜7円/ページ　推論特化・難しい判定に強い</option>
+                    </optgroup>
                 </select>
                 <div class="hint">使用するAIモデルを選択してください</div>
             </div>
             <div class="settings-group">
-                <label>Gemini API Key</label>
+                <label>Google Gemini API Key</label>
                 <input type="password" id="settGeminiKey" placeholder="Gemini APIキーを入力してください">
-                <div class="hint">Gemini選択時に使用</div>
+                <div class="hint">Gemini Flash / Pro 選択時に使用（Google AI Studio）</div>
             </div>
             <div class="settings-group">
                 <label>Anthropic API Key</label>
                 <input type="password" id="settAnthropicKey" placeholder="Anthropic APIキーを入力してください">
-                <div class="hint">Claude Opus / Sonnet選択時に使用</div>
+                <div class="hint">Claude Sonnet / Opus 選択時に使用（console.anthropic.com）</div>
+            </div>
+            <div class="settings-group">
+                <label>OpenAI API Key</label>
+                <input type="password" id="settOpenAIKey" placeholder="OpenAI APIキーを入力してください">
+                <div class="hint">GPT-4o / o3 選択時に使用（platform.openai.com）</div>
             </div>
             <div class="settings-group">
                 <label>Google Service Account Key (JSON)</label>
@@ -83,7 +97,11 @@
                     <p class="subtitle">アクセシビリティ監査ツール</p>
                 </div>
                 <div class="config-status" id="configStatus">
-                    <span class="config-status-item" id="statusGemini">AI <span class="st" id="stGemini">NONE</span></span>
+                    <span class="config-status-item config-status-ai" id="statusGemini">
+                        <span class="st-label">MULTI AI</span>
+                        <span class="st-model" id="stAIModel">Gemini 2.5 Flash</span>
+                        <span class="st st-key" id="stGemini">KEY: NONE</span>
+                    </span>
                     <span class="config-status-item" id="statusServiceAccount">ServiceKey <span class="st" id="stServiceAccount">NONE</span></span>
                     <span class="config-status-item" id="statusDriveFolder">DriveFolder <span class="st" id="stDriveFolder">NONE</span></span>
                     <span class="config-status-item" id="statusSheets">Sheets <span class="st" id="stSheets">NONE</span></span>
@@ -776,6 +794,7 @@
                 $('settAIProvider').value = data.aiProvider || 'gemini';
                 $('settGeminiKey').value = data.geminiApiKey || '';
                 $('settAnthropicKey').value = data.anthropicApiKey || '';
+                $('settOpenAIKey').value = data.openaiApiKey || '';
                 $('settServiceAccount').value = data.serviceAccountKey || '';
                 $('settFolderId').value = data.driveFolderId || '';
                 $('settReportFolderId').value = data.reportFolderId || '';
@@ -784,6 +803,7 @@
                 // 環境変数フォールバックの表示
                 $('settGeminiKey').placeholder = data.envGemini ? '設定済み（変更する場合のみ入力）' : 'Gemini APIキーを入力してください';
                 $('settAnthropicKey').placeholder = data.envAnthropic ? '設定済み（変更する場合のみ入力）' : 'Anthropic APIキーを入力してください';
+                $('settOpenAIKey').placeholder = data.envOpenAI ? '設定済み（変更する場合のみ入力）' : 'OpenAI APIキーを入力してください';
                 $('settServiceAccount').placeholder = data.envServiceAccount ? '設定済み（変更する場合のみ入力）' : 'Service Account JSONを貼り付けてください';
                 $('settFolderId').placeholder = data.envFolder ? '設定済み（変更する場合のみ入力）' : 'Google DriveフォルダIDを入力してください';
             } catch (e) {}
@@ -807,6 +827,7 @@
                         aiProvider: $('settAIProvider').value,
                         geminiApiKey: $('settGeminiKey').value,
                         anthropicApiKey: $('settAnthropicKey').value,
+                        openaiApiKey: $('settOpenAIKey').value,
                         serviceAccountKey: $('settServiceAccount').value,
                         driveFolderId: $('settFolderId').value,
                         reportFolderId: $('settReportFolderId').value,
@@ -1898,13 +1919,27 @@
                     }
                 };
                 const aiStatus = data.geminiConfigured ? 'OK' : 'NONE';
-                const aiProviderLabel = { gemini: 'Gemini', 'claude-sonnet': 'Sonnet', 'claude-opus': 'Opus' }[data.aiProvider || 'gemini'] || 'AI';
-                const aiStatusEl = $('statusGemini');
-                if (aiStatusEl) aiStatusEl.firstChild.textContent = aiProviderLabel + ' ';
+                const aiModelNames = {
+                    'gemini':        'Gemini 2.5 Flash',
+                    'gemini-pro':    'Gemini 2.5 Pro',
+                    'claude-sonnet': 'Claude Sonnet 4.6',
+                    'claude-opus':   'Claude Opus 4.6',
+                    'gpt-4o':        'GPT-4o',
+                    'o3':            'o3'
+                };
+                const aiModelEl = $('stAIModel');
+                if (aiModelEl) aiModelEl.textContent = aiModelNames[data.aiProvider || 'gemini'] || 'Gemini 2.5 Flash';
+                const aiKeyEl = $('stGemini');
+                if (aiKeyEl) aiKeyEl.textContent = 'KEY: ' + aiStatus;
+                const aiStatusItem = $('statusGemini');
+                if (aiStatusItem) {
+                    aiStatusItem.classList.remove('ok', 'ng');
+                    if (aiStatus === 'OK') aiStatusItem.classList.add('ok');
+                }
                 const serviceAccountStatus = data.serviceAccountStatus || (data.serviceAccountConfigured ? 'NG' : 'NONE');
                 const driveFolderStatus = data.driveFolderStatus || (data.driveFolderConfigured ? 'NG' : 'NONE');
                 const sheetsStatus = data.sheetsStatus || (data.configured ? 'OK' : 'NG');
-                setStatus('Gemini', 'stGemini', aiStatus);
+                // AIインジケーターは上で個別処理済み（setStatus呼び出し不要）
                 setStatus('ServiceAccount', 'stServiceAccount', serviceAccountStatus);
                 setStatus('DriveFolder', 'stDriveFolder', driveFolderStatus);
                 setStatus('Sheets', 'stSheets', sheetsStatus);

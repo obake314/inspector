@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const Anthropic = require("@anthropic-ai/sdk");
+const OpenAI = require("openai");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -36,21 +37,30 @@ function hashPassword(pw) {
 const savedSettings = loadSettings();
 
 // AI プロバイダー設定（設定ファイル → 環境変数の優先順位）
-// aiProvider: 'gemini' | 'claude-opus' | 'claude-sonnet'
+// aiProvider: 'gemini' | 'gemini-pro' | 'claude-sonnet' | 'claude-opus' | 'gpt-4o' | 'o3'
 let AI_PROVIDER = savedSettings.aiProvider || process.env.AI_PROVIDER || 'gemini';
+
+// 全モデルマップ
+const AI_MODEL_MAP = {
+  'gemini':        'gemini-2.5-flash',
+  'gemini-pro':    'gemini-2.5-pro',
+  'claude-sonnet': 'claude-sonnet-4-6',
+  'claude-opus':   'claude-opus-4-6',
+  'gpt-4o':        'gpt-4o',
+  'o3':            'o3',
+};
 
 // Gemini API設定
 let GEMINI_API_KEY = savedSettings.geminiApiKey || process.env.GEMINI_API_KEY || '';
-const GEMINI_MODEL = 'gemini-2.5-flash';
 let genAI = new GoogleGenerativeAI(GEMINI_API_KEY || 'placeholder');
 
 // Anthropic API設定
 let ANTHROPIC_API_KEY = savedSettings.anthropicApiKey || process.env.ANTHROPIC_API_KEY || '';
-const CLAUDE_MODELS = {
-  'claude-opus':   'claude-opus-4-6',
-  'claude-sonnet': 'claude-sonnet-4-6'
-};
 let anthropicClient = new Anthropic({ apiKey: ANTHROPIC_API_KEY || 'placeholder' });
+
+// OpenAI API設定
+let OPENAI_API_KEY = savedSettings.openaiApiKey || process.env.OPENAI_API_KEY || '';
+let openaiClient = new OpenAI({ apiKey: OPENAI_API_KEY || 'placeholder' });
 
 // Google Sheets設定
 const GOOGLE_SERVICE_ACCOUNT_KEY_PATH = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH || '';
@@ -275,20 +285,21 @@ async function applyViewportPreset(page, presetRaw) {
 }
 
 /**
- * Gemini 2.5 Flash APIを呼び出す関数
+ * Gemini Flash / Pro APIを呼び出す関数
  */
-async function callGeminiAPI(prompt, imageBase64 = null) {
+async function callGeminiAPI(prompt, imageBase64 = null, modelKey = 'gemini') {
   if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY が設定されていません');
+  const modelId = AI_MODEL_MAP[modelKey] || AI_MODEL_MAP['gemini'];
 
   const model = genAI.getGenerativeModel({
-    model: GEMINI_MODEL,
+    model: modelId,
     generationConfig: { responseMimeType: "application/json" }
   });
 
   const parts = [{ text: prompt }];
   if (imageBase64) {
     parts.push({
-      inlineData: { mimeType: "image/png", data: imageBase64 }
+      inlineData: { mimeType: "image/jpeg", data: imageBase64 }
     });
   }
 
@@ -302,7 +313,7 @@ async function callGeminiAPI(prompt, imageBase64 = null) {
  */
 async function callClaudeAPI(prompt, imageBase64 = null, modelKey = 'claude-sonnet') {
   if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY が設定されていません');
-  const modelId = CLAUDE_MODELS[modelKey] || CLAUDE_MODELS['claude-sonnet'];
+  const modelId = AI_MODEL_MAP[modelKey] || AI_MODEL_MAP['claude-sonnet'];
 
   const contentParts = [];
   if (imageBase64) {
@@ -323,18 +334,50 @@ async function callClaudeAPI(prompt, imageBase64 = null, modelKey = 'claude-sonn
 }
 
 /**
+ * GPT-4o / o3 APIを呼び出す関数
+ */
+async function callOpenAIAPI(prompt, imageBase64 = null, modelKey = 'gpt-4o') {
+  if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY が設定されていません');
+  const modelId = AI_MODEL_MAP[modelKey] || AI_MODEL_MAP['gpt-4o'];
+
+  const userContent = [];
+  if (imageBase64) {
+    userContent.push({
+      type: 'image_url',
+      image_url: { url: `data:image/jpeg;base64,${imageBase64}`, detail: 'high' }
+    });
+  }
+  userContent.push({ type: 'text', text: prompt });
+
+  const completion = await openaiClient.chat.completions.create({
+    model: modelId,
+    max_tokens: 4096,
+    messages: [{ role: 'user', content: userContent }],
+    response_format: { type: 'json_object' }
+  });
+
+  return completion.choices[0].message.content;
+}
+
+/**
  * 現在のAIプロバイダー設定に応じてAPIを呼び出す統合関数
  * @returns { text: string, modelName: string }
  */
 async function callAI(prompt, imageBase64 = null) {
   const provider = AI_PROVIDER || 'gemini';
-  if (provider === 'claude-opus' || provider === 'claude-sonnet') {
+  const modelName = AI_MODEL_MAP[provider] || AI_MODEL_MAP['gemini'];
+
+  if (provider === 'claude-sonnet' || provider === 'claude-opus') {
     const text = await callClaudeAPI(prompt, imageBase64, provider);
-    return { text, modelName: CLAUDE_MODELS[provider] };
+    return { text, modelName };
   }
-  // デフォルト: Gemini
-  const text = await callGeminiAPI(prompt, imageBase64);
-  return { text, modelName: GEMINI_MODEL };
+  if (provider === 'gpt-4o' || provider === 'o3') {
+    const text = await callOpenAIAPI(prompt, imageBase64, provider);
+    return { text, modelName };
+  }
+  // Gemini Flash / Pro
+  const text = await callGeminiAPI(prompt, imageBase64, provider);
+  return { text, modelName };
 }
 
 app.use(express.json({ limit: '50mb' }));
@@ -371,6 +414,7 @@ app.post('/api/settings-get', (req, res) => {
   res.json({
     geminiApiKey: saved.geminiApiKey ? '********' + (saved.geminiApiKey.slice(-4)) : '',
     anthropicApiKey: saved.anthropicApiKey ? '********' + (saved.anthropicApiKey.slice(-4)) : '',
+    openaiApiKey: saved.openaiApiKey ? '********' + (saved.openaiApiKey.slice(-4)) : '',
     aiProvider: saved.aiProvider || AI_PROVIDER || 'gemini',
     serviceAccountKey: saved.serviceAccountKey ? '(設定済み)' : '',
     driveFolderId: saved.driveFolderId || GOOGLE_DRIVE_FOLDER_ID || '',
@@ -380,6 +424,7 @@ app.post('/api/settings-get', (req, res) => {
     // 環境変数フォールバックの表示
     envGemini: !!process.env.GEMINI_API_KEY,
     envAnthropic: !!process.env.ANTHROPIC_API_KEY,
+    envOpenAI: !!process.env.OPENAI_API_KEY,
     envServiceAccount: !!(process.env.GOOGLE_SERVICE_ACCOUNT_KEY || GOOGLE_SERVICE_ACCOUNT_KEY_PATH),
     envFolder: !!process.env.GOOGLE_DRIVE_FOLDER_ID
   });
@@ -389,7 +434,7 @@ app.post('/api/settings-get', (req, res) => {
  * 設定保存API
  */
 app.post('/api/settings-save', (req, res) => {
-  const { password, geminiApiKey, anthropicApiKey, aiProvider, serviceAccountKey, driveFolderId, reportFolderId, newPassword, aaaBeta } = req.body;
+  const { password, geminiApiKey, anthropicApiKey, openaiApiKey, aiProvider, serviceAccountKey, driveFolderId, reportFolderId, newPassword, aaaBeta } = req.body;
   // パスワード認証
   if (APP_PASSWORD_HASH && hashPassword(password || '') !== APP_PASSWORD_HASH) {
     return res.status(401).json({ error: '認証エラー' });
@@ -398,7 +443,7 @@ app.post('/api/settings-save', (req, res) => {
   const saved = loadSettings();
 
   // AI プロバイダー選択
-  if (aiProvider && ['gemini', 'claude-opus', 'claude-sonnet'].includes(aiProvider)) {
+  if (aiProvider && Object.keys(AI_MODEL_MAP).includes(aiProvider)) {
     saved.aiProvider = aiProvider;
     AI_PROVIDER = aiProvider;
   }
@@ -415,6 +460,13 @@ app.post('/api/settings-save', (req, res) => {
     saved.anthropicApiKey = anthropicApiKey;
     ANTHROPIC_API_KEY = anthropicApiKey;
     anthropicClient = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+  }
+
+  // OpenAI API Key（マスク値でなければ更新）
+  if (openaiApiKey && !openaiApiKey.startsWith('********')) {
+    saved.openaiApiKey = openaiApiKey;
+    OPENAI_API_KEY = openaiApiKey;
+    openaiClient = new OpenAI({ apiKey: OPENAI_API_KEY });
   }
 
   // Service Account Key
@@ -2586,9 +2638,17 @@ app.post('/api/ai-evaluate', async (req, res) => {
     return res.json({ success: true, model: provider, results: [] });
   }
   // プロバイダーに応じたAPIキー確認
-  const activeApiKey = (provider === 'claude-opus' || provider === 'claude-sonnet') ? ANTHROPIC_API_KEY : GEMINI_API_KEY;
+  const activeApiKey =
+    (provider === 'claude-sonnet' || provider === 'claude-opus') ? ANTHROPIC_API_KEY
+    : (provider === 'gpt-4o' || provider === 'o3')               ? OPENAI_API_KEY
+    : GEMINI_API_KEY;
+  const keyNameMap = {
+    'gemini': 'GEMINI_API_KEY', 'gemini-pro': 'GEMINI_API_KEY',
+    'claude-sonnet': 'ANTHROPIC_API_KEY', 'claude-opus': 'ANTHROPIC_API_KEY',
+    'gpt-4o': 'OPENAI_API_KEY', 'o3': 'OPENAI_API_KEY'
+  };
   if (!activeApiKey) {
-    const keyName = (provider === 'claude-opus' || provider === 'claude-sonnet') ? 'ANTHROPIC_API_KEY' : 'GEMINI_API_KEY';
+    const keyName = keyNameMap[provider] || 'AI_API_KEY';
     const reason = `${keyName} が未設定のため自動評価をスキップしました`;
     console.warn('[AI] ' + reason);
     return res.json({ success: true, model: 'manual-fallback', fallback: true, reason, results: makeFallbackResults(reason) });
@@ -3125,10 +3185,13 @@ app.post('/api/export-report', async (req, res) => {
 app.get('/api/sheets-status', async (req, res) => {
   const saved = loadSettings();
   const provider = AI_PROVIDER || 'gemini';
-  const geminiKey = GEMINI_API_KEY || saved.geminiApiKey || '';
+  const geminiKey    = GEMINI_API_KEY    || saved.geminiApiKey    || '';
   const anthropicKey = ANTHROPIC_API_KEY || saved.anthropicApiKey || '';
-  const aiConfigured = provider === 'gemini' ? !!geminiKey
-    : (provider === 'claude-opus' || provider === 'claude-sonnet') ? !!anthropicKey
+  const openaiKey    = OPENAI_API_KEY    || saved.openaiApiKey    || '';
+  const aiConfigured =
+    (provider === 'gemini' || provider === 'gemini-pro')            ? !!geminiKey
+    : (provider === 'claude-sonnet' || provider === 'claude-opus')  ? !!anthropicKey
+    : (provider === 'gpt-4o' || provider === 'o3')                  ? !!openaiKey
     : false;
   try {
     const status = await getSheetsConnectivityStatus();
