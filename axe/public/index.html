@@ -875,14 +875,14 @@
                     })
                 }, '/api/settings-save');
                 if (!res.ok) throw new Error(data.error);
-                $('settingsMsg').className = 'settings-msg ok';
-                $('settingsMsg').textContent = '保存しました';
                 // パスワード変更時はセッション更新
                 if ($('settNewPassword').value) {
                     sessionPassword = $('settNewPassword').value;
                 }
                 // Sheets設定を再チェック
                 checkSheetsStatusFn();
+                // 保存完了と同時にパネルを閉じる
+                closeSettings();
             } catch (e) {
                 $('settingsMsg').className = 'settings-msg ng';
                 $('settingsMsg').textContent = 'エラー: ' + e.message;
