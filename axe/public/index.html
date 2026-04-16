@@ -28,17 +28,17 @@
                 <label>MULTI SCAN AIモデル</label>
                 <select id="settAIProvider">
                     <optgroup label="Google Gemini">
-                        <option value="gemini">Gemini 2.5 Flash　約1〜2円/ページ　低コスト・高速（デフォルト）</option>
-                        <option value="gemini-pro">Gemini 2.5 Pro　約5〜8円/ページ　高精度・大量処理向き</option>
+                        <option value="gemini">Gemini 2.5 Flash</option>
+                        <option value="gemini-pro">Gemini 2.5 Pro</option>
                     </optgroup>
                     <optgroup label="Anthropic Claude">
-                        <option value="claude-sonnet">Claude Sonnet 4.6　約8〜13円/ページ　実務主力・改善提案の質が高い</option>
-                        <option value="claude-opus">Claude Opus 4.6　約14〜22円/ページ　最高精度・複合判断に強い</option>
+                        <option value="claude-sonnet">Claude Sonnet 4.6</option>
+                        <option value="claude-opus">Claude Opus 4.6</option>
                     </optgroup>
                     <optgroup label="OpenAI">
-                        <option value="gpt-4o">GPT-4o　約6〜9円/ページ　画像込み総合診断</option>
-                        <option value="o3">o3　約5〜7円/ページ　推論特化・難しい判定に強い</option>
-                        <option value="gpt-5">GPT-5　約18〜29円/ページ　最高峰・複雑な推論・精密判断</option>
+                        <option value="gpt-4o">GPT-4o</option>
+                        <option value="o3">o3</option>
+                        <option value="gpt-5">GPT-5</option>
                     </optgroup>
                 </select>
                 <div class="hint">使用するAIモデルを選択してください</div>
@@ -108,7 +108,36 @@
                     <span class="config-status-item" id="statusSheets">Sheets <span class="st" id="stSheets">NONE</span></span>
                 </div>
             <button type="button" class="settings-gear" id="settingsGear" onclick="openSettings()" title="設定">&#9881;</button>
+            <button type="button" class="help-btn" id="helpBtn" onclick="openHelp()" title="ヘルプ">?</button>
         </header>
+
+        <!-- ヘルプモーダル -->
+        <div id="helpModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeHelp()">
+            <div class="modal-content help-modal-content">
+                <h2>AIモデル比較 <button type="button" onclick="closeHelp()">&times;</button></h2>
+                <div class="help-body">
+                    <table class="help-model-table">
+                        <thead>
+                            <tr>
+                                <th>モデル</th>
+                                <th>1ページあたりのコスト</th>
+                                <th>精度</th>
+                                <th>おすすめ用途</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>Gemini 2.5 Flash</td><td>約1〜2円</td><td>★☆☆☆☆</td><td>大量ページの自動一次診断</td></tr>
+                            <tr><td>Gemini 2.5 Pro</td><td>約5〜8円</td><td>★★☆☆☆</td><td>主要ページの再確認</td></tr>
+                            <tr><td>Claude Sonnet 4.6</td><td>約8〜13円</td><td>★★★☆☆</td><td>実務向けの標準診断</td></tr>
+                            <tr><td>Claude Opus 4.6</td><td>約14〜22円</td><td>★★★★☆</td><td>複雑なアクセシビリティ判断</td></tr>
+                            <tr><td>GPT-4o</td><td>約6〜9円</td><td>★★★★☆</td><td>画像・UIを含む総合診断</td></tr>
+                            <tr><td>o3</td><td>約5〜7円</td><td>★★★☆☆</td><td>難しい判定補助</td></tr>
+                            <tr class="help-row-best"><td>GPT-5</td><td>約18〜29円</td><td>★★★★★</td><td>総合力最高</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
         <div class="input-section">
             <div class="section-column mode-toggle" id="modeToggle">
                 <span class="section-headline">チェック方式</span>
@@ -812,6 +841,13 @@
 
         function closeSettings() {
             $('settingsOverlay').classList.add('hidden');
+        }
+
+        function openHelp() {
+            $('helpModal').style.display = 'flex';
+        }
+        function closeHelp() {
+            $('helpModal').style.display = 'none';
         }
 
         async function saveSettings() {
@@ -2484,7 +2520,7 @@
             const deepSub = sessionAAABeta ? 'A/AA/AAA β' : 'A/AA';
             const basicLabel = `BASIC<br><span class="score-row-sub">axe-core 自動検査</span>`;
             const deepLabel  = `DEEP<br><span class="score-row-sub">ヒューリスティック検査</span>`;
-            const multiLabel = `MULTI<br><span class="score-row-sub">Gemini AI 検査</span>`;
+            const multiLabel = `MULTI<br><span class="score-row-sub">AI 検査</span>`;
             body.innerHTML =
                 row(basicLabel, 'label-basic', nb, true, false) +
                 row(deepLabel, 'label-deep', nd, deepEnabled, false) +

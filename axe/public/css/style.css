@@ -1370,6 +1370,63 @@ footer a:hover {
   border-color: var(--navy-400);
   color: var(--navy-700);
 }
+
+.help-btn {
+  background: none;
+  border: 2px solid var(--navy-400);
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--navy-400);
+  font-size: 15px;
+  font-weight: 700;
+  align-self: flex-start;
+  margin-left: 4px;
+  line-height: 1;
+}
+.help-btn:hover {
+  background: var(--navy-400);
+  color: #fff;
+}
+
+/* ヘルプモーダル */
+.help-modal-content {
+  max-width: 720px;
+  width: 95vw;
+}
+.help-body {
+  padding: 8px 0 4px;
+  overflow-x: auto;
+}
+.help-model-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.help-model-table th,
+.help-model-table td {
+  padding: 8px 12px;
+  border: 1px solid var(--navy-200, #dde2ee);
+  text-align: left;
+  white-space: nowrap;
+}
+.help-model-table thead th {
+  background: var(--navy-100, #f0f3fa);
+  font-weight: 600;
+  color: var(--navy-700, #1a2340);
+}
+.help-model-table tbody tr:hover {
+  background: var(--navy-50, #f8faff);
+}
+.help-row-best td {
+  font-weight: 600;
+  background: #fffbec;
+}
+
 .config-status {
   display: flex;
   gap: var(--space-s);
