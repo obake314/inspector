@@ -292,7 +292,7 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: var(--space-s);
-  padding: var(--space-s) var(--space-m);
+  padding: var(--space-m) var(--space-l);
   border: 1px solid var(--navy-200);
   background: var(--color-white);
   transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
@@ -417,8 +417,7 @@ h1 {
   font-weight: 500;
   min-width: 150px;
 }
-.skip-rule-item small {
-}
+
 .results {
   display: none;
 }
