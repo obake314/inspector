@@ -1363,22 +1363,19 @@ footer a:hover {
 }
 
 .help-btn button{
-  background: none;
-  border: 2px solid var(--navy-400);
-  border-radius: 50%;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--navy-400);
-  font-size: 15px;
-  font-weight: 700;
-  align-self: flex-start;
-  margin-left: 4px;
-  line-height: 1;
+    border: none;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--navy-400);
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1;
 }
+
 .help-btn button:hover {
   background: var(--navy-400);
   color: #fff;
