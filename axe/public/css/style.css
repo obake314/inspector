@@ -1147,6 +1147,129 @@ h1 {
 .batch-summary-table tr.has-violations td:first-child {
   border-left: 3px solid var(--navy-700);
 }
+
+/* ---- 一括検査サマリーテーブル（動的生成） ---- */
+.batch-summary-table-generated {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-s);
+  margin-bottom: var(--space-m);
+  background: var(--color-white);
+}
+
+/* ヘッダー */
+.batchsum-th {
+  background: var(--navy-200);
+  border: 1px solid #d0d5e0;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--navy-700);
+  text-align: center;
+  white-space: nowrap;
+}
+.batchsum-th-url {
+  text-align: left;
+  width: 35%;
+  min-width: 180px;
+}
+.batchsum-th-score {
+  min-width: 72px;
+  line-height: 1.3;
+}
+.batchsum-th-sub {
+  font-size: 9px;
+  font-weight: 400;
+  opacity: 0.7;
+  letter-spacing: 0.03em;
+}
+
+/* ヘッダー列のトーン色 */
+.batchsum-th.tone-critical { color: var(--color-crilical); }
+.batchsum-th.tone-serious  { color: var(--color-serious);  }
+.batchsum-th.tone-moderate { color: var(--color-moderate); }
+.batchsum-th.tone-minor    { color: var(--color-minor);    }
+.batchsum-th.tone-pass     { color: var(--color-multi);    }
+.batchsum-th.tone-neutral  { color: var(--navy-400);       }
+
+/* 行 */
+.batchsum-row {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.batchsum-row:hover td {
+  background: #f4f6fb;
+}
+.batchsum-row.has-violations .batchsum-url {
+  border-left: 3px solid var(--color-serious);
+}
+
+/* セル共通 */
+.batchsum-td {
+  border: 1px solid #e2e6ef;
+  padding: 8px 10px;
+  text-align: center;
+  background: var(--color-white);
+  vertical-align: middle;
+}
+
+/* URL セル */
+.batchsum-url {
+  text-align: left;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--navy-700);
+}
+
+/* スコアセル */
+.batchsum-score {
+  min-width: 72px;
+  line-height: 1.3;
+}
+.batchsum-total {
+  font-size: 11px;
+  color: var(--navy-400);
+}
+.batchsum-score-value {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.batchsum-score-value.is-high { color: var(--color-multi);    }
+.batchsum-score-value.is-mid  { color: var(--color-moderate); }
+.batchsum-score-value.is-low  { color: var(--color-serious);  }
+
+/* 数値セル */
+.batchsum-num {
+  display: inline-block;
+  font-size: 14px;
+  font-weight: 600;
+  min-width: 20px;
+}
+.batchsum-num.is-zero {
+  color: var(--navy-400);
+  font-weight: 400;
+  font-size: 12px;
+}
+.batchsum-num.tone-critical { color: var(--color-crilical); }
+.batchsum-num.tone-serious  { color: var(--color-serious);  }
+.batchsum-num.tone-moderate { color: var(--color-moderate); }
+.batchsum-num.tone-minor    { color: var(--color-minor);    }
+.batchsum-num.tone-pass     { color: var(--color-multi);    }
+.batchsum-num.tone-neutral  { color: var(--navy-400);       }
+
+/* エラー行 */
+.batchsum-error {
+  text-align: left;
+  color: var(--color-serious);
+  font-size: 12px;
+}
+
 footer {
   text-align: center;
   padding: var(--space-l) var(--space-l);
