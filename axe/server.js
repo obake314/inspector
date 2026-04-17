@@ -3415,7 +3415,7 @@ app.post('/api/drive-cleanup', async (req, res) => {
 });
 
 // ============================================================
-// PLAYWRITE: Playwright アクセシビリティ検査
+// PLAYWRIGHT: Playwright アクセシビリティ検査
 // ============================================================
 const { chromium } = require('playwright');
 
@@ -3615,7 +3615,7 @@ app.post('/api/playwright-check', async (req, res) => {
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
-    if (!res.headersSent) res.status(504).json({ error: 'PLAYWRITEがタイムアウトしました（5分超過）' });
+    if (!res.headersSent) res.status(504).json({ error: 'PLAYWRIGHTがタイムアウトしました（5分超過）' });
   }, HANDLER_TIMEOUT);
 
   let browser;
