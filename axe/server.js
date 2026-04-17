@@ -3423,27 +3423,41 @@ const { chromium } = require('playwright');
  * SC 4.1.2 - アクセシブルネーム・ロール監査（アクセシビリティスナップショット使用）
  */
 async function pw_check_4_1_2_accessible_names(page) {
-  const snapshot = await page.accessibility.snapshot();
-  const nameless = [];
-  const interactiveRoles = ['button', 'link', 'textbox', 'checkbox', 'radio',
-    'combobox', 'listbox', 'menuitem', 'menuitemcheckbox', 'menuitemradio',
-    'option', 'switch', 'tab', 'searchbox', 'spinbutton'];
-  function walk(node) {
-    if (!node) return;
-    if (interactiveRoles.includes(node.role) && (!node.name || !node.name.trim())) {
-      nameless.push(`${node.role}要素にアクセシブルネームなし`);
+  const result = await page.evaluate(() => {
+    const selectors = [
+      'button', 'a[href]', 'input:not([type="hidden"])', 'select', 'textarea',
+      '[role="button"]', '[role="link"]', '[role="checkbox"]', '[role="radio"]',
+      '[role="combobox"]', '[role="listbox"]', '[role="menuitem"]',
+      '[role="switch"]', '[role="tab"]', '[role="searchbox"]'
+    ];
+    const nameless = [];
+    const seen = new Set();
+    for (const sel of selectors) {
+      for (const el of document.querySelectorAll(sel)) {
+        if (seen.has(el)) continue;
+        seen.add(el);
+        const label = el.getAttribute('aria-label') || el.getAttribute('aria-labelledby')
+          ? (el.getAttribute('aria-label') || document.getElementById(el.getAttribute('aria-labelledby'))?.textContent)
+          : el.textContent?.trim() || el.getAttribute('title') || el.getAttribute('placeholder') || el.getAttribute('alt');
+        if (!label || !label.trim()) {
+          const tag = el.tagName.toLowerCase();
+          const id = el.id ? `#${el.id}` : '';
+          const role = el.getAttribute('role') || tag;
+          nameless.push(`<${tag}${id}> [role=${role}] アクセシブルネームなし`);
+          if (nameless.length >= 10) break;
+        }
+      }
+      if (nameless.length >= 10) break;
     }
-    (node.children || []).forEach(walk);
-  }
-  walk(snapshot);
-  const deduped = [...new Set(nameless)];
+    return nameless;
+  });
   return {
     sc: '4.1.2',
-    status: deduped.length > 0 ? 'fail' : 'pass',
-    violations: deduped.slice(0, 10),
-    message: deduped.length > 0
-      ? `${nameless.length}個のインタラクティブ要素にアクセシブルネームが未設定`
-      : 'アクセシビリティスナップショット: すべてのインタラクティブ要素にアクセシブルネームあり'
+    status: result.length > 0 ? 'fail' : 'pass',
+    violations: result,
+    message: result.length > 0
+      ? `${result.length}個のインタラクティブ要素にアクセシブルネームが未設定`
+      : 'すべてのインタラクティブ要素にアクセシブルネームあり'
   };
 }
 
