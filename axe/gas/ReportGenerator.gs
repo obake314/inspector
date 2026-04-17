@@ -50,16 +50,8 @@ function showReportDialog() {
     '<label>対象サイト名</label>',
     '<input id="v_siteName" placeholder="例: 株式会社サンプル コーポレートサイト">',
 
-    '<label>審査基準</label>',
-    '<input id="v_standard" value="WCAG 2.2 Level AA / JIS X 8341-3:2016">',
-
     '<label>作成者</label>',
     '<input id="v_author" placeholder="例: 山田太郎">',
-
-    '<div class="row">',
-    '<div><label>審査開始日</label><input id="v_periodStart" type="date"></div>',
-    '<div><label>審査終了日</label><input id="v_periodEnd" type="date"></div>',
-    '</div>',
 
     '<div class="row">',
     '<div><label>作成日</label><input id="v_date" type="date"></div>',
@@ -76,7 +68,6 @@ function showReportDialog() {
     'var P=function(n){return String(n).padStart(2,"0")};',
     'var N=new Date();',
     'document.getElementById("v_date").value=N.getFullYear()+"-"+P(N.getMonth()+1)+"-"+P(N.getDate());',
-    'document.getElementById("v_periodEnd").value=document.getElementById("v_date").value;',
 
     'google.script.run.withFailureHandler(function(e){',
     '  var el=document.getElementById("chips");',
@@ -97,12 +88,12 @@ function showReportDialog() {
     '  google.script.run',
     '    .withSuccessHandler(function(url){if(url)window.open(url,"_blank");google.script.host.close()})',
     '    .withFailureHandler(function(e){b.disabled=false;b.textContent="報告書を生成";m.style.color="#d32f2f";m.textContent="エラー: "+e.message})',
-    '    .generateReport({company:document.getElementById("v_company").value,siteName:document.getElementById("v_siteName").value,standard:document.getElementById("v_standard").value,author:document.getElementById("v_author").value,periodStart:document.getElementById("v_periodStart").value,periodEnd:document.getElementById("v_periodEnd").value,createdDate:document.getElementById("v_date").value,version:document.getElementById("v_version").value,tabs:sel});',
+    '    .generateReport({company:document.getElementById("v_company").value,siteName:document.getElementById("v_siteName").value,author:document.getElementById("v_author").value,createdDate:document.getElementById("v_date").value,version:document.getElementById("v_version").value,tabs:sel});',
     '}',
     '</script>'
   ].join('\n'))
   .setWidth(440)
-  .setHeight(640);
+  .setHeight(500);
 
   SpreadsheetApp.getUi().showModalDialog(html, '報告書生成');
 }
@@ -113,8 +104,18 @@ function showReportDialog() {
 function getReportTabs() {
   var out = [];
   SpreadsheetApp.getActiveSpreadsheet().getSheets().forEach(function(s) {
-    var v = s.getDataRange().getValues();
-    if (detectReportSheet_(v)) out.push(s.getName());
+    try {
+      // フォーマット判定は先頭8行×12列のみ読み込む（全体読み込みはサーバーエラーの原因になる）
+      var lastRow = s.getLastRow();
+      var lastCol = s.getLastColumn();
+      if (lastRow === 0 || lastCol === 0) return;
+      var rows = Math.min(lastRow, 8);
+      var cols = Math.min(lastCol, 12);
+      var v = s.getRange(1, 1, rows, cols).getDisplayValues();
+      if (detectReportSheet_(v)) out.push(s.getName());
+    } catch (e) {
+      // 読み取り不可のシートはスキップ
+    }
   });
   return out;
 }
