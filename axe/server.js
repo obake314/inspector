@@ -3415,7 +3415,7 @@ app.post('/api/drive-cleanup', async (req, res) => {
 });
 
 // ============================================================
-// PLAY SCAN: Playwright アクセシビリティ検査
+// PLAYWRITE: Playwright アクセシビリティ検査
 // ============================================================
 const { chromium } = require('playwright');
 
@@ -3615,27 +3615,27 @@ app.post('/api/playwright-check', async (req, res) => {
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
-    if (!res.headersSent) res.status(504).json({ error: 'PLAY SCANがタイムアウトしました（5分超過）' });
+    if (!res.headersSent) res.status(504).json({ error: 'PLAYWRITEがタイムアウトしました（5分超過）' });
   }, HANDLER_TIMEOUT);
 
   let browser;
   try {
-    browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext();
-
+    browser = await chromium.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+    });
     // ビューポート設定
     const preset = (viewportPreset || 'desktop').toLowerCase();
-    if (preset.includes('mobile') || preset.includes('iphone') || preset.includes('sp')) {
-      await context.setViewportSize({ width: 375, height: 812 });
-    } else {
-      await context.setViewportSize({ width: 1280, height: 800 });
-    }
+    const viewport = (preset.includes('mobile') || preset.includes('iphone') || preset.includes('sp'))
+      ? { width: 375, height: 812 }
+      : { width: 1280, height: 800 };
 
-    const page = await context.newPage();
+    const contextOptions = { viewport };
     if (basicAuth && basicAuth.user && basicAuth.pass) {
-      await page.route('**/*', route => route.continue());
-      await context.setHTTPCredentials({ username: basicAuth.user, password: basicAuth.pass });
+      contextOptions.httpCredentials = { username: basicAuth.user, password: basicAuth.pass };
     }
+    const context = await browser.newContext(contextOptions);
+    const page = await context.newPage();
 
     await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
     await page.waitForTimeout(1000);

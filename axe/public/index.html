@@ -260,7 +260,7 @@
                         </label>
                         <label class="scan-option" id="playScanLabel" title="Playwright（ヘッドレスブラウザ）でキーボード操作・アクセシビリティツリー・フォーカス表示を実際に検証します。&#10;確認項目: SC 4.1.2(アクセシブルネーム), 4.1.3(ステータスメッセージ), 2.4.6(見出し・ラベル), 1.3.1(情報と関係性), 2.4.7(フォーカス表示), 2.1.1(キーボード到達性)&#10;APIコスト不要・所要時間：1〜2分">
                             <input type="checkbox" id="playScanOpt" class="scan-option-checkbox">
-                            <span class="scan-option-text scan-option-text-play">PLAY SCAN</span>
+                            <span class="scan-option-text scan-option-text-play">PLAYWRITE</span>
                         </label>
                     </div>
                     <div class="batch-progress" id="singleProgress">
@@ -285,7 +285,7 @@
                         </label>
                         <label class="scan-option" id="batchPlayLabel" title="Playwright（ヘッドレスブラウザ）でキーボード操作・アクセシビリティツリー・フォーカス表示を実際に検証します。&#10;APIコスト不要・所要時間：1〜2分（URL1件あたり）">
                             <input type="checkbox" id="batchPlayOpt" class="scan-option-checkbox">
-                            <span class="scan-option-text scan-option-text-play">PLAY SCAN</span>
+                            <span class="scan-option-text scan-option-text-play">PLAYWRITE</span>
                         </label>
                         <span class="batch-count" id="batchCount">0 / 10 URL</span>
                     </div>
@@ -1677,7 +1677,7 @@
                         renderPhases(localPhase + 1);
                         for (let i = 0; i < successUrls.length; i++) {
                             const shortUrl = successUrls[i].replace(/^https?:\/\//, '').substring(0, 40);
-                            progressLabel.textContent = `${vPrefix}PLAY SCANNING: ${shortUrl}`;
+                            progressLabel.textContent = `${vPrefix}PLAYWRITING: ${shortUrl}`;
                             progressSub.textContent = `${i + 1} / ${successUrls.length} URL`;
                             setPhaseProgress(localPhase, i / successUrls.length);
                             try {
@@ -1929,7 +1929,7 @@
                 // --- PLAY ---
                 if (doPlay && snapshot.basic) {
                     const playPhase = phaseOffset + localPhaseIndex;
-                    progressLabel.textContent = `${labelPrefix}PLAY SCANNING（キーボード・アクセシビリティツリー検査）...`;
+                    progressLabel.textContent = `${labelPrefix}PLAYWRITING（キーボード・アクセシビリティツリー検査）...`;
                     renderSinglePhases(playPhase + 1);
                     const tPlay = startPhaseTimer(playPhase);
                     try {
@@ -1956,7 +1956,7 @@
                         );
                     } catch (e) {
                         clearInterval(tPlay);
-                        progressLabel.textContent = `${labelPrefix}PLAY SCAN エラー: ${e.message}`;
+                        progressLabel.textContent = `${labelPrefix}PLAYWRITE エラー: ${e.message}`;
                     }
                 }
                 return snapshot;
@@ -3063,7 +3063,7 @@
         }
 
         // ============================================================
-        // PLAY SCAN 実行（Playwright ブラウザ検査）
+        // PLAYWRITE 実行（Playwright ブラウザ検査）
         // ============================================================
         async function runPlaywrightCheck(silent = false, options = {}) {
             const url = document.getElementById('urlInput').value.trim();
@@ -3085,15 +3085,15 @@
                         body: JSON.stringify(body),
                         signal: controller.signal
                     }, '/api/playwright-check');
-                    if (!r.response.ok) throw new Error(r.data.error || 'PLAY SCAN失敗');
+                    if (!r.response.ok) throw new Error(r.data.error || 'PLAYWRITE失敗');
                     rData = r.data;
                 } finally {
                     clearTimeout(timer);
                 }
                 lastPlayResults = rData.results;
             } catch (e) {
-                const msg = e.name === 'AbortError' ? 'PLAY SCANタイムアウト（6分超過）' : e.message;
-                if (!silent) console.warn('[PLAY SCAN] エラー:', msg);
+                const msg = e.name === 'AbortError' ? 'PLAYWRITEタイムアウト（6分超過）' : e.message;
+                if (!silent) console.warn('[PLAYWRITE] エラー:', msg);
                 throw e;
             }
         }
