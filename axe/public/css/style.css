@@ -7,6 +7,7 @@
   --color-basic:#3581B8;
   --color-deep:#304C89;
   --color-multi:#0D7A5F;
+  --color-play:#7B4DC8;
   --color-white:#fff;
   --color-crilical: #7f1d1d;
   --color-serious: #dc2626;
@@ -312,6 +313,9 @@ h1 {
 .scan-option-text-multi {
   color: var(--color-multi);
 }
+.scan-option-text-play {
+  color: var(--color-play);
+}
 .scan-option-checkbox {
   appearance: none;
   -webkit-appearance: none;
@@ -349,6 +353,12 @@ h1 {
 #batchAIOpt:checked,
 .scan-option-checkbox#multiScanOpt:checked {
   background: var(--color-multi);
+  border-color: var(--navy-700);
+}
+
+#batchPlayOpt:checked,
+.scan-option-checkbox#playScanOpt:checked {
+  background: var(--color-play);
   border-color: var(--navy-700);
 }
 
@@ -498,6 +508,9 @@ h1 {
 }
 .scoretable tbody td.label-multi{
   color: var(--color-multi);
+}
+.scoretable tbody td.label-play{
+  color: var(--color-play);
 }
 .scoretable tbody td.label-basic{
   color: var(--color-basic);
@@ -659,7 +672,10 @@ h1 {
   background: var(--color-deep);
 }
 .badge-multi{
-  background: var(--color-multi); 
+  background: var(--color-multi);
+}
+.badge-play{
+  background: var(--color-play);
 }
 
 .badge.critical {

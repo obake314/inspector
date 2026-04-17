@@ -258,6 +258,10 @@
                             <input type="checkbox" id="multiScanOpt" class="scan-option-checkbox" checked>
                             <span class="scan-option-text scan-option-text-multi">MULTI SCAN</span>
                         </label>
+                        <label class="scan-option" id="playScanLabel" title="Playwright（ヘッドレスブラウザ）でキーボード操作・アクセシビリティツリー・フォーカス表示を実際に検証します。&#10;確認項目: SC 4.1.2(アクセシブルネーム), 4.1.3(ステータスメッセージ), 2.4.6(見出し・ラベル), 1.3.1(情報と関係性), 2.4.7(フォーカス表示), 2.1.1(キーボード到達性)&#10;APIコスト不要・所要時間：1〜2分">
+                            <input type="checkbox" id="playScanOpt" class="scan-option-checkbox">
+                            <span class="scan-option-text scan-option-text-play">PLAY SCAN</span>
+                        </label>
                     </div>
                     <div class="batch-progress" id="singleProgress">
                         <div class="batch-progress-header">
@@ -278,6 +282,10 @@
                         <label class="scan-option" id="batchAILabel" title="Gemini AIがページ全体のHTML・スクリーンショット・操作結果を解析し、メディア代替・フォーム設計・ナビゲーション一貫性・可読性など約70のWCAG達成基準を一括評価します。&#10;所要時間：1〜2分（URL1件あたり、Gemini APIキーが必要）">
                             <input type="checkbox" id="batchAIOpt" class="scan-option-checkbox" checked>
                             <span class="scan-option-text scan-option-text-multi">MULTI SCAN</span>
+                        </label>
+                        <label class="scan-option" id="batchPlayLabel" title="Playwright（ヘッドレスブラウザ）でキーボード操作・アクセシビリティツリー・フォーカス表示を実際に検証します。&#10;APIコスト不要・所要時間：1〜2分（URL1件あたり）">
+                            <input type="checkbox" id="batchPlayOpt" class="scan-option-checkbox">
+                            <span class="scan-option-text scan-option-text-play">PLAY SCAN</span>
                         </label>
                         <span class="batch-count" id="batchCount">0 / 10 URL</span>
                     </div>
@@ -709,7 +717,7 @@
             renderAllTabs('pc');
             if (lastMobileScanSnapshot) {
                 const sp = lastMobileScanSnapshot;
-                renderAllTabs('sp', sp.basic, sp.deep || null, sp.multi || {});
+                renderAllTabs('sp', sp.basic, sp.deep || null, sp.multi || {}, sp.play || null);
             }
             refreshScoreTable();
         };
@@ -718,26 +726,35 @@
             if (!lastResults) return;
             const doDeep  = !!lastEnhancedResults;
             const doMulti = Object.keys(aiResults).length > 0;
+            const doPlay  = !!lastPlayResults;
             // PC テーブル
             renderScanScoreTable(
                 computeBasicScore(lastResults),
                 doDeep  ? computeDeepScore(lastEnhancedResults)  : null,
                 doMulti ? computeMultiScore(aiResults)           : null,
                 doDeep, doMulti,
-                { scoreBodyId: 'scanScoreBody', scoreTableId: 'scanScoreTable', scoreBlockId: 'scoreBlockDesktop' }
+                {
+                    scoreBodyId: 'scanScoreBody', scoreTableId: 'scanScoreTable', scoreBlockId: 'scoreBlockDesktop',
+                    playEnabled: doPlay, playScore: doPlay ? computePlayScore(lastPlayResults) : null,
+                    state: { playResults: lastPlayResults }
+                }
             );
             // SP テーブル（スナップショットがある場合のみ）
             if (lastMobileScanSnapshot) {
                 const sp = lastMobileScanSnapshot;
                 const spDeep  = !!sp.deep;
                 const spMulti = sp.multi && Object.keys(sp.multi).length > 0;
+                const spPlay  = !!sp.play;
                 renderScanScoreTable(
                     computeBasicScore(sp.basic),
                     spDeep  ? computeDeepScore(sp.deep)   : null,
                     spMulti ? computeMultiScore(sp.multi) : null,
                     spDeep, spMulti,
-                    { scoreBodyId: 'scanScoreBodyMobile', scoreTableId: 'scanScoreTableMobile', scoreBlockId: 'scoreBlockMobile',
-                      state: { basicResults: sp.basic, deepResults: sp.deep, multiAiData: sp.multi } }
+                    {
+                        scoreBodyId: 'scanScoreBodyMobile', scoreTableId: 'scanScoreTableMobile', scoreBlockId: 'scoreBlockMobile',
+                        playEnabled: spPlay, playScore: spPlay ? computePlayScore(sp.play) : null,
+                        state: { basicResults: sp.basic, deepResults: sp.deep, multiAiData: sp.multi, playResults: sp.play }
+                    }
                 );
             }
         }
@@ -1079,6 +1096,7 @@
         let aiResults = {};
         // 高精度検査結果を保存（単一ページ）
         let lastEnhancedResults = null;
+        let lastPlayResults = null;
         let lastMobileScanSnapshot = null;
 
         async function runAIEvaluation(silent = false, options = {}) {
@@ -1215,6 +1233,7 @@
             // --- 状態リセット ---
             lastResults = null;
             lastEnhancedResults = null;
+            lastPlayResults = null;
             aiResults = {};
             manualDecisions.clear();
             manualImpacts.clear();
@@ -1222,9 +1241,11 @@
             batchNavConsistency = null;
             batchEnhancedResults = {};
             batchAIResults = {};
+            batchPlayResults = {};
             batchMobileResultsData = [];
             batchMobileEnhancedResults = {};
             batchMobileAIResults = {};
+            batchMobilePlayResults = {};
             batchViewportMode = 'desktop';
             lastMobileScanSnapshot = null;
             scanExecuted = false;
@@ -1300,9 +1321,11 @@
         let batchNavConsistency = null;
         let batchEnhancedResults = {}; // url → enhanced results array
         let batchAIResults = {};       // url → processed aiResults object
+        let batchPlayResults = {};     // url → play results array
         let batchMobileResultsData = [];          // SP用（PC+SP時のみ使用）
         let batchMobileEnhancedResults = {};      // url → SP enhanced results
         let batchMobileAIResults = {};            // url → SP AI results
+        let batchMobilePlayResults = {};          // url → SP play results
         let batchViewportMode = 'desktop';        // 実行時のviewportMode
 
         function renderNavConsistency() {
@@ -1429,16 +1452,21 @@
             // --- PC ---
             lastEnhancedResults = batchEnhancedResults[r.url] || null;
             aiResults = batchAIResults[r.url] || {};
+            lastPlayResults = batchPlayResults[r.url] || null;
             displayResults(r.results, r.url);
             $('results').classList.add('visible');
             const deepEnabled  = !!lastEnhancedResults;
             const multiEnabled = Object.keys(aiResults).length > 0;
+            const playEnabledBatch = !!lastPlayResults;
             renderScanScoreTable(
                 computeBasicScore(lastResults),
                 deepEnabled  ? computeDeepScore(lastEnhancedResults) : null,
                 multiEnabled ? computeMultiScore(aiResults) : null,
                 deepEnabled, multiEnabled,
-                { scoreBodyId: 'scanScoreBody', scoreTableId: 'scanScoreTable', scoreBlockId: 'scoreBlockDesktop' }
+                {
+                    scoreBodyId: 'scanScoreBody', scoreTableId: 'scanScoreTable', scoreBlockId: 'scoreBlockDesktop',
+                    playEnabled: playEnabledBatch, playScore: playEnabledBatch ? computePlayScore(lastPlayResults) : null
+                }
             );
             renderAllTabs('pc');
 
@@ -1447,16 +1475,22 @@
             if (mobileR?.success) {
                 const mobileEnhanced = batchMobileEnhancedResults[mobileR.url] || null;
                 const mobileAI       = batchMobileAIResults[mobileR.url] || {};
+                const mobilePlay     = batchMobilePlayResults[mobileR.url] || null;
                 const mDeepEnabled   = !!mobileEnhanced;
                 const mMultiEnabled  = Object.keys(mobileAI).length > 0;
+                const mPlayEnabled   = !!mobilePlay;
                 renderScanScoreTable(
                     computeBasicScore(mobileR.results),
                     mDeepEnabled  ? computeDeepScore(mobileEnhanced) : null,
                     mMultiEnabled ? computeMultiScore(mobileAI) : null,
                     mDeepEnabled, mMultiEnabled,
-                    { scoreBodyId: 'scanScoreBodyMobile', scoreTableId: 'scanScoreTableMobile', scoreBlockId: 'scoreBlockMobile' }
+                    {
+                        scoreBodyId: 'scanScoreBodyMobile', scoreTableId: 'scanScoreTableMobile', scoreBlockId: 'scoreBlockMobile',
+                        playEnabled: mPlayEnabled, playScore: mPlayEnabled ? computePlayScore(mobilePlay) : null,
+                        state: { playResults: mobilePlay }
+                    }
                 );
-                renderAllTabs('sp', mobileR.results, mobileEnhanced, mobileAI);
+                renderAllTabs('sp', mobileR.results, mobileEnhanced, mobileAI, mobilePlay);
             } else {
                 const mb = $('scoreBlockMobile');
                 if (mb) mb.style.display = 'none';
@@ -1495,11 +1529,12 @@
 
             const doEnhanced = $('batchEnhancedOpt').checked;
             const doAI = $('batchAIOpt').checked;
+            const doPlayBatch = $('batchPlayOpt').checked;
             const viewportMode = getViewportMode();
             const runDesktop = viewportMode !== 'mobile';
             const runMobile  = viewportMode !== 'desktop';
             const viewCount  = (runDesktop ? 1 : 0) + (runMobile ? 1 : 0);
-            const phasesPerView = 1 + (doEnhanced ? 1 : 0) + (doAI ? 1 : 0);
+            const phasesPerView = 1 + (doEnhanced ? 1 : 0) + (doAI ? 1 : 0) + (doPlayBatch ? 1 : 0);
             const totalPhases = phasesPerView * viewCount;
             batchViewportMode = viewportMode;
 
@@ -1516,8 +1551,9 @@
                 if (runMobile)  viewports.push(runDesktop ? 'SP' : '');
                 for (const vp of viewports) {
                     labels.push(vp ? `${vp} BASIC` : 'BASIC');
-                    if (doEnhanced) labels.push(vp ? `${vp} DEEP` : 'DEEP');
-                    if (doAI)       labels.push(vp ? `${vp} MULTI` : 'MULTI');
+                    if (doEnhanced)  labels.push(vp ? `${vp} DEEP` : 'DEEP');
+                    if (doAI)        labels.push(vp ? `${vp} MULTI` : 'MULTI');
+                    if (doPlayBatch) labels.push(vp ? `${vp} PLAY` : 'PLAY');
                 }
                 return labels;
             }
@@ -1634,7 +1670,29 @@
                         }
                     }
 
-                    return { resultsData, navConsistency, enhancedResults, aiResultsMap, succeededCount };
+                    // PLAY
+                    const playResultsMap = {};
+                    if (doPlayBatch && successUrls.length > 0) {
+                        localPhase++;
+                        renderPhases(localPhase + 1);
+                        for (let i = 0; i < successUrls.length; i++) {
+                            const shortUrl = successUrls[i].replace(/^https?:\/\//, '').substring(0, 40);
+                            progressLabel.textContent = `${vPrefix}PLAY SCANNING: ${shortUrl}`;
+                            progressSub.textContent = `${i + 1} / ${successUrls.length} URL`;
+                            setPhaseProgress(localPhase, i / successUrls.length);
+                            try {
+                                const { response: pr, data: pd } = await fetchApiJson(apiUrl('/api/playwright-check'), {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ url: successUrls[i], basicAuth, viewportPreset })
+                                }, '/api/playwright-check');
+                                if (pr.ok) playResultsMap[successUrls[i]] = pd.results;
+                            } catch (e) {}
+                            setPhaseProgress(localPhase, (i + 1) / successUrls.length);
+                        }
+                    }
+
+                    return { resultsData, navConsistency, enhancedResults, aiResultsMap, playResultsMap, succeededCount };
                 }
 
                 // --- PC（デスクトップ） ---
@@ -1644,6 +1702,7 @@
                     batchNavConsistency    = pc.navConsistency;
                     batchEnhancedResults   = pc.enhancedResults;
                     batchAIResults         = pc.aiResultsMap;
+                    batchPlayResults       = pc.playResultsMap;
                     renderBatchSummary();
                     renderBatchNav(0);
                     $('batchResults').style.display = 'block';
@@ -1658,12 +1717,14 @@
                         batchMobileResultsData     = sp.resultsData;
                         batchMobileEnhancedResults = sp.enhancedResults;
                         batchMobileAIResults       = sp.aiResultsMap;
+                        batchMobilePlayResults     = sp.playResultsMap;
                     } else {
                         // SPのみ: メイン変数として扱う
                         batchResultsData       = sp.resultsData;
                         batchNavConsistency    = sp.navConsistency;
                         batchEnhancedResults   = sp.enhancedResults;
                         batchAIResults         = sp.aiResultsMap;
+                        batchPlayResults       = sp.playResultsMap;
                         renderBatchSummary();
                         renderBatchNav(0);
                         $('batchResults').style.display = 'block';
@@ -1671,7 +1732,7 @@
                 }
 
                 progressFill.style.width = '100%';
-                const phasesDone = [doEnhanced ? 'DEEP' : null, doAI ? 'MULTI' : null].filter(Boolean).join('/');
+                const phasesDone = [doEnhanced ? 'DEEP' : null, doAI ? 'MULTI' : null, doPlayBatch ? 'PLAY' : null].filter(Boolean).join('/');
                 const viewLabel  = viewportMode === 'both' ? 'PC+SP' : viewportMode === 'mobile' ? 'SP' : 'PC';
                 const succeededCount = batchResultsData.filter(r => r.success).length;
                 progressLabel.textContent = `完了（${viewLabel}${phasesDone ? ` / ${phasesDone}` : ''}）: ${succeededCount}/${batchResultsData.length}件`;
@@ -1699,6 +1760,7 @@
             lockScanUI();
             const doDeep = $('deepScanOpt').checked;
             const doMulti = $('multiScanOpt').checked;
+            const doPlay = $('playScanOpt').checked;
             const viewportMode = getViewportMode();
             const runDesktop = viewportMode !== 'mobile';
             const runMobile = viewportMode !== 'desktop';
@@ -1708,7 +1770,7 @@
             btn.disabled = true;
 
             // --- 進捗インジケーター ---
-            const phasesPerView = 1 + (doDeep ? 1 : 0) + (doMulti ? 1 : 0);
+            const phasesPerView = 1 + (doDeep ? 1 : 0) + (doMulti ? 1 : 0) + (doPlay ? 1 : 0);
             const totalPhases = phasesPerView * viewCount;
             const progress      = $('singleProgress');
             const progressFill  = $('singleProgressFill');
@@ -1725,6 +1787,7 @@
                 phaseLabels.push(prefix ? `${prefix} BASIC` : 'BASIC');
                 if (doDeep) phaseLabels.push(prefix ? `${prefix} DEEP` : 'DEEP');
                 if (doMulti) phaseLabels.push(prefix ? `${prefix} MULTI` : 'MULTI');
+                if (doPlay) phaseLabels.push(prefix ? `${prefix} PLAY` : 'PLAY');
             };
             if (runDesktop && runMobile) {
                 pushPhaseLabels('PC');
@@ -1764,7 +1827,8 @@
                     viewportPreset,
                     basic: null,
                     deep: null,
-                    multi: null
+                    multi: null,
+                    play: null
                 };
                 const labelPrefix = viewLabel ? `${viewLabel} ` : '';
 
@@ -1842,20 +1906,57 @@
                             computeBasicScore(snapshot.basic),
                             doDeep ? computeDeepScore(snapshot.deep) : null,
                             computeMultiScore(snapshot.multi),
-                            doDeep,
-                            true,
+                            doDeep, true,
                             {
                                 ...scoreTableIds,
+                                playEnabled: doPlay,
+                                playScore: snapshot.play ? computePlayScore(snapshot.play) : null,
                                 state: {
                                     basicResults: snapshot.basic,
                                     deepResults: doDeep ? snapshot.deep : null,
-                                    multiAiData: snapshot.multi
+                                    multiAiData: snapshot.multi,
+                                    playResults: snapshot.play
                                 }
                             }
                         );
                     } catch (e) {
                         clearInterval(tMulti);
                         progressLabel.textContent = `${labelPrefix}MULTI SCAN エラー: ${e.message}`;
+                    }
+                    localPhaseIndex++;
+                }
+
+                // --- PLAY ---
+                if (doPlay && snapshot.basic) {
+                    const playPhase = phaseOffset + localPhaseIndex;
+                    progressLabel.textContent = `${labelPrefix}PLAY SCANNING（キーボード・アクセシビリティツリー検査）...`;
+                    renderSinglePhases(playPhase + 1);
+                    const tPlay = startPhaseTimer(playPhase);
+                    try {
+                        await runPlaywrightCheck(true, { viewportPreset });
+                        clearInterval(tPlay);
+                        setSinglePhaseProgress(playPhase, 1);
+                        snapshot.play = cloneData(lastPlayResults);
+                        renderScanScoreTable(
+                            computeBasicScore(snapshot.basic),
+                            doDeep ? computeDeepScore(snapshot.deep) : null,
+                            doMulti ? computeMultiScore(snapshot.multi) : null,
+                            doDeep, doMulti,
+                            {
+                                ...scoreTableIds,
+                                playEnabled: true,
+                                playScore: computePlayScore(snapshot.play),
+                                state: {
+                                    basicResults: snapshot.basic,
+                                    deepResults: doDeep ? snapshot.deep : null,
+                                    multiAiData: doMulti ? snapshot.multi : null,
+                                    playResults: snapshot.play
+                                }
+                            }
+                        );
+                    } catch (e) {
+                        clearInterval(tPlay);
+                        progressLabel.textContent = `${labelPrefix}PLAY SCAN エラー: ${e.message}`;
                     }
                 }
                 return snapshot;
@@ -1914,12 +2015,13 @@
                 lastResults = cloneData(primarySnapshot?.basic || null);
                 lastEnhancedResults = cloneData(primarySnapshot?.deep || null);
                 aiResults = primarySnapshot?.multi ? cloneData(primarySnapshot.multi) : {};
+                lastPlayResults = primarySnapshot?.play ? cloneData(primarySnapshot.play) : null;
                 lastMobileScanSnapshot = runMobile ? cloneData(mobileSnapshot) : null;
 
                 refreshScoreTable();
                 renderAllTabs('pc');
                 if (runMobile && mobileSnapshot) {
-                    renderAllTabs('sp', mobileSnapshot.basic, mobileSnapshot.deep || null, mobileSnapshot.multi || {});
+                    renderAllTabs('sp', mobileSnapshot.basic, mobileSnapshot.deep || null, mobileSnapshot.multi || {}, mobileSnapshot.play || null);
                 }
                 $('results').classList.add('visible');
                 $('exportArea').classList.add('visible');
@@ -2184,6 +2286,36 @@
                      score: Math.round(pass / getTargetScList().length * 100) };
         }
 
+        function computePlayScore(playData) {
+            if (!playData || !playData.length) return null;
+            const scSet = new Set(getTargetScList());
+            const rank = { fail: 0, pass: 1, unverified: 2, na: 3 };
+            const scMap = {};
+            function merge(sc, status) {
+                if (!sc || !scSet.has(sc)) return;
+                const cur = scMap[sc];
+                if (!cur || rank[status] < rank[cur.status]) scMap[sc] = { status };
+            }
+            playData.forEach(r => {
+                const rawStatus = r.status === 'fail' ? 'fail'
+                    : r.status === 'pass' ? 'pass'
+                    : r.status === 'not_applicable' ? 'na' : 'unverified';
+                const d = applyDecisionToStatus(`PLAY:${r.sc}`, rawStatus, 'serious');
+                splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status));
+            });
+            let fail = 0, pass = 0, na = 0, unverified = 0;
+            Object.values(scMap).forEach(({ status }) => {
+                if (status === 'fail') fail++;
+                else if (status === 'pass') pass++;
+                else if (status === 'na') na++;
+                else unverified++;
+            });
+            return { total: fail + pass + na + unverified,
+                     critical: 0, serious: fail, moderate: 0, minor: 0,
+                     pass, na, unverified,
+                     score: Math.round(pass / getTargetScList().length * 100) };
+        }
+
         function computeMultiScore(aiData) {
             if (!aiData) return null;
             const lo = { 'A': 1, 'AA': 2, 'AAA': 3 };
@@ -2207,7 +2339,7 @@
                      score: Math.round(pass / getTargetScList().length * 100) };
         }
 
-        function computeTotalScore(basicResults, deepResults, multiAiData) {
+        function computeTotalScore(basicResults, deepResults, multiAiData, playResults) {
             const rank = { fail: 0, pass: 1, unverified: 2, na: 3 };
             const scMap = {}; // sc → { result, impact }
             const lo = { 'A': 1, 'AA': 2, 'AAA': 3 };
@@ -2255,6 +2387,14 @@
                     merge(item.ref, d.status, d.impact);
                 });
             }
+            if (playResults) {
+                playResults.forEach(r => {
+                    const rawStatus = r.status === 'fail' ? 'fail' : r.status === 'pass' ? 'pass'
+                               : r.status === 'not_applicable' ? 'na' : 'unverified';
+                    const d = applyDecisionToStatus(`PLAY:${r.sc}`, rawStatus, 'serious');
+                    splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, d.impact));
+                });
+            }
 
             const imp = { critical: 0, serious: 0, moderate: 0, minor: 0 };
             let pass = 0, na = 0, unverified = 0, fail = 0;
@@ -2276,6 +2416,7 @@
             BASIC: 'badge-basic',
             DEEP: 'badge-deep',
             MULTI: 'badge-multi',
+            PLAY: 'badge-play',
             BATCH: 'badge-batch'
         };
 
@@ -2313,7 +2454,7 @@
         // ============================================================
         // 全タブ再描画（BASIC + DEEP + MULTI の結果をマージ）
         // ============================================================
-        function renderAllTabs(suffix = 'pc', basic = lastResults, deep = lastEnhancedResults, multi = aiResults) {
+        function renderAllTabs(suffix = 'pc', basic = lastResults, deep = lastEnhancedResults, multi = aiResults, play = lastPlayResults) {
             const lo    = { 'A': 1, 'AA': 2, 'AAA': 3 };
             const lim   = lo[targetLevel] || 2;
 
@@ -2379,10 +2520,23 @@
                 (buckets[dest] || buckets.unverified).push({ src: 'MULTI', type: 'multi', data: { ...item, idx: i, aiResult: r }, dkey });
             });
 
+            // PLAY results
+            if (play) {
+                play.forEach(r => {
+                    if (!splitCompositeSc(r.sc).some(sc => scSet.has(sc))) return;
+                    const dkey = `PLAY:${r.sc}`;
+                    const defaultBucket = r.status === 'fail' ? 'serious'
+                        : r.status === 'pass' ? 'pass'
+                        : r.status === 'not_applicable' ? 'na' : 'unverified';
+                    const dest = applyDecision(dkey, defaultBucket, 'serious');
+                    (buckets[dest] || buckets.unverified).push({ src: 'PLAY', type: 'play', data: r, dkey });
+                });
+            }
+
             // SC 3.2.3/3.2.4 ナビゲーション一貫性はカード表示せず情報バーで表示
 
             // 各タブを描画（バッジ数はSC単位のTOTALスコアに合わせる）
-            const ts = computeTotalScore(basic, deep || null, Object.keys(multi || {}).length > 0 ? multi : null);
+            const ts = computeTotalScore(basic, deep || null, Object.keys(multi || {}).length > 0 ? multi : null, play || null);
             // スコア表のTOTAL行と同じ正規化（未カバーSCをunverifiedに補完）
             const _fixedTotal = getTargetScList().length;
             const _tsUsed = (ts.critical||0) + (ts.serious||0) + (ts.moderate||0) + (ts.minor||0) + (ts.pass||0) + (ts.na||0);
@@ -2434,6 +2588,12 @@
                             const locs     = r && r.reason ? [r.reason] : [];
                             return renderCardItem(no, src, null, data.ref, data.level, data.text || '', data.category || '', '', locs, dkey);
                         }
+                        if (type === 'play') {
+                            const r    = data;
+                            const locs = (r.violations || []).slice(0, 8);
+                            const countText = r.violations && r.violations.length ? `検出件数：${r.violations.length}件` : '';
+                            return renderCardItem(no, src, r.status === 'fail' ? 'serious' : null, r.sc, null, r.sc ? `SC ${r.sc}` : 'PLAY検査', r.message || '', countText, locs, dkey);
+                        }
                         return '';
                     }).join('')
                     : EMPTY;
@@ -2447,15 +2607,19 @@
             const scoreBodyId = options.scoreBodyId || 'scanScoreBody';
             const scoreTableId = options.scoreTableId || 'scanScoreTable';
             const scoreBlockId = options.scoreBlockId || null;
+            const playEnabled = !!options.playEnabled;
+            const playScore   = options.playScore || null;
             const state = options.state || {};
             const basicResults = state.basicResults !== undefined ? state.basicResults : lastResults;
             const deepResults = state.deepResults !== undefined ? state.deepResults : (deepEnabled ? lastEnhancedResults : null);
             const multiAiData = state.multiAiData !== undefined ? state.multiAiData : (multiEnabled && Object.keys(aiResults).length > 0 ? aiResults : null);
+            const playData    = state.playResults  !== undefined ? state.playResults  : (playEnabled ? lastPlayResults : null);
 
             const totalScore = computeTotalScore(
                 basicResults,
                 deepEnabled ? deepResults : null,
-                multiEnabled ? multiAiData : null
+                multiEnabled ? multiAiData : null,
+                playEnabled ? playData : null
             );
 
             // WCAGレベルごとの固定項目数で正規化
@@ -2485,6 +2649,7 @@
             const nb = normalize(basicScore);
             const nd = normalize(deepScore);
             const nm = normalize(multiScore);
+            const np = normalize(playScore);
 
             function scoreChip(score) {
                 if (score === null || score === undefined) return DASH;
@@ -2526,10 +2691,12 @@
             const basicLabel = `BASIC<br><span class="score-row-sub">axe-core 自動検査</span>`;
             const deepLabel  = `DEEP<br><span class="score-row-sub">ヒューリスティック検査</span>`;
             const multiLabel = `MULTI<br><span class="score-row-sub">AI 検査</span>`;
+            const playLabel  = `PLAY<br><span class="score-row-sub">Playwright 検査</span>`;
             body.innerHTML =
                 row(basicLabel, 'label-basic', nb, true, false) +
                 row(deepLabel, 'label-deep', nd, deepEnabled, false) +
                 row(multiLabel, 'label-multi', nm, multiEnabled, false) +
+                row(playLabel, 'label-play', np, playEnabled, false) +
                 row('TOTAL', 'label-total', normalize(totalScore), true, true);
 
             const table = $(scoreTableId);
@@ -2892,6 +3059,42 @@
                 btn.disabled = false;
                 spinner.style.display = 'none';
                 btnText.textContent = 'DEEP SCAN';
+            }
+        }
+
+        // ============================================================
+        // PLAY SCAN 実行（Playwright ブラウザ検査）
+        // ============================================================
+        async function runPlaywrightCheck(silent = false, options = {}) {
+            const url = document.getElementById('urlInput').value.trim();
+            if (!url) { if (!silent) alert('URLを入力してください'); return; }
+
+            try {
+                const basicUser = document.getElementById('basicUser').value.trim();
+                const basicPass = document.getElementById('basicPass').value.trim();
+                const body = { url, viewportPreset: options.viewportPreset || 'desktop' };
+                if (basicUser && basicPass) body.basicAuth = { user: basicUser, pass: basicPass };
+
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 6 * 60 * 1000);
+                let rData;
+                try {
+                    const r = await fetchApiJson(apiUrl('/api/playwright-check'), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body),
+                        signal: controller.signal
+                    }, '/api/playwright-check');
+                    if (!r.response.ok) throw new Error(r.data.error || 'PLAY SCAN失敗');
+                    rData = r.data;
+                } finally {
+                    clearTimeout(timer);
+                }
+                lastPlayResults = rData.results;
+            } catch (e) {
+                const msg = e.name === 'AbortError' ? 'PLAY SCANタイムアウト（6分超過）' : e.message;
+                if (!silent) console.warn('[PLAY SCAN] エラー:', msg);
+                throw e;
             }
         }
 
