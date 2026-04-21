@@ -118,8 +118,9 @@
         <!-- ヘルプモーダル -->
         <div id="helpOverlay" class="settings-overlay hidden" onclick="if(event.target===this)closeHelp()">
             <div class="settings-box help-modal-content">
-                <h2>AIモデル比較 <button type="button" onclick="closeHelp()">&times;</button></h2>
+                <h2>ヘルプ <button type="button" onclick="closeHelp()">&times;</button></h2>
                 <div class="help-body">
+                    <h3 class="help-section-title">AIモデル比較</h3>
                     <table class="help-model-table">
                         <thead>
                             <tr>
@@ -139,6 +140,19 @@
                             <tr class="help-row-best"><td>GPT-5</td><td>約18〜29円</td><td>★★★★★</td><td>総合力最高</td></tr>
                         </tbody>
                     </table>
+                    <h3 class="help-section-title">各検査の概要</h3>
+                    <dl class="help-scan-list">
+                        <dt><span class="scan-option-text" style="background-color: #4b5563;">BASIC</span></dt>
+                        <dd><strong>axe-core</strong> を使用した基本的な自動検査です。ページの静的なHTML構造を解析し、WCAGの多くの基準を高速にチェックします。</dd>
+                        <dt><span class="scan-option-text scan-option-text-deep">DEEP</span></dt>
+                        <dd><strong>Puppeteer</strong>（ヘッドレスブラウザ）を使用してページを実際に操作し、axe-coreだけでは検出できない動的な問題やインタラクションに関する約30項目を検証します。キーボード操作、リフロー、フォーカス表示などが含まれます。</dd>
+                        <dt><span class="scan-option-text scan-option-text-multi">MULTI</span></dt>
+                        <dd>選択された<strong>大規模言語モデル（Gemini, Claude, GPTなど）</strong>が、ページのHTML、スクリーンショット、操作結果を総合的に解析します。メディアの代替テキスト、フォームの設計、ナビゲーションの一貫性など、文脈的な判断が必要な約70項目を評価します。APIキーの設定が必要です。</dd>
+                        <dt><span class="scan-option-text scan-option-text-play">PLAYWRIGHT</span></dt>
+                        <dd><strong>Playwright</strong>（ヘッドレスブラウザ）を使用して、キーボード操作、アクセシビリティツリー、フォーカス関連の検証を実際に行います。ページタイトル、言語設定、フォームのラベル、アクセシブルネームなど、より実践的なユーザー操作に基づいたテストを実行します。</dd>
+                        <dt><span class="scan-option-text scan-option-text-ext">EXT</span></dt>
+                        <dd><strong>IBM Equal Access Checker</strong>, <strong>Lighthouse</strong>相当の独自検査, <strong>Chrome DevTools Protocol(CDP)</strong>を組み合わせた拡張検査です。axe-coreとは異なるルールセットで、重複IDやランドマーク構造、キーボードイベントの検出など、多角的な視点から問題を発見します。</dd>
+                    </dl>
                 </div>
             </div>
         </div>

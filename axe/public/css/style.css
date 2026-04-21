@@ -1623,7 +1623,25 @@ footer small {
 .settings-msg.ng {
   color: var(--color-serious);
 }
-
+.help-section-title {
+    margin-top: 28px;
+    margin-bottom: 16px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 8px;
+}
+.help-scan-list dt {
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+.help-scan-list dd {
+    margin-left: 0;
+    margin-bottom: 16px;
+    padding-left: 16px;
+    font-size: 0.9rem;
+    color: #374151;
+}
 .help-btn{
       display: flex;
     align-items: center;
