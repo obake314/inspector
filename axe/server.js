@@ -426,7 +426,9 @@ app.post('/api/settings-get', (req, res) => {
     driveFolderId: saved.driveFolderId || GOOGLE_DRIVE_FOLDER_ID || '',
     reportFolderId: saved.reportFolderId || REPORT_FOLDER_ID || '',
     hasPassword: !!APP_PASSWORD_HASH,
-    aaaBeta: saved.aaaBeta || false,
+    // AAA βは一時停止中。再開時はフロントUIと同時に戻す。
+    // aaaBeta: saved.aaaBeta || false,
+    aaaBeta: false,
     // 環境変数フォールバックの表示
     envGemini: !!process.env.GEMINI_API_KEY,
     envAnthropic: !!process.env.ANTHROPIC_API_KEY,
@@ -510,10 +512,11 @@ app.post('/api/settings-save', (req, res) => {
     APP_PASSWORD_HASH = saved.passwordHash;
   }
 
-  // AAA ベータ設定
-  if (typeof aaaBeta === 'boolean') {
-    saved.aaaBeta = aaaBeta;
-  }
+  // AAA βは一時停止中。保存済みtrueが残らないようfalse固定。
+  // if (typeof aaaBeta === 'boolean') {
+  //   saved.aaaBeta = aaaBeta;
+  // }
+  saved.aaaBeta = false;
 
   saveSettingsFile(saved);
   console.log('[Settings] 設定を保存しました');
@@ -2422,7 +2425,10 @@ async function check_aria_attributes(page) {
 const AAA_SC_LIST = new Set(['2.3.3','2.4.12','2.4.13','2.1.3','3.3.9','2.3.2','2.2.3','2.2.4','2.2.5','2.2.6','2.4.6','2.4.8','2.4.9','2.4.10','1.4.6','1.4.7','1.4.8','1.4.9','2.5.5','2.5.6','3.1.3','3.1.4','3.1.5','3.1.6','3.2.5','3.3.5','3.3.6','3.3.9']);
 
 app.post('/api/enhanced-check', async (req, res) => {
-  const { url, basicAuth, includeAAA, viewportPreset } = req.body;
+  const { url, basicAuth, viewportPreset } = req.body;
+  // AAA βは一時停止中。再開時はreq.body.includeAAAを復帰する。
+  // const { includeAAA } = req.body;
+  const includeAAA = false;
   if (!url) return res.status(400).json({ error: 'URLを指定してください' });
 
   // リクエスト全体に8分のタイムアウトを設定
@@ -2476,8 +2482,8 @@ app.post('/api/enhanced-check', async (req, res) => {
     // 1-4
     results.push(await withTimeout(() => check_2_4_1_skip_link(page)));
 
-    // 1-5 SC 2.3.3 は AAA のみ → aaaBeta オフ時はスキップ
-    if (includeAAA) results.push(await withTimeout(() => check_2_3_3_animation(page)));
+    // 1-5 SC 2.3.3 は AAA β停止中のため実行しない
+    // if (includeAAA) results.push(await withTimeout(() => check_2_3_3_animation(page)));
 
     // 1-6
     results.push(await withTimeout(() => check_1_4_12_text_spacing(page)));
@@ -3223,7 +3229,9 @@ app.get('/api/sheets-status', async (req, res) => {
       driveFolderError: status.driveFolderError,
       geminiConfigured: aiConfigured,
       aiProvider: provider,
-      aaaBeta: saved.aaaBeta || false
+      // AAA βは一時停止中。再開時は保存値参照を戻す。
+      // aaaBeta: saved.aaaBeta || false
+      aaaBeta: false
     });
   } catch (e) {
     console.error('[sheets-status] Error:', e.message);

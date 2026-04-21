@@ -1,6 +1,6 @@
 # SPEC_WEB
 
-最終更新: 2026-04-21（EXT SCAN新設: IBM Equal Access + Lighthouse相当 + CDP拡張検査・PLAY/EXT行をレポートに追加）
+最終更新: 2026-04-21（AAA β一時停止、全スキャンのタイムアウトURL再スキャンキューを追加）
 
 ## 対象
 
@@ -14,17 +14,31 @@
 - 入力: `{ url, level, basicAuth?, viewportPreset? }`
 - `viewportPreset`: `desktop` / `iphone-se`（省略時 `desktop`）
 - 出力: `{ success, viewportPreset, results: { violations[], passes[], incomplete[] } }`
+- クライアント側タイムアウト: 6分
 
 ### DEEP SCAN
 
 - API: `POST /api/enhanced-check`
 - 入力: `{ url, includeAAA?, basicAuth?, viewportPreset? }`
 - 出力: `{ success, viewportPreset, results: [{ sc, name, status, message, violations[] }], includeAAA }`
+- AAA βは一時停止中。フロントUIはコメントアウトし、`includeAAA` が送信されてもサーバー側で `false` 固定として扱う。
 - status: `pass` / `fail` / `not_applicable` / `manual_required` / `error`
 - タイムアウト仕様:
   - サーバー側: リクエスト受信から **8分** で 504 を返す
   - クライアント側: fetch に **9分** の AbortController タイムアウトを設定
   - `server.timeout` / `server.keepAliveTimeout`: **10分**（旧: 2分）
+
+### タイムアウト再スキャンキュー
+
+- 対象: BASIC / DEEP / MULTI / PLAY / EXT、単一スキャン・一括スキャンの両方
+- タイムアウト判定: `AbortError`、レスポンス/エラーメッセージ内の `timeout` / `timed out` / `タイムアウト` / `504`
+- 記録項目: URL、スキャン種別、実行モード（single/batch）、viewport（PC/SP）、メッセージ
+- 重複キー: `URL + スキャン種別 + viewport`
+- UI: `#timeoutRetryPanel` に記録済みURLを表示し、「再スキャン対象にセット」で入力欄へ戻す
+  - スキャン実行中は再スキャン/クリア操作を無効化し、完了後に有効化する
+  - 1 URL かつ単一スキャン由来: 単一チェックのURL入力へセット
+  - 複数URLまたは一括スキャン由来: 一括チェックのURL欄へセット
+  - セット時に通常の `clearScan()` を実行し、前回結果とUIロックをリセットする
 
 ### MULTI SCAN
 
@@ -33,6 +47,7 @@
 - 出力: `{ success, model, results: [{ index, status, reason, suggestion, confidence? }] }`
 - status: `pass` / `fail` / `not_applicable` / `manual_required`
 - AI未設定/接続失敗時: `success: true` のまま `model: manual-fallback` で全項目 `manual_required` を返す
+- クライアント側タイムアウト: 10分
 
 ### PLAY SCAN
 
@@ -105,7 +120,7 @@
   - `PCのみ`
   - `SPのみ`（iPhone SE）
   - `PC+SP`
-- レベル選択: A / AA / AAA（AAAは設定で表示）
+- レベル選択: A / AA（AAA βは一時停止中のためUIコメントアウト）
 - 単一スキャン: URL + `DEEP` / `MULTI` / `PLAYWRIGHT` / `EXT` チェックボックス
 - 一括スキャン: URL複数入力（最大10件）
 - Basic認証入力（BASIC/DEEPで利用）
@@ -146,6 +161,7 @@
 - 入力: `{ urls[], level, basicAuth?, viewportPreset? }`
 - 上限: 10 URL
 - フェーズ: BASIC → DEEP（任意）→ MULTI（任意）→ PLAY（任意）→ EXT（任意）
+- 一括BASICのクライアント側タイムアウト: 10分
 - ビュー選択（`viewportModeWrap`）は単一チェックと共通。選択値に応じて以下のビューで実行:
   - `PCのみ`: `desktop` 固定
   - `SPのみ`: `mobile`（iphone-se）固定
@@ -194,8 +210,8 @@
 
 - A: `31`
 - AA: `55`（A+AA）
-- 参考 AAA: `86`（A+AA+AAA）
-- 通常運用（AAAベータ無効時）は A/AA の2パターン
+- 参考 AAA: `86`（A+AA+AAA、AAA β停止中のため通常UIでは選択不可）
+- 通常運用は A/AA の2パターン
 
 ### 行内整合式
 
@@ -209,7 +225,7 @@
 - スコアテーブル・詳細カード・レポート出力のいずれも `targetLevel` に基づき SC をフィルタリングする
 - レベル `A` 選択時: `WCAG_SC.A` に属するSCのみ表示（AA/AAA項目は除外）
 - レベル `AA` 選択時: `WCAG_SC.A + WCAG_SC.AA` のみ（AAAは除外）
-- レベル `AAA` 選択時: すべて表示
+- レベル `AAA` はUIコメントアウト中。保存済み設定やAPI入力でAAA βが残っていても A/AA として処理する
 - フィルタリング対象:
   - BASIC violations / incomplete / passes: `getWcagLevel(tags)` でレベル判定
   - DEEP results: `splitCompositeSc(r.sc).some(sc => scSet.has(sc))` で判定

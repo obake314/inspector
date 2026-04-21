@@ -943,6 +943,68 @@ h1 {
   font-size: var(--font-size-m);
   color: var(--navy-400);
 }
+.timeout-retry-panel {
+  display: none;
+  background: var(--color-white);
+  border: 1px solid var(--navy-200);
+  border-left: 3px solid var(--color-ext);
+  padding: var(--space-m);
+  margin-bottom: var(--space-m);
+}
+.timeout-retry-panel.visible {
+  display: block;
+}
+.timeout-retry-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-m);
+}
+.timeout-retry-head h4 {
+  margin: 0 0 var(--space-s);
+  font-size: var(--font-size-m);
+  font-weight: 600;
+  color: var(--navy-700);
+}
+.timeout-retry-head p {
+  margin: 0;
+  font-size: var(--font-size-m);
+  color: var(--navy-400);
+}
+.timeout-retry-actions {
+  display: flex;
+  gap: var(--space-s);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.timeout-retry-list {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-m) 0 0;
+  display: grid;
+  gap: var(--space-s);
+}
+.timeout-retry-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-m);
+  border-top: 1px solid var(--navy-200);
+  padding-top: var(--space-s);
+}
+.timeout-retry-url {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--navy-700);
+}
+.timeout-retry-scans {
+  flex: 0 0 auto;
+  color: var(--color-ext);
+  font-size: var(--font-size-s);
+  font-weight: 600;
+}
 .export-btn {
   background: none;
   color: var(--navy-700);
@@ -1462,10 +1524,12 @@ footer a:hover {
   cursor:pointer;
 }
 
+/* AAA βは一時停止中
 .settings-group input#settAAABeta{
   width:16px;
   height:16px;
 }
+*/
 
 .settings-group input:focus,
 .settings-group textarea:focus {

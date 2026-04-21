@@ -78,6 +78,7 @@
                 <input type="password" id="settNewPassword" placeholder="新しいパスワード（変更する場合のみ）">
                 <div class="hint">空欄の場合は変更しません</div>
             </div>
+            <!-- AAA βは一時停止中。再開時はUIとincludeAAA送信を同時に戻す。
             <div class="settings-group">
                 <label>
                     <input type="checkbox" id="settAAABeta">
@@ -86,6 +87,7 @@
                 </label>
                 <div class="hint">チェックを入れると高精度検査に WCAG 2.2 AAA 基準（SC 2.3.3, 2.4.12, 2.4.13 等）が追加されます。デフォルトは A/AA のみ。</div>
             </div>
+            -->
             <button type="button" class="settings-save-btn" id="settSaveBtn" onclick="saveSettings()">保存</button>
             <div class="settings-msg" id="settingsMsg"></div>
         </div>
@@ -170,7 +172,9 @@
                 <div class="section-right section-right-btn">
                     <button type="button" class="level-select-btn" data-level="A">A</button>
                     <button type="button" class="level-select-btn active" data-level="AA">AA</button>
+                    <!-- AAA βは一時停止中
                     <button type="button" class="level-select-btn is-hidden" data-level="AAA" id="levelBtnAAA">AAA</button>
+                    -->
                 </div>
             </div>
             <div id="singleInput" class="section-column">
@@ -304,6 +308,7 @@
             <h4>エラー</h4>
             <p id="errorText"></p>
         </div>
+        <div class="timeout-retry-panel" id="timeoutRetryPanel" aria-live="polite"></div>
         <div class="results" id="batchResults">
             <div class="batch-results-header">
                 <h2>一括検査結果</h2>
@@ -801,6 +806,113 @@
             return checked ? checked.value : 'desktop';
         }
 
+        let timeoutRetryQueue = [];
+        let scanInProgress = false;
+
+        function isTimeoutLike(error, message = '') {
+            const text = [message, error?.name, error?.message]
+                .filter(Boolean)
+                .join(' ');
+            return error?.name === 'AbortError' || /timeout|timed out|タイムアウト|504/i.test(text);
+        }
+
+        function getViewportLabel(viewportPreset) {
+            return viewportPreset === 'iphone-se' || viewportPreset === 'mobile' ? 'SP' : 'PC';
+        }
+
+        function updateBatchCount() {
+            const batchUrls = $('batchUrls');
+            const batchCount = $('batchCount');
+            if (!batchUrls || !batchCount) return;
+            const urls = batchUrls.value.split('\n').map(u => u.trim()).filter(u => u.length > 0);
+            batchCount.textContent = `${urls.length} / 10 URL`;
+            batchCount.style.color = urls.length > 10 ? '#dc2626' : '';
+        }
+
+        function recordTimeoutRetry({ url, scanType, mode = 'single', viewportPreset = 'desktop', message = '' }) {
+            if (!url) return;
+            const normalizedViewport = viewportPreset === 'mobile' ? 'iphone-se' : (viewportPreset || 'desktop');
+            const key = `${url}::${scanType}::${normalizedViewport}`;
+            const existing = timeoutRetryQueue.find(item => item.key === key);
+            const item = {
+                key,
+                url,
+                scanType,
+                mode,
+                viewportPreset: normalizedViewport,
+                message,
+                recordedAt: new Date().toISOString()
+            };
+            if (existing) Object.assign(existing, item);
+            else timeoutRetryQueue.push(item);
+            renderTimeoutRetryPanel();
+        }
+
+        function renderTimeoutRetryPanel() {
+            const panel = $('timeoutRetryPanel');
+            if (!panel) return;
+            if (timeoutRetryQueue.length === 0) {
+                panel.classList.remove('visible');
+                panel.innerHTML = '';
+                return;
+            }
+
+            const grouped = new Map();
+            timeoutRetryQueue.forEach(item => {
+                const current = grouped.get(item.url) || [];
+                current.push(item);
+                grouped.set(item.url, current);
+            });
+
+            const rows = Array.from(grouped.entries()).map(([url, items]) => {
+                const scans = items
+                    .map(item => `${getViewportLabel(item.viewportPreset)} ${item.scanType}`)
+                    .join(' / ');
+                return `<li><span class="timeout-retry-url" title="${escapeHtml(url)}">${escapeHtml(url)}</span><span class="timeout-retry-scans">${escapeHtml(scans)}</span></li>`;
+            }).join('');
+
+            const actionDisabled = scanInProgress ? ' disabled' : '';
+            panel.innerHTML = `
+                <div class="timeout-retry-head">
+                    <div>
+                        <h4>タイムアウトしたURLを記録しました</h4>
+                        <p>スキャン完了後、このURLを入力欄に戻して再スキャンできます。</p>
+                    </div>
+                    <div class="timeout-retry-actions">
+                        <button type="button" class="export-btn" onclick="prepareTimeoutRetry()"${actionDisabled}>再スキャン対象にセット</button>
+                        <button type="button" class="export-btn clear-btn" onclick="clearTimeoutRetryQueue()"${actionDisabled}>クリア</button>
+                    </div>
+                </div>
+                <ul class="timeout-retry-list">${rows}</ul>`;
+            panel.classList.add('visible');
+        }
+
+        window.clearTimeoutRetryQueue = function() {
+            if (scanInProgress) return;
+            timeoutRetryQueue = [];
+            renderTimeoutRetryPanel();
+        };
+
+        window.prepareTimeoutRetry = function() {
+            if (scanInProgress) return;
+            const retryItems = timeoutRetryQueue.slice();
+            const urls = Array.from(new Set(retryItems.map(item => item.url)));
+            if (urls.length === 0) return;
+            timeoutRetryQueue = [];
+            renderTimeoutRetryPanel();
+            clearScan();
+
+            const shouldUseBatch = urls.length > 1 || retryItems.some(item => item.mode === 'batch');
+            if (shouldUseBatch) {
+                setMode('batch');
+                $('batchUrls').value = urls.join('\n');
+                updateBatchCount();
+            } else {
+                setMode('single');
+                $('urlInput').value = urls[0];
+            }
+        };
+
         // --- ログイン・設定 ---
         let sessionPassword = '';
 
@@ -859,7 +971,8 @@
                 $('settFolderId').value = data.driveFolderId || '';
                 $('settReportFolderId').value = data.reportFolderId || '';
                 $('settNewPassword').value = '';
-                $('settAAABeta').checked = !!data.aaaBeta;
+                // AAA βは一時停止中。設定UIはHTMLコメントアウトしているため読み込みもしない。
+                // $('settAAABeta').checked = !!data.aaaBeta;
                 // 環境変数フォールバックの表示
                 $('settGeminiKey').placeholder = data.envGemini ? '設定済み（変更する場合のみ入力）' : 'Gemini APIキーを入力してください';
                 $('settAnthropicKey').placeholder = data.envAnthropic ? '設定済み（変更する場合のみ入力）' : 'Anthropic APIキーを入力してください';
@@ -899,7 +1012,8 @@
                         driveFolderId: $('settFolderId').value,
                         reportFolderId: $('settReportFolderId').value,
                         newPassword: $('settNewPassword').value || undefined,
-                        aaaBeta: $('settAAABeta').checked
+                        // AAA βは一時停止中。保存済みtrueが残らないようfalse固定。
+                        aaaBeta: false
                     })
                 }, '/api/settings-save');
                 if (!res.ok) throw new Error(data.error);
@@ -1031,16 +1145,26 @@
                 const basicPass = $('basicPass')?.value || '';
                 const basicAuth = (basicUser && basicPass) ? { user: basicUser, pass: basicPass } : null;
                 
-                const { response, data } = await fetchApiJson(apiUrl('/api/check'), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        url,
-                        level: targetLevel,
-                        basicAuth,
-                        viewportPreset: options.viewportPreset || 'desktop'
-                    })
-                }, '/api/check');
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 6 * 60 * 1000);
+                let response, data;
+                try {
+                    const r = await fetchApiJson(apiUrl('/api/check'), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            url,
+                            level: targetLevel,
+                            basicAuth,
+                            viewportPreset: options.viewportPreset || 'desktop'
+                        }),
+                        signal: controller.signal
+                    }, '/api/check');
+                    response = r.response;
+                    data = r.data;
+                } finally {
+                    clearTimeout(timer);
+                }
                 
                 if (!response.ok || !data.success) {
                     throw new Error(data.message || data.error || 'チェックに失敗しました');
@@ -1048,8 +1172,19 @@
                 
                 // 新しいレスポンス形式に対応（data.results内にaxe結果がある）
                 displayResults(data.results, url);
-            } catch (e) { 
-                $('errorText').textContent = e.message; 
+            } catch (e) {
+                const msg = e.name === 'AbortError' ? 'BASIC SCANがタイムアウトしました（6分超過）' : e.message;
+                if (isTimeoutLike(e, msg)) {
+                    recordTimeoutRetry({
+                        url,
+                        scanType: 'BASIC',
+                        mode: currentMode,
+                        viewportPreset: options.viewportPreset || 'desktop',
+                        message: msg
+                    });
+                }
+                lastResults = null;
+                $('errorText').textContent = msg;
                 $('errorMessage').classList.add('visible'); 
             } finally { 
                 $('checkBtn').classList.remove('loading'); 
@@ -1140,15 +1275,25 @@
 
                 if (!silent) status.textContent = `${filteredItems.length}項目 SCORING...（1-2分かかります）`;
 
-                const { response, data } = await fetchApiJson(apiUrl('/api/ai-evaluate'), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        url: lastResults.url,
-                        checkItems: filteredItems,
-                        viewportPreset: options.viewportPreset || 'desktop'
-                    })
-                }, '/api/ai-evaluate');
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 10 * 60 * 1000);
+                let response, data;
+                try {
+                    const r = await fetchApiJson(apiUrl('/api/ai-evaluate'), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            url: lastResults.url,
+                            checkItems: filteredItems,
+                            viewportPreset: options.viewportPreset || 'desktop'
+                        }),
+                        signal: controller.signal
+                    }, '/api/ai-evaluate');
+                    response = r.response;
+                    data = r.data;
+                } finally {
+                    clearTimeout(timer);
+                }
 
                 if (!response.ok) {
                     throw new Error(data.message || data.error || 'AI評価に失敗しました');
@@ -1174,7 +1319,17 @@
                     status.innerHTML = `評価完了 <span class="ai-status-badge">合格: ${passCount} / 不合格: ${failCount} / 要手動: ${manualCount} / 該当なし: ${naCount}</span>`;
                 }
             } catch (error) {
-                if (!silent) status.textContent = `エラー: ${error.message}`;
+                const msg = error.name === 'AbortError' ? 'MULTI SCANがタイムアウトしました（10分超過）' : error.message;
+                if (isTimeoutLike(error, msg)) {
+                    recordTimeoutRetry({
+                        url: lastResults.url,
+                        scanType: 'MULTI',
+                        mode: currentMode,
+                        viewportPreset: options.viewportPreset || 'desktop',
+                        message: msg
+                    });
+                }
+                if (!silent) status.textContent = `エラー: ${msg}`;
                 console.error('AI評価エラー:', error);
                 throw error;
             } finally {
@@ -1263,6 +1418,7 @@
             batchMobileExtResults = {};
             batchViewportMode = 'desktop';
             lastMobileScanSnapshot = null;
+            timeoutRetryQueue = [];
             scanExecuted = false;
 
             // --- UI非表示 ---
@@ -1270,6 +1426,7 @@
             $('exportArea').classList.remove('visible');
             $('batchResults').style.display = 'none';
             $('errorMessage').classList.remove('visible');
+            renderTimeoutRetryPanel();
             $('singleProgress').classList.remove('visible');
             const bar = $('navConsistencyBar');
             if (bar) bar.remove();
@@ -1329,11 +1486,7 @@
         setMode(currentMode);
 
         // Batch URL count
-        $('batchUrls').addEventListener('input', () => {
-            const urls = $('batchUrls').value.split('\n').map(u => u.trim()).filter(u => u.length > 0);
-            $('batchCount').textContent = `${urls.length} / 10 URL`;
-            $('batchCount').style.color = urls.length > 10 ? '#dc2626' : '';
-        });
+        $('batchUrls').addEventListener('input', updateBatchCount);
 
         // --- Batch results state ---
         let batchResultsData = [];
@@ -1537,6 +1690,8 @@
             if (raw.length === 0) return;
             if (raw.length > 10) { alert('最大10件までです'); return; }
             lockScanUI();
+            scanInProgress = true;
+            renderTimeoutRetryPanel();
 
             const btn = $('batchCheckBtn');
             btn.classList.add('loading');
@@ -1631,16 +1786,47 @@
                     }, 300);
                     progressLabel.textContent = `${vPrefix}${raw.length} URLs TESTING...`;
 
-                    const { response, data } = await fetchApiJson(apiUrl('/api/batch-check'), {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ urls: raw, level: targetLevel, basicAuth, viewportPreset })
-                    }, '/api/batch-check');
-                    clearInterval(progressTimer);
+                    const basicController = new AbortController();
+                    const basicTimer = setTimeout(() => basicController.abort(), 10 * 60 * 1000);
+                    let response, data;
+                    try {
+                        const r = await fetchApiJson(apiUrl('/api/batch-check'), {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ urls: raw, level: targetLevel, basicAuth, viewportPreset }),
+                            signal: basicController.signal
+                        }, '/api/batch-check');
+                        response = r.response;
+                        data = r.data;
+                    } catch (e) {
+                        const msg = e.name === 'AbortError' ? 'BATCH BASICがタイムアウトしました（10分超過）' : e.message;
+                        if (isTimeoutLike(e, msg)) {
+                            raw.forEach(targetUrl => recordTimeoutRetry({
+                                url: targetUrl,
+                                scanType: 'BASIC',
+                                mode: 'batch',
+                                viewportPreset,
+                                message: msg
+                            }));
+                        }
+                        throw e;
+                    } finally {
+                        clearTimeout(basicTimer);
+                        clearInterval(progressTimer);
+                    }
                     setPhaseProgress(phaseOffset, 1);
                     if (!response.ok) throw new Error(data.error || '一括チェックに失敗しました');
 
                     const resultsData = data.results;
+                    resultsData
+                        .filter(r => !r.success && isTimeoutLike(null, r.error || ''))
+                        .forEach(r => recordTimeoutRetry({
+                            url: r.url,
+                            scanType: 'BASIC',
+                            mode: 'batch',
+                            viewportPreset,
+                            message: r.error || 'BASIC SCANタイムアウト'
+                        }));
                     const navConsistency = data.navConsistency || null;
                     const succeededCount = resultsData.filter(r => r.success).length;
                     progressLabel.textContent = `${vPrefix}axe-core完了: ${succeededCount}/${resultsData.length}件 成功`;
@@ -1660,13 +1846,39 @@
                             progressSub.textContent = `${i + 1} / ${successUrls.length} URL`;
                             setPhaseProgress(localPhase, i / successUrls.length);
                             try {
-                                const { response: er, data: ed } = await fetchApiJson(apiUrl('/api/enhanced-check'), {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ url: successUrls[i], includeAAA: sessionAAABeta, basicAuth, viewportPreset })
-                                }, '/api/enhanced-check');
-                                if (er.ok) enhancedResults[successUrls[i]] = ed.results;
-                            } catch (e) {}
+                                const deepController = new AbortController();
+                                const deepTimer = setTimeout(() => deepController.abort(), 9 * 60 * 1000);
+                                let er, ed;
+                                try {
+                                    const r = await fetchApiJson(apiUrl('/api/enhanced-check'), {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ url: successUrls[i], includeAAA: false, basicAuth, viewportPreset }),
+                                        signal: deepController.signal
+                                    }, '/api/enhanced-check');
+                                    er = r.response; ed = r.data;
+                                } finally {
+                                    clearTimeout(deepTimer);
+                                }
+                                if (er && er.ok) {
+                                    enhancedResults[successUrls[i]] = ed.results;
+                                    console.log(`[BATCH-DEEP] ${successUrls[i]}: ${ed.results.length} 基準`);
+                                } else {
+                                    const errorMsg = ed?.error || 'DEEP SCAN失敗';
+                                    if (isTimeoutLike(null, errorMsg)) {
+                                        recordTimeoutRetry({ url: successUrls[i], scanType: 'DEEP', mode: 'batch', viewportPreset, message: errorMsg });
+                                    }
+                                    console.error(`[BATCH-DEEP] ${successUrls[i]}: ${errorMsg}`);
+                                }
+                            } catch (e) {
+                                const msg = e.name === 'AbortError'
+                                    ? 'DEEP SCANがタイムアウトしました（9分超過）'
+                                    : e.message;
+                                if (isTimeoutLike(e, msg)) {
+                                    recordTimeoutRetry({ url: successUrls[i], scanType: 'DEEP', mode: 'batch', viewportPreset, message: msg });
+                                }
+                                console.error(`[BATCH-DEEP] ${successUrls[i]}: ${msg}`);
+                            }
                             setPhaseProgress(localPhase, (i + 1) / successUrls.length);
                         }
                         localPhase++;
@@ -1681,20 +1893,44 @@
                             progressSub.textContent = `${i + 1} / ${successUrls.length} URL`;
                             setPhaseProgress(localPhase, i / successUrls.length);
                             try {
-                                const { response: ar, data: ad } = await fetchApiJson(apiUrl('/api/ai-evaluate'), {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ url: successUrls[i], checkItems: filteredItems, viewportPreset })
-                                }, '/api/ai-evaluate');
-                                if (ar.ok) {
+                                const aiController = new AbortController();
+                                const aiTimer = setTimeout(() => aiController.abort(), 10 * 60 * 1000);
+                                let ar, ad;
+                                try {
+                                    const r = await fetchApiJson(apiUrl('/api/ai-evaluate'), {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ url: successUrls[i], checkItems: filteredItems, viewportPreset }),
+                                        signal: aiController.signal
+                                    }, '/api/ai-evaluate');
+                                    ar = r.response; ad = r.data;
+                                } finally {
+                                    clearTimeout(aiTimer);
+                                }
+                                if (ar && ar.ok) {
                                     const processed = {};
                                     ad.results.forEach(result => {
                                         const orig = filteredItems[result.index]?.index;
                                         if (orig !== undefined) processed[orig] = result;
                                     });
                                     aiResultsMap[successUrls[i]] = processed;
+                                    console.log(`[BATCH-MULTI] ${successUrls[i]}: ${ad.results.length} 結果`);
+                                } else {
+                                    const errorMsg = ad?.error || 'MULTI SCAN失敗';
+                                    if (isTimeoutLike(null, errorMsg)) {
+                                        recordTimeoutRetry({ url: successUrls[i], scanType: 'MULTI', mode: 'batch', viewportPreset, message: errorMsg });
+                                    }
+                                    console.error(`[BATCH-MULTI] ${successUrls[i]}: ${errorMsg}`);
                                 }
-                            } catch (e) {}
+                            } catch (e) {
+                                const msg = e.name === 'AbortError'
+                                    ? 'MULTIタイムアウト（10分超過）'
+                                    : e.message;
+                                if (isTimeoutLike(e, msg)) {
+                                    recordTimeoutRetry({ url: successUrls[i], scanType: 'MULTI', mode: 'batch', viewportPreset, message: msg });
+                                }
+                                console.error(`[BATCH-MULTI] ${successUrls[i]}: ${msg}`);
+                            }
                             setPhaseProgress(localPhase, (i + 1) / successUrls.length);
                         }
                     }
@@ -1710,13 +1946,39 @@
                             progressSub.textContent = `${i + 1} / ${successUrls.length} URL`;
                             setPhaseProgress(localPhase, i / successUrls.length);
                             try {
-                                const { response: pr, data: pd } = await fetchApiJson(apiUrl('/api/playwright-check'), {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ url: successUrls[i], basicAuth, viewportPreset })
-                                }, '/api/playwright-check');
-                                if (pr.ok) playResultsMap[successUrls[i]] = pd.results;
-                            } catch (e) {}
+                                const playController = new AbortController();
+                                const playTimer = setTimeout(() => playController.abort(), 6 * 60 * 1000);
+                                let pr, pd;
+                                try {
+                                    const r = await fetchApiJson(apiUrl('/api/playwright-check'), {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ url: successUrls[i], basicAuth, viewportPreset }),
+                                        signal: playController.signal
+                                    }, '/api/playwright-check');
+                                    pr = r.response; pd = r.data;
+                                } finally {
+                                    clearTimeout(playTimer);
+                                }
+                                if (pr && pr.ok) {
+                                    playResultsMap[successUrls[i]] = pd.results;
+                                    console.log(`[BATCH-PLAY] ${successUrls[i]}: ${pd.results.length} 項目`);
+                                } else {
+                                    const errorMsg = pd?.error || 'PLAY SCAN失敗';
+                                    if (isTimeoutLike(null, errorMsg)) {
+                                        recordTimeoutRetry({ url: successUrls[i], scanType: 'PLAY', mode: 'batch', viewportPreset, message: errorMsg });
+                                    }
+                                    console.error(`[BATCH-PLAY] ${successUrls[i]}: ${errorMsg}`);
+                                }
+                            } catch (e) {
+                                const msg = e.name === 'AbortError'
+                                    ? 'PLAYタイムアウト（6分超過）'
+                                    : e.message;
+                                if (isTimeoutLike(e, msg)) {
+                                    recordTimeoutRetry({ url: successUrls[i], scanType: 'PLAY', mode: 'batch', viewportPreset, message: msg });
+                                }
+                                console.error(`[BATCH-PLAY] ${successUrls[i]}: ${msg}`);
+                            }
                             setPhaseProgress(localPhase, (i + 1) / successUrls.length);
                         }
                     }
@@ -1732,13 +1994,39 @@
                             progressSub.textContent = `${i + 1} / ${successUrls.length} URL`;
                             setPhaseProgress(localPhase, i / successUrls.length);
                             try {
-                                const { response: er, data: ed } = await fetchApiJson(apiUrl('/api/ext-check'), {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ url: successUrls[i], basicAuth, viewportPreset })
-                                }, '/api/ext-check');
-                                if (er.ok) extResultsMap[successUrls[i]] = ed.results;
-                            } catch (e) {}
+                                const extController = new AbortController();
+                                const extTimer = setTimeout(() => extController.abort(), 7 * 60 * 1000);
+                                let er, ed;
+                                try {
+                                    const r = await fetchApiJson(apiUrl('/api/ext-check'), {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ url: successUrls[i], basicAuth, viewportPreset }),
+                                        signal: extController.signal
+                                    }, '/api/ext-check');
+                                    er = r.response; ed = r.data;
+                                } finally {
+                                    clearTimeout(extTimer);
+                                }
+                                if (er && er.ok) {
+                                    extResultsMap[successUrls[i]] = ed.results;
+                                    console.log(`[BATCH-EXT] ${successUrls[i]}: ${ed.results.length} 項目`);
+                                } else {
+                                    const errorMsg = ed?.error || 'EXT SCAN失敗';
+                                    if (isTimeoutLike(null, errorMsg)) {
+                                        recordTimeoutRetry({ url: successUrls[i], scanType: 'EXT', mode: 'batch', viewportPreset, message: errorMsg });
+                                    }
+                                    console.error(`[BATCH-EXT] ${successUrls[i]}: ${errorMsg}`);
+                                }
+                            } catch (e) {
+                                const msg = e.name === 'AbortError'
+                                    ? 'EXTタイムアウト（7分超過）'
+                                    : e.message;
+                                if (isTimeoutLike(e, msg)) {
+                                    recordTimeoutRetry({ url: successUrls[i], scanType: 'EXT', mode: 'batch', viewportPreset, message: msg });
+                                }
+                                console.error(`[BATCH-EXT] ${successUrls[i]}: ${msg}`);
+                            }
                             setPhaseProgress(localPhase, (i + 1) / successUrls.length);
                         }
                     }
@@ -1800,6 +2088,8 @@
                 $('errorText').textContent = e.message;
                 $('errorMessage').classList.add('visible');
             } finally {
+                scanInProgress = false;
+                renderTimeoutRetryPanel();
                 btn.classList.remove('loading');
                 btn.disabled = false;
             }
@@ -1812,6 +2102,8 @@
             const url = $('urlInput').value.trim();
             if (!url) return;
             lockScanUI();
+            scanInProgress = true;
+            renderTimeoutRetryPanel();
             const doDeep = $('deepScanOpt').checked;
             const doMulti = $('multiScanOpt').checked;
             const doPlay = $('playScanOpt').checked;
@@ -1943,7 +2235,11 @@
                         );
                     } catch (e) {
                         clearInterval(tDeep);
-                        progressLabel.textContent = `${labelPrefix}DEEP SCAN エラー: ${e.name === 'AbortError' ? 'タイムアウト（9分超過）' : e.message}`;
+                        const msg = e.name === 'AbortError' ? 'タイムアウト（9分超過）' : e.message;
+                        if (isTimeoutLike(e, msg)) {
+                            recordTimeoutRetry({ url, scanType: 'DEEP', mode: 'single', viewportPreset, message: msg });
+                        }
+                        progressLabel.textContent = `${labelPrefix}DEEP SCAN エラー: ${msg}`;
                     }
                     localPhaseIndex++;
                 }
@@ -1981,7 +2277,11 @@
                         );
                     } catch (e) {
                         clearInterval(tMulti);
-                        progressLabel.textContent = `${labelPrefix}MULTI SCAN エラー: ${e.message}`;
+                        const msg = e.name === 'AbortError' ? 'タイムアウト（10分超過）' : e.message;
+                        if (isTimeoutLike(e, msg)) {
+                            recordTimeoutRetry({ url, scanType: 'MULTI', mode: 'single', viewportPreset, message: msg });
+                        }
+                        progressLabel.textContent = `${labelPrefix}MULTI SCAN エラー: ${msg}`;
                     }
                     localPhaseIndex++;
                 }
@@ -2019,7 +2319,11 @@
                         );
                     } catch (e) {
                         clearInterval(tPlay);
-                        progressLabel.textContent = `${labelPrefix}PLAYWRIGHT エラー: ${e.message}`;
+                        const msg = e.name === 'AbortError' ? 'タイムアウト（6分超過）' : e.message;
+                        if (isTimeoutLike(e, msg)) {
+                            recordTimeoutRetry({ url, scanType: 'PLAY', mode: 'single', viewportPreset, message: msg });
+                        }
+                        progressLabel.textContent = `${labelPrefix}PLAYWRIGHT エラー: ${msg}`;
                     }
                     localPhaseIndex++;
                 }
@@ -2057,7 +2361,11 @@
                         );
                     } catch (e) {
                         clearInterval(tExt);
-                        progressLabel.textContent = `${labelPrefix}EXT SCAN エラー: ${e.message}`;
+                        const msg = e.name === 'AbortError' ? 'タイムアウト（7分超過）' : e.message;
+                        if (isTimeoutLike(e, msg)) {
+                            recordTimeoutRetry({ url, scanType: 'EXT', mode: 'single', viewportPreset, message: msg });
+                        }
+                        progressLabel.textContent = `${labelPrefix}EXT SCAN エラー: ${msg}`;
                     }
                 }
                 return snapshot;
@@ -2112,7 +2420,13 @@
                 }
 
                 // タブ・エクスポートは PC優先、SPのみ選択時は SP を主表示として使用
-                const primarySnapshot = runDesktop ? desktopSnapshot : mobileSnapshot;
+                const primarySnapshot = (runDesktop && desktopSnapshot?.basic) ? desktopSnapshot : mobileSnapshot;
+                if (!primarySnapshot?.basic) {
+                    progressLabel.textContent = 'BASIC SCANが完了しませんでした';
+                    renderSinglePhases(totalPhases + 1);
+                    renderTimeoutRetryPanel();
+                    return;
+                }
                 lastResults = cloneData(primarySnapshot?.basic || null);
                 lastEnhancedResults = cloneData(primarySnapshot?.deep || null);
                 aiResults = primarySnapshot?.multi ? cloneData(primarySnapshot.multi) : {};
@@ -2132,6 +2446,8 @@
                 else progressLabel.textContent = 'SP 検査完了';
                 renderSinglePhases(totalPhases + 1); // 全フェーズ完了
             } finally {
+                scanInProgress = false;
+                renderTimeoutRetryPanel();
                 btn.classList.remove('loading');
                 btn.disabled = false;
                 // 完了後2秒でプログレス非表示
@@ -2218,11 +2534,11 @@
                     el.title = sheetsOk ? '' : sheetsDisabledReason;
                 });
 
-                // AAA ボタン表示制御（sheets-status に aaaBeta を含めたため認証不要）
-                sessionAAABeta = !!data.aaaBeta;
-                const btn = $('levelBtnAAA');
-                if (btn) btn.style.display = sessionAAABeta ? '' : 'none';
-                if (!sessionAAABeta && targetLevel === 'AAA') {
+                // AAA βは一時停止中。ボタンはHTMLコメントアウト済みで、セッションもfalse固定。
+                sessionAAABeta = false;
+                // const btn = $('levelBtnAAA');
+                // if (btn) btn.style.display = sessionAAABeta ? '' : 'none';
+                if (targetLevel === 'AAA') {
                     targetLevel = 'AA';
                     document.querySelectorAll('.level-select-btn').forEach(b => b.classList.toggle('active', b.dataset.level === 'AA'));
                 }
@@ -3218,18 +3534,19 @@
             const status = document.getElementById('enhancedStatus');
             const resultsEl = document.getElementById('enhancedResults');
 
-            // 設定から最新の aaaBeta を取得
-            try {
-                const { data: sData } = await fetchApiJson(apiUrl('/api/settings-get'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: sessionPassword }) }, '/api/settings-get');
-                sessionAAABeta = !!sData.aaaBeta;
-            } catch (e) {}
+            // AAA βは一時停止中。再開時は設定読み込みとincludeAAA送信を同時に戻す。
+            // try {
+            //     const { data: sData } = await fetchApiJson(apiUrl('/api/settings-get'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: sessionPassword }) }, '/api/settings-get');
+            //     sessionAAABeta = !!sData.aaaBeta;
+            // } catch (e) {}
+            sessionAAABeta = false;
 
             btn.disabled = true;
             spinner.style.display = 'inline-block';
             btnText.textContent = 'TESTING...';
             if (!silent) {
                 status.style.display = 'block';
-                const modeLabel = sessionAAABeta ? 'A/AA/AAA（β）' : 'A/AA';
+                const modeLabel = 'A/AA';
                 status.textContent = `DEEP SCANNING（${modeLabel}、2〜4分かかります）...`;
             }
             if (resultsEl) resultsEl.innerHTML = '';
@@ -3241,7 +3558,7 @@
                 const basicPass = document.getElementById('basicPass').value.trim();
                 const body = {
                     url,
-                    includeAAA: sessionAAABeta,
+                    includeAAA: false,
                     viewportPreset: options.viewportPreset || 'desktop'
                 };
                 if (basicUser && basicPass) body.basicAuth = { user: basicUser, pass: basicPass };
@@ -3264,15 +3581,24 @@
                 if (!res.ok) throw new Error(data.error || '検査失敗');
 
                 if (!silent) {
-                    const aaa = data.includeAAA ? ' (AAA β含む)' : ' (A/AA)';
+                    const aaa = ' (A/AA)';
                     status.textContent = `検査完了: ${data.results.length}基準を検査${aaa}`;
                 }
                 lastEnhancedResults = data.results;
-                renderEnhancedResults(data.results, data.includeAAA);
+                renderEnhancedResults(data.results, false);
             } catch (e) {
                 const msg = e.name === 'AbortError'
                     ? 'DEEP SCANがタイムアウトしました（9分超過）。対象ページの応答が遅い可能性があります。'
                     : e.message;
+                if (isTimeoutLike(e, msg)) {
+                    recordTimeoutRetry({
+                        url,
+                        scanType: 'DEEP',
+                        mode: currentMode,
+                        viewportPreset: options.viewportPreset || 'desktop',
+                        message: msg
+                    });
+                }
                 if (!silent) {
                     status.textContent = 'エラー: ' + msg;
                     if (resultsEl) resultsEl.innerHTML = `<div class="enhanced-error">${escapeHtml(msg)}</div>`;
@@ -3316,6 +3642,15 @@
                 lastPlayResults = rData.results;
             } catch (e) {
                 const msg = e.name === 'AbortError' ? 'PLAYWRIGHTタイムアウト（6分超過）' : e.message;
+                if (isTimeoutLike(e, msg)) {
+                    recordTimeoutRetry({
+                        url,
+                        scanType: 'PLAY',
+                        mode: currentMode,
+                        viewportPreset: options.viewportPreset || 'desktop',
+                        message: msg
+                    });
+                }
                 if (!silent) console.warn('[PLAYWRIGHT] エラー:', msg);
                 throw e;
             }
@@ -3349,6 +3684,15 @@
                 lastExtResults = rData.results;
             } catch (e) {
                 const msg = e.name === 'AbortError' ? 'EXT SCANタイムアウト（7分超過）' : e.message;
+                if (isTimeoutLike(e, msg)) {
+                    recordTimeoutRetry({
+                        url,
+                        scanType: 'EXT',
+                        mode: currentMode,
+                        viewportPreset: options.viewportPreset || 'desktop',
+                        message: msg
+                    });
+                }
                 if (!silent) console.warn('[EXT] エラー:', msg);
                 throw e;
             }

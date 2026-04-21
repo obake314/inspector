@@ -20,6 +20,7 @@
   - `results[]` を返す
   - `status` が `pass/fail/not_applicable/manual_required/error`
   - 正常完了時は UI に「検査完了: N基準を検査」と表示される
+  - AAA β停止中のため `includeAAA: true` を送ってもレスポンスは `includeAAA: false`
 
 ## T-SCAN-02b: DEEP SCAN タイムアウト
 
@@ -30,6 +31,8 @@
   - UI に「DEEP SCANがタイムアウトしました（8分超過）」と表示される
   - DEEP SCAN ボタンがローディング解除されて再操作可能になる
   - 9分時点でクライアント側 AbortController が発火した場合も同様のエラーメッセージが表示される
+  - `#timeoutRetryPanel` に対象URLと `PC/SP DEEP` が記録される
+  - 「再スキャン対象にセット」で対象URLが単一または一括の入力欄に戻る
 
 ## T-SCAN-03: MULTI SCAN
 
@@ -144,13 +147,13 @@
   - 返却 `results[]` に AAA 専用 SC（2.3.3, 2.4.12 等）が含まれない
   - 件数が A/AA 範囲内
 
-## T-SCAN-16: DEEP SCAN 結果件数（AAA含む）
+## T-SCAN-16: DEEP SCAN AAA β停止中
 
 - 手順
   1. `includeAAA: true` で `POST /axe/api/enhanced-check`
 - 期待結果
-  - 返却 `results[]` に AAA SC が含まれる
-  - `includeAAA: true` がレスポンスに含まれる
+  - AAA β停止中のため返却 `results[]` に AAA SC が含まれない
+  - `includeAAA: false` がレスポンスに含まれる
 
 ## T-SCAN-17: BASIC SCAN Basic認証
 
@@ -590,3 +593,17 @@
 - 期待結果
   - `extScanOpt` / `batchExtOpt` が `checked` になる
   - チェックON時の背景色が amber（#D97706）になり、白いチェックマークが視認できる
+
+## T-SCAN-61: タイムアウトURL再スキャンキュー
+
+- 手順
+  1. BASIC / DEEP / MULTI / PLAY / EXT のいずれかで意図的にタイムアウトを発生させる
+  2. 単一スキャンと一括スキャンの両方で確認する
+  3. `#timeoutRetryPanel` の「再スキャン対象にセット」をクリックする
+- 期待結果
+  - タイムアウトしたURLが `URL + スキャン種別 + viewport` 単位で重複なく記録される
+  - パネルには `PC BASIC` / `SP EXT` のようにビューとスキャン種別が表示される
+  - スキャン実行中は「再スキャン対象にセット」「クリア」が disabled
+  - 1URLの単一スキャン由来は単一URL入力欄へ戻る
+  - 複数URLまたは一括スキャン由来は一括URL欄へ戻り、URL件数表示も更新される
+  - 再セット時に前回結果とUIロックがクリアされ、再度SCANできる
