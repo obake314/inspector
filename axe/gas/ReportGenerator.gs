@@ -103,9 +103,11 @@ function showReportDialog() {
    ============================================================ */
 function getReportTabs() {
   var out = [];
+  var GRID = SpreadsheetApp.SheetType.GRID;
   SpreadsheetApp.getActiveSpreadsheet().getSheets().forEach(function(s) {
     try {
-      // フォーマット判定は先頭8行×12列のみ読み込む（全体読み込みはサーバーエラーの原因になる）
+      // DATASOURCE・OBJECT シートは読み取り時にPERMISSION_DENIEDが発生するためスキップ
+      if (s.getType() !== GRID) return;
       var lastRow = s.getLastRow();
       var lastCol = s.getLastColumn();
       if (lastRow === 0 || lastCol === 0) return;
@@ -805,11 +807,14 @@ function parseDate_(s) {
    ============================================================ */
 function readPages_(ss, selectedTabs) {
   var pages = [];
+  var GRID = SpreadsheetApp.SheetType.GRID;
   var coverUrlMap = getCoverUrlMap_(ss);
   ss.getSheets().forEach(function(sheet) {
+    try { if (sheet.getType() !== GRID) return; } catch(e) { return; }
     var name = sheet.getName();
     if (selectedTabs.length && selectedTabs.indexOf(name) === -1) return;
-    var v = sheet.getDataRange().getDisplayValues();
+    var v;
+    try { v = sheet.getDataRange().getDisplayValues(); } catch(e) { return; }
     var detected = detectReportSheet_(v);
     if (!detected) return;
 
@@ -929,8 +934,11 @@ function normalizeLegacyTitle_(s) {
 
 function getCoverUrlMap_(ss) {
   var map = {};
+  var GRID = SpreadsheetApp.SheetType.GRID;
   ss.getSheets().forEach(function(sheet) {
-    var v = sheet.getDataRange().getDisplayValues();
+    try { if (sheet.getType() !== GRID) return; } catch(e) { return; }
+    var v;
+    try { v = sheet.getDataRange().getDisplayValues(); } catch(e) { return; }
     if (!v.length || String(v[0][0]).trim() !== 'アクセシビリティ検査レポート') return;
     for (var i = 0; i < v.length; i++) {
       if (String(v[i][0]).trim() !== 'No' || String(v[i][1]).trim() !== 'URL') continue;

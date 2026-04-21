@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AXE INSPECTOR</title>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Noto+Sans+JP:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;600;700&family=Poppins:wght@400;500;600&family=Noto+Sans+JP:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </head>
@@ -258,7 +258,7 @@
                             <input type="checkbox" id="multiScanOpt" class="scan-option-checkbox" checked>
                             <span class="scan-option-text scan-option-text-multi">MULTI SCAN</span>
                         </label>
-                        <label class="scan-option" id="playScanLabel" title="Playwright（ヘッドレスブラウザ）でキーボード操作・アクセシビリティツリー・フォーカス表示を実際に検証します。&#10;確認項目: SC 4.1.2(アクセシブルネーム), 4.1.3(ステータスメッセージ), 2.4.6(見出し・ラベル), 1.3.1(情報と関係性), 2.4.7(フォーカス表示), 2.1.1(キーボード到達性)&#10;APIコスト不要・所要時間：1〜2分">
+                        <label class="scan-option" id="playScanLabel" title="Playwright（ヘッドレスブラウザ）でキーボード操作・アクセシビリティツリー・フォーカス表示を実際に検証します。&#10;確認項目: SC 2.4.2(ページタイトル), 3.1.1(ページ言語), 2.1.4(文字キーショートカット), 1.3.5(入力目的), 3.3.2(フォームラベル), 2.5.3(名前の中のラベル), 4.1.2(アクセシブルネーム), 4.1.3(ステータスメッセージ), 2.4.6(見出し・ラベル), 1.3.1(情報と関係性), 2.4.7(フォーカス表示), 2.1.1(キーボード到達性), 2.1.2(キーボードトラップ), 2.4.3(フォーカス順序), 2.4.11(フォーカスが隠れない)&#10;APIコスト不要・所要時間：3〜5分">
                             <input type="checkbox" id="playScanOpt" class="scan-option-checkbox">
                             <span class="scan-option-text scan-option-text-play">PLAYWRIGHT</span>
                         </label>
@@ -283,7 +283,7 @@
                             <input type="checkbox" id="batchAIOpt" class="scan-option-checkbox" checked>
                             <span class="scan-option-text scan-option-text-multi">MULTI SCAN</span>
                         </label>
-                        <label class="scan-option" id="batchPlayLabel" title="Playwright（ヘッドレスブラウザ）でキーボード操作・アクセシビリティツリー・フォーカス表示を実際に検証します。&#10;APIコスト不要・所要時間：1〜2分（URL1件あたり）">
+                        <label class="scan-option" id="batchPlayLabel" title="Playwright（ヘッドレスブラウザ）でキーボード操作・アクセシビリティツリー・フォーカス表示を実際に検証します。&#10;確認項目: SC 2.4.2, 3.1.1, 2.1.4, 1.3.5, 3.3.2, 2.5.3, 4.1.2, 4.1.3, 2.4.6, 1.3.1, 2.4.7, 2.1.1, 2.1.2, 2.4.3, 2.4.11&#10;APIコスト不要・所要時間：3〜5分（URL1件あたり）">
                             <input type="checkbox" id="batchPlayOpt" class="scan-option-checkbox">
                             <span class="scan-option-text scan-option-text-play">PLAYWRIGHT</span>
                         </label>
@@ -1215,11 +1215,11 @@
             // オプション設定ブロック
             lock($('optionsSection'));
             // SCANアクションエリアのチェックボックスのみ無効化（ボタンは runScan/batchCheck 内で disabled）
-            ['deepScanOpt','multiScanOpt','batchEnhancedOpt','batchAIOpt'].forEach(id => {
+            ['deepScanOpt','multiScanOpt','playScanOpt','batchEnhancedOpt','batchAIOpt','batchPlayOpt'].forEach(id => {
                 const el = $(id);
                 if (el) { el.disabled = true; }
             });
-            ['deepScanLabel','multiScanLabel','batchDeepLabel','batchAILabel'].forEach(id => {
+            ['deepScanLabel','multiScanLabel','playScanLabel','batchDeepLabel','batchAILabel','batchPlayLabel'].forEach(id => {
                 const el = $(id);
                 if (el) { el.style.opacity = '0.4'; el.style.pointerEvents = 'none'; }
             });
@@ -1295,12 +1295,16 @@
             unlock($('modeToggle'));
             document.querySelectorAll('.level-select-btn').forEach(unlock);
             unlock($('optionsSection'));
-            ['deepScanLabel','multiScanLabel','batchDeepLabel','batchAILabel'].forEach(id => unlock($(id)));
+            ['deepScanLabel','multiScanLabel','playScanLabel','batchDeepLabel','batchAILabel','batchPlayLabel'].forEach(id => unlock($(id)));
             unlock($('viewportModeWrap'));
             // チェックボックスはGemini設定状態に応じて再判定
             ['deepScanOpt','batchEnhancedOpt'].forEach(id => {
                 const el = $(id);
                 if (el) { el.disabled = false; el.checked = true; }
+            });
+            ['playScanOpt','batchPlayOpt'].forEach(id => {
+                const el = $(id);
+                if (el) { el.disabled = false; }
             });
             checkSheetsStatusFn(); // Gemini/Sheets状態を再チェックしてMULTI等を適切に有効化
             setMode(currentMode);
@@ -2598,7 +2602,7 @@
                     }).join('')
                     : EMPTY;
                 const badge = $(`badge-${key}-${suffix}`);
-                if (badge) badge.textContent = badgeMap[key] ?? items.length;
+                if (badge) badge.textContent = items.length > 0 ? items.length : (badgeMap[key] ?? 0);
             });
         }
 

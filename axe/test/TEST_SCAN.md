@@ -451,10 +451,10 @@
   1. `POST /axe/api/playwright-check` with `{url}`
 - 期待結果
   - `success: true`
-  - `results[]` が 6 件（4.1.2 / 4.1.3 / 2.4.6 / 1.3.1 / 2.4.7 / 2.1.1）返る
+  - `results[]` が 15 件（2.4.2 / 3.1.1 / 2.1.4 / 1.3.5 / 3.3.2 / 2.5.3 / 4.1.2 / 4.1.3 / 2.4.6 / 1.3.1 / 2.4.7 / 2.1.1 / 2.1.2 / 2.4.3 / 2.4.11）返る
   - 各 result に `sc`, `status`, `violations[]`, `message` が含まれる
   - `status` が `pass` / `fail` / `not_applicable` のいずれか
-  - サーバーログに `[PLAY] 完了: 6件` と出力される
+  - サーバーログに `[PLAY] 完了: 15件` と出力される
 
 ## T-SCAN-47: BATCH PLAY SCAN
 
@@ -476,3 +476,57 @@
   - MULTI 行が「— 未実行 —」ではなく実際のスコア（数値）で表示される
   - TOTAL 行も MULTI を含む統合スコアになっている
   - サーバーログに `[gpt-4o] AI評価開始:` と出力される（500エラーにならない）
+
+## T-SCAN-48: スキャン中 PLAYWRIGHT チェックボックス無効化
+
+- 手順
+  1. 単一スキャンモードで SCAN ボタンを押してスキャンを開始する
+  2. スキャン実行中（プログレス表示中）に PLAYWRIGHT チェックボックスとラベルの状態を確認
+- 期待結果
+  - PLAYWRIGHT チェックボックスが `disabled` になる
+  - PLAYWRIGHTラベルが opacity 0.4・pointer-events none になる（DEEP SCAN / MULTI SCAN と同じ挙動）
+  - クリア後は PLAYWRIGHT チェックボックスが `disabled` 解除・操作可能に戻る
+
+## T-SCAN-49: スキャン中 BATCH PLAYWRIGHT チェックボックス無効化
+
+- 手順
+  1. 一括スキャンモードで BATCH SCAN ボタンを押してスキャンを開始する
+  2. スキャン実行中に PLAYWRIGHT チェックボックスとラベルの状態を確認
+- 期待結果
+  - 一括スキャン側の PLAYWRIGHT チェックボックスが `disabled` になる
+  - PLAYWRIGHTラベルが opacity 0.4・pointer-events none になる
+  - クリア後は操作可能に戻る
+
+## T-SCAN-50: 該当なしタブのバッジ数
+
+- 手順
+  1. DEEP SCAN または MULTI SCAN を実行し、「該当なし」タブに1件以上のカードが表示される状態にする
+  2. 「該当なし」タブのバッジ数を確認
+- 期待結果
+  - バッジ数が「該当なし」タブに表示されているカード枚数と一致する（0にならない）
+
+## T-SCAN-51: PLAY SCAN API 15項目レスポンス確認
+
+- 手順
+  1. `POST /axe/api/playwright-check` with `{url}`
+- 期待結果
+  - `success: true`
+  - `results[]` が 15 件（2.4.2 / 3.1.1 / 2.1.4 / 1.3.5 / 3.3.2 / 2.5.3 / 4.1.2 / 4.1.3 / 2.4.6 / 1.3.1 / 2.4.7 / 2.1.1 / 2.1.2 / 2.4.3 / 2.4.11）返る
+  - 各 result に `sc`, `status`, `violations[]`, `message` が含まれる
+  - サーバーログに `[PLAY] 完了: 15件` と出力される
+
+## T-SCAN-52: PLAY SCAN 新項目 - ページタイトル（2.4.2）
+
+- 手順
+  1. `<title>` が空のページ / 意味のある title があるページで PLAY SCAN を実行
+- 期待結果
+  - title なしの場合: `sc: "2.4.2"`, `status: "fail"`, violationsに `titleタグがないか空白です` が含まれる
+  - title ありの場合: `status: "pass"`, messageにタイトル文字列が含まれる
+
+## T-SCAN-53: PLAY SCAN 新項目 - フォームラベル（3.3.2）
+
+- 手順
+  1. ラベルなし input がある / ラベルがある ページで PLAY SCAN を実行
+- 期待結果
+  - ラベルなし要素がある場合: `sc: "3.3.2"`, `status: "fail"`, violationsにその要素のセレクタが含まれる
+  - すべてラベルあり: `status: "pass"`

@@ -3621,6 +3621,329 @@ async function pw_check_2_1_1_full_tab_sequence(page) {
   };
 }
 
+/** SC 2.4.2 - ページタイトル */
+async function pw_check_2_4_2_page_title(page) {
+  try {
+    const title = await page.title();
+    const trimmed = (title || '').trim();
+    const violations = [];
+    if (!trimmed) violations.push('titleタグがないか空白です');
+    else if (trimmed.length < 3) violations.push(`タイトルが短すぎます（${trimmed.length}文字）: "${trimmed}"`);
+    else if (/^(untitled|new tab|ページ|無題)$/i.test(trimmed)) violations.push(`意味のないタイトルです: "${trimmed}"`);
+    return {
+      sc: '2.4.2',
+      status: violations.length === 0 ? 'pass' : 'fail',
+      violations,
+      message: violations.length === 0 ? `ページタイトルあり: "${trimmed.substring(0, 50)}"` : violations[0]
+    };
+  } catch (e) {
+    return { sc: '2.4.2', status: 'error', violations: [], message: e.message };
+  }
+}
+
+/** SC 3.1.1 - ページの言語 */
+async function pw_check_3_1_1_language(page) {
+  try {
+    const info = await page.evaluate(() => {
+      const html = document.documentElement;
+      const lang = html.getAttribute('lang') || html.getAttribute('xml:lang') || '';
+      return { lang: lang.trim() };
+    });
+    const violations = [];
+    if (!info.lang) violations.push('html要素にlang属性がありません');
+    else if (!/^[a-zA-Z]{2,}(-[a-zA-Z0-9]+)*$/.test(info.lang)) violations.push(`langの値が不正です: "${info.lang}"`);
+    return {
+      sc: '3.1.1',
+      status: violations.length === 0 ? 'pass' : 'fail',
+      violations,
+      message: violations.length === 0 ? `lang="${info.lang}" が設定されています` : violations[0]
+    };
+  } catch (e) {
+    return { sc: '3.1.1', status: 'error', violations: [], message: e.message };
+  }
+}
+
+/** SC 1.3.5 - 入力目的の特定（autocomplete属性） */
+async function pw_check_1_3_5_input_purpose(page) {
+  try {
+    const issues = await page.evaluate(() => {
+      const purposeMap = {
+        name: 'name', 'given-name': 'given-name', 'family-name': 'family-name',
+        email: 'email', tel: 'tel', username: 'username', 'new-password': 'new-password',
+        'current-password': 'current-password', bday: 'bday', 'street-address': 'street-address',
+        'address-line1': 'address-line1', 'postal-code': 'postal-code', country: 'country',
+        'cc-name': 'cc-name', 'cc-number': 'cc-number', 'cc-exp': 'cc-exp', organization: 'organization'
+      };
+      const typeHints = {
+        email: 'email', tel: 'tel', password: ['current-password', 'new-password'],
+        text: null
+      };
+      const inputs = Array.from(document.querySelectorAll('input, textarea, select')).filter(el => {
+        const s = getComputedStyle(el);
+        return s.display !== 'none' && s.visibility !== 'hidden' && !el.disabled;
+      });
+      const missing = [];
+      inputs.forEach(el => {
+        const type = (el.type || 'text').toLowerCase();
+        if (['hidden', 'submit', 'button', 'reset', 'image', 'file', 'checkbox', 'radio', 'range', 'color', 'search'].includes(type)) return;
+        const ac = (el.getAttribute('autocomplete') || '').toLowerCase().trim();
+        if (!ac || ac === 'on' || ac === 'off') {
+          const tag = el.tagName.toLowerCase();
+          const id = el.id ? `#${el.id}` : '';
+          const name = el.name ? `[name="${el.name}"]` : '';
+          missing.push(`${tag}${id}${name} (type="${type}") にautocomplete属性なし`);
+        }
+      });
+      return missing;
+    });
+    return {
+      sc: '1.3.5',
+      status: issues.length === 0 ? 'pass' : 'fail',
+      violations: issues.slice(0, 10),
+      message: issues.length === 0
+        ? 'フォーム入力のautocomplete属性を確認（問題なし）'
+        : `${issues.length}個の入力欄にautocomplete属性がありません`
+    };
+  } catch (e) {
+    return { sc: '1.3.5', status: 'error', violations: [], message: e.message };
+  }
+}
+
+/** SC 3.3.2 - ラベルまたは説明（フォーム入力） */
+async function pw_check_3_3_2_labels(page) {
+  try {
+    const issues = await page.evaluate(() => {
+      const inputs = Array.from(document.querySelectorAll('input, textarea, select')).filter(el => {
+        const s = getComputedStyle(el);
+        return s.display !== 'none' && s.visibility !== 'hidden' && !el.disabled;
+      });
+      const unlabeled = [];
+      inputs.forEach(el => {
+        const type = (el.type || 'text').toLowerCase();
+        if (['hidden', 'submit', 'button', 'reset', 'image'].includes(type)) return;
+        const hasLabel = el.id && document.querySelector(`label[for="${el.id}"]`);
+        const hasAriaLabel = el.getAttribute('aria-label');
+        const hasAriaLabelledBy = el.getAttribute('aria-labelledby');
+        const hasTitle = el.getAttribute('title');
+        const hasPlaceholder = el.getAttribute('placeholder');
+        const isWrapped = el.closest('label');
+        if (!hasLabel && !hasAriaLabel && !hasAriaLabelledBy && !hasTitle && !hasPlaceholder && !isWrapped) {
+          const tag = el.tagName.toLowerCase();
+          const id = el.id ? `#${el.id}` : '';
+          const name = el.name ? `[name="${el.name}"]` : '';
+          unlabeled.push(`${tag}${id}${name} (type="${type}") にラベルなし`);
+        }
+      });
+      return unlabeled;
+    });
+    return {
+      sc: '3.3.2',
+      status: issues.length === 0 ? 'pass' : 'fail',
+      violations: issues.slice(0, 10),
+      message: issues.length === 0
+        ? 'フォーム入力すべてにラベルまたは説明があります'
+        : `${issues.length}個の入力欄にラベルや説明がありません`
+    };
+  } catch (e) {
+    return { sc: '3.3.2', status: 'error', violations: [], message: e.message };
+  }
+}
+
+/** SC 2.5.3 - 名前の中のラベル（アクセシブルネームに視覚的ラベルが含まれるか） */
+async function pw_check_2_5_3_label_in_name(page) {
+  try {
+    const issues = await page.evaluate(() => {
+      const interactives = Array.from(document.querySelectorAll(
+        'button, a[href], input[type="button"], input[type="submit"], [role="button"], [role="link"]'
+      )).filter(el => {
+        const s = getComputedStyle(el);
+        return s.display !== 'none' && s.visibility !== 'hidden';
+      });
+      const mismatches = [];
+      interactives.forEach(el => {
+        const visibleText = (el.textContent || el.value || el.placeholder || '').trim().toLowerCase();
+        if (!visibleText) return;
+        const ariaLabel = (el.getAttribute('aria-label') || '').trim().toLowerCase();
+        if (!ariaLabel) return;
+        if (!ariaLabel.includes(visibleText) && !visibleText.includes(ariaLabel)) {
+          const tag = el.tagName.toLowerCase();
+          const id = el.id ? `#${el.id}` : '';
+          mismatches.push(`${tag}${id}: 表示テキスト"${visibleText.substring(0,20)}" vs aria-label"${ariaLabel.substring(0,20)}"`);
+        }
+      });
+      return mismatches;
+    });
+    return {
+      sc: '2.5.3',
+      status: issues.length === 0 ? 'pass' : 'fail',
+      violations: issues.slice(0, 10),
+      message: issues.length === 0
+        ? 'アクセシブルネームに視覚的ラベルが含まれています（問題なし）'
+        : `${issues.length}個の要素で表示テキストとaria-labelが不一致`
+    };
+  } catch (e) {
+    return { sc: '2.5.3', status: 'error', violations: [], message: e.message };
+  }
+}
+
+/** SC 2.1.2 - キーボードトラップなし（Playwright版） */
+async function pw_check_2_1_2_keyboard_trap(page) {
+  try {
+    const focusableCount = await page.evaluate(() =>
+      document.querySelectorAll(
+        'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      ).length
+    );
+    const maxTabs = Math.min(focusableCount + 20, 50);
+    const history = [];
+    await page.keyboard.press('Tab');
+    for (let i = 0; i < maxTabs; i++) {
+      const el = await page.evaluate(() => {
+        const a = document.activeElement;
+        if (!a || a === document.body) return null;
+        const tag = a.tagName.toLowerCase();
+        const id = a.id ? `#${a.id}` : '';
+        const cls = a.className && typeof a.className === 'string'
+          ? '.' + a.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+        let inModal = false;
+        let p = a;
+        while (p) { if (p.getAttribute && p.getAttribute('aria-modal') === 'true') { inModal = true; break; } p = p.parentElement; }
+        return { key: `${tag}${id}${cls}`.slice(0, 60), inModal };
+      });
+      if (el) history.push(el);
+      await page.keyboard.press('Tab');
+    }
+    const traps = [];
+    for (let i = 2; i < history.length; i++) {
+      if (history[i].key === history[i-1].key && history[i].key === history[i-2].key && !history[i].inModal) {
+        if (!traps.includes(history[i].key)) traps.push(history[i].key);
+      }
+    }
+    return {
+      sc: '2.1.2',
+      status: traps.length === 0 ? 'pass' : 'fail',
+      violations: traps,
+      message: traps.length === 0 ? 'キーボードトラップは検出されませんでした' : `${traps.length}箇所でキーボードトラップを検出`
+    };
+  } catch (e) {
+    return { sc: '2.1.2', status: 'error', violations: [], message: e.message };
+  }
+}
+
+/** SC 2.1.4 - 文字キーショートカット（accesskey属性の検出） */
+async function pw_check_2_1_4_character_shortcuts(page) {
+  try {
+    const issues = await page.evaluate(() => {
+      const els = Array.from(document.querySelectorAll('[accesskey]'));
+      return els.map(el => {
+        const key = el.getAttribute('accesskey');
+        const tag = el.tagName.toLowerCase();
+        const id = el.id ? `#${el.id}` : '';
+        const label = (el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 40);
+        return `${tag}${id} accesskey="${key}"${label ? ` (${label})` : ''}`;
+      });
+    });
+    return {
+      sc: '2.1.4',
+      status: issues.length === 0 ? 'pass' : 'fail',
+      violations: issues.slice(0, 10),
+      message: issues.length === 0
+        ? '文字キーショートカット（accesskey）は検出されませんでした'
+        : `${issues.length}個の要素にaccesskey属性があります（無効化・変更手段を確認してください）`
+    };
+  } catch (e) {
+    return { sc: '2.1.4', status: 'error', violations: [], message: e.message };
+  }
+}
+
+/** SC 2.4.3 - フォーカス順序（Playwright版） */
+async function pw_check_2_4_3_focus_order(page) {
+  try {
+    const maxCheck = 30;
+    const positions = [];
+    const tabindexIssues = [];
+    for (let i = 0; i < maxCheck; i++) {
+      await page.keyboard.press('Tab');
+      const info = await page.evaluate(() => {
+        const el = document.activeElement;
+        if (!el || el === document.body) return null;
+        const rect = el.getBoundingClientRect();
+        const tabindex = parseInt(el.getAttribute('tabindex') || '0', 10);
+        const tag = el.tagName.toLowerCase();
+        const id = el.id ? `#${el.id}` : '';
+        return { x: rect.left, y: rect.top, tabindex, label: `${tag}${id}`.slice(0, 50) };
+      });
+      if (!info) continue;
+      if (info.tabindex > 0) tabindexIssues.push(`${info.label} (tabindex=${info.tabindex})`);
+      positions.push({ x: info.x, y: info.y, label: info.label });
+    }
+    let orderViolations = 0;
+    for (let i = 1; i < positions.length; i++) {
+      const prev = positions[i-1], curr = positions[i];
+      if (curr.y < prev.y - 100 && curr.x > prev.x + 100) orderViolations++;
+    }
+    const violations = [...tabindexIssues];
+    if (orderViolations > 2) violations.push(`フォーカス順序が視覚的読み順と大きく異なる箇所が${orderViolations}件`);
+    return {
+      sc: '2.4.3',
+      status: violations.length === 0 ? 'pass' : 'fail',
+      violations,
+      message: violations.length === 0
+        ? 'フォーカス順序は論理的です（tabindex > 0 なし）'
+        : `${violations.length}件の問題: tabindex > 0 または順序の逸脱`
+    };
+  } catch (e) {
+    return { sc: '2.4.3', status: 'error', violations: [], message: e.message };
+  }
+}
+
+/** SC 2.4.11 - フォーカスが隠れない（最低限、Playwright版） */
+async function pw_check_2_4_11_focus_obscured(page) {
+  try {
+    const maxCheck = 30;
+    const violations = [];
+    for (let i = 0; i < maxCheck; i++) {
+      await page.keyboard.press('Tab');
+      const info = await page.evaluate(() => {
+        const el = document.activeElement;
+        if (!el || el === document.body || el === document.documentElement) return null;
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return null;
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const topEls = document.elementsFromPoint(centerX, centerY) || [];
+        const fixedEls = topEls.filter(e => {
+          if (e === el || el.contains(e) || e.contains(el)) return false;
+          const s = getComputedStyle(e);
+          return s.position === 'fixed' || s.position === 'sticky';
+        });
+        if (fixedEls.length === 0) return null;
+        const tag = el.tagName.toLowerCase();
+        const id = el.id ? `#${el.id}` : '';
+        const label = `${tag}${id}`.slice(0, 60);
+        for (const fe of fixedEls) {
+          const fr = fe.getBoundingClientRect();
+          const ox = Math.max(0, Math.min(rect.right, fr.right) - Math.max(rect.left, fr.left));
+          const oy = Math.max(0, Math.min(rect.bottom, fr.bottom) - Math.max(rect.top, fr.top));
+          if (ox > 0 && oy > 0 && ox * oy >= rect.width * rect.height * 0.9) return { label, fully: true };
+        }
+        return null;
+      });
+      if (info && info.fully) violations.push(`フォーカスが完全に隠れる: ${info.label}`);
+    }
+    return {
+      sc: '2.4.11',
+      status: violations.length === 0 ? 'pass' : 'fail',
+      violations: violations.slice(0, 10),
+      message: violations.length === 0
+        ? 'フォーカスが完全に隠れる要素は検出されませんでした'
+        : `${violations.length}個の要素でフォーカスが完全に隠れています`
+    };
+  } catch (e) {
+    return { sc: '2.4.11', status: 'error', violations: [], message: e.message };
+  }
+}
+
 app.post('/api/playwright-check', async (req, res) => {
   const { url, basicAuth, viewportPreset } = req.body;
   if (!url) return res.status(400).json({ error: 'URLを指定してください' });
@@ -3658,18 +3981,36 @@ app.post('/api/playwright-check', async (req, res) => {
       Promise.race([fn(), new Promise(r => setTimeout(() => r({ sc: '?', status: 'unverified', violations: [], message: 'タイムアウト' }), ms))]);
 
     const results = [];
+    // DOM静的検査（リロード不要）
+    results.push(await withTimeout(() => pw_check_2_4_2_page_title(page)));
+    results.push(await withTimeout(() => pw_check_3_1_1_language(page)));
+    results.push(await withTimeout(() => pw_check_2_1_4_character_shortcuts(page)));
+    results.push(await withTimeout(() => pw_check_1_3_5_input_purpose(page)));
+    results.push(await withTimeout(() => pw_check_3_3_2_labels(page)));
+    results.push(await withTimeout(() => pw_check_2_5_3_label_in_name(page)));
+    // アクセシビリティツリー検査
     results.push(await withTimeout(() => pw_check_4_1_2_accessible_names(page)));
     await page.reload({ waitUntil: 'networkidle' }).catch(() => {});
     await page.waitForTimeout(500);
     results.push(await withTimeout(() => pw_check_4_1_3_status_messages(page)));
     results.push(await withTimeout(() => pw_check_2_4_6_headings_labels(page)));
     results.push(await withTimeout(() => pw_check_1_3_1_info_relationships(page)));
+    // フォーカス系検査
     await page.reload({ waitUntil: 'networkidle' }).catch(() => {});
     await page.waitForTimeout(500);
     results.push(await withTimeout(() => pw_check_2_4_7_focus_visible_all(page)));
     await page.reload({ waitUntil: 'networkidle' }).catch(() => {});
     await page.waitForTimeout(500);
     results.push(await withTimeout(() => pw_check_2_1_1_full_tab_sequence(page)));
+    await page.reload({ waitUntil: 'networkidle' }).catch(() => {});
+    await page.waitForTimeout(500);
+    results.push(await withTimeout(() => pw_check_2_1_2_keyboard_trap(page)));
+    await page.reload({ waitUntil: 'networkidle' }).catch(() => {});
+    await page.waitForTimeout(500);
+    results.push(await withTimeout(() => pw_check_2_4_3_focus_order(page)));
+    await page.reload({ waitUntil: 'networkidle' }).catch(() => {});
+    await page.waitForTimeout(500);
+    results.push(await withTimeout(() => pw_check_2_4_11_focus_obscured(page)));
 
     await page.close();
     console.log(`[PLAY] 完了: ${results.length}件 (${url})`);

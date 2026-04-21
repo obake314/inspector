@@ -1,6 +1,6 @@
 # SPEC_WEB
 
-最終更新: 2026-04-17（PLAY SCAN追加: Playwright によるキーボード・アクセシビリティツリー検査）
+最終更新: 2026-04-21（PLAY SCAN拡張: 15項目化・スキャン中UI無効化・Roboto Condensedフォント・バッジ実数化・GAS PERMISSION_DENIED修正）
 
 ## 対象
 
@@ -44,16 +44,25 @@
 - APIコスト不要（ローカルブラウザ実行）
 - タイムアウト: サーバー5分 / クライアント6分
 
-#### PLAY SCAN 検査項目（6項目）
+#### PLAY SCAN 検査項目（15項目）
 
 | 項目 | SC | 手法 |
 |---|---|---|
+| ページタイトル | 2.4.2 | `<title>` の存在・内容を確認 |
+| ページ言語 | 3.1.1 | `<html lang>` の有無・形式を確認 |
+| 文字キーショートカット | 2.1.4 | `accesskey` 属性の有無を検出 |
+| 入力目的の特定 | 1.3.5 | フォーム入力の `autocomplete` 属性の有無を確認 |
+| フォームラベル | 3.3.2 | 入力欄に `<label>` / `aria-label` / `aria-labelledby` / `title` があるか確認 |
+| 名前の中のラベル | 2.5.3 | 表示テキストと `aria-label` の不一致を検出 |
 | アクセシブルネーム監査 | 4.1.2 | `page.accessibility.snapshot()` でインタラクティブ要素の名前・ロールを検証 |
 | ステータスメッセージ | 4.1.3 | aria-live / role=status / role=alert の有無を確認 |
 | 見出し・ラベル | 2.4.6 | 空見出し・ラベル未設定フォームを検出 |
 | 情報と関係性 | 1.3.1 | テーブルヘッダー欠落・fieldset未使用ラジオグループを検出 |
 | フォーカス表示（全要素） | 2.4.7 | フォーカス可能要素に outline/box-shadow を確認（最大40要素） |
 | キーボード完全到達性 | 2.1.1 | Tab キーシーケンスで到達可能要素を列挙（最大60要素） |
+| キーボードトラップ | 2.1.2 | Tab 連続押下で同一要素3回連続 = トラップとして検出（aria-modal 除外） |
+| フォーカス順序 | 2.4.3 | tabindex > 0 の有無・視覚的読み順からの逸脱を検出 |
+| フォーカスが隠れない（最低限） | 2.4.11 | fixed/sticky 要素によるフォーカス完全隠蔽を検出 |
 
 ## UI構成
 
@@ -70,7 +79,7 @@
   - PC VIEW ブロック: PCスコアテーブル（BASIC/DEEP/MULTI/PLAY/TOTAL）＋ PCスコア詳細タブ
   - SP VIEW ブロック: SPスコアテーブル（BASIC/DEEP/MULTI/PLAY/TOTAL）＋ SPスコア詳細タブ
   - 各ブロックのスコア詳細タブ（緊急/重大/中程度/軽微/合格/該当なし/未検証）はそれぞれ独立して操作
-  - タブ横の数字はSC単位の集計値（緊急+重大+中程度+軽微+合格+該当なし+未検証 = 全項目数）
+  - タブ横の数字はそのタブに表示されるカードの実数（items.length）を表示。ただし0件のタブはSC単位集計値にフォールバック
 - クリアボタン（エクスポートエリア右端）:
   - スキャン結果・状態を全リセットして再検査可能状態に戻す
   - UIロックを解除（モード切替・レベル・オプション等）
@@ -335,6 +344,13 @@
   - `https://www.googleapis.com/auth/documents`
   - `https://www.googleapis.com/auth/drive.file`（`DocumentApp.create()` による Drive ファイル作成に必要）
 - スコープ変更後は GAS エディタで再認証が必要
+- PERMISSION_DENIED 対策: `getReportTabs()` / `readPages_()` / `getCoverUrlMap_()` で `sheet.getType() !== GRID` のシートをスキップ（DATASOURCE/OBJECT シートが PERMISSION_DENIED を引き起こすため）
+
+## フォント仕様
+
+- 本文・UI全般: `"Roboto Condensed", "Poppins", "Noto Sans JP", sans-serif`（CSS変数 `--font-basic`）
+- Roboto Condensedは英数字・ラテン文字をカバー、日本語は Noto Sans JP にフォールバック
+- Google Fonts: `Roboto+Condensed:wght@400;500;600;700` + `Poppins:wght@400;500;600` + `Noto+Sans+JP:wght@400;500;600`
 
 ## 既知の実装差異
 
