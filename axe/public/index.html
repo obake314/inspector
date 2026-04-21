@@ -262,6 +262,10 @@
                             <input type="checkbox" id="playScanOpt" class="scan-option-checkbox">
                             <span class="scan-option-text scan-option-text-play">PLAYWRIGHT</span>
                         </label>
+                        <label class="scan-option" id="extScanLabel" title="IBM Equal Access Checker + Lighthouse相当の独自検査 + CDP（Chrome DevTools Protocol）イベントリスナー解析を組み合わせた拡張検査です。&#10;IBM Equal Access: axe-coreとは異なるルールセットで追加の違反を検出&#10;ネイティブ検査: SC 4.1.1(重複ID), 2.4.1(ランドマーク), 2.1.1(スクロール領域), 2.4.6(見出し順序)&#10;CDP拡張: SC 2.1.4(キーボードイベントリスナー検出)&#10;APIコスト不要・所要時間：2〜4分">
+                            <input type="checkbox" id="extScanOpt" class="scan-option-checkbox">
+                            <span class="scan-option-text scan-option-text-ext">EXT SCAN</span>
+                        </label>
                     </div>
                     <div class="batch-progress" id="singleProgress">
                         <div class="batch-progress-header">
@@ -286,6 +290,10 @@
                         <label class="scan-option" id="batchPlayLabel" title="Playwright（ヘッドレスブラウザ）でキーボード操作・アクセシビリティツリー・フォーカス表示を実際に検証します。&#10;確認項目: SC 2.4.2, 3.1.1, 2.1.4, 1.3.5, 3.3.2, 2.5.3, 4.1.2, 4.1.3, 2.4.6, 1.3.1, 2.4.7, 2.1.1, 2.1.2, 2.4.3, 2.4.11&#10;APIコスト不要・所要時間：3〜5分（URL1件あたり）">
                             <input type="checkbox" id="batchPlayOpt" class="scan-option-checkbox">
                             <span class="scan-option-text scan-option-text-play">PLAYWRIGHT</span>
+                        </label>
+                        <label class="scan-option" id="batchExtLabel" title="IBM Equal Access + Lighthouse相当検査 + CDP拡張。APIコスト不要・所要時間：2〜4分（URL1件あたり）">
+                            <input type="checkbox" id="batchExtOpt" class="scan-option-checkbox">
+                            <span class="scan-option-text scan-option-text-ext">EXT SCAN</span>
                         </label>
                         <span class="batch-count" id="batchCount">0 / 10 URL</span>
                     </div>
@@ -717,7 +725,7 @@
             renderAllTabs('pc');
             if (lastMobileScanSnapshot) {
                 const sp = lastMobileScanSnapshot;
-                renderAllTabs('sp', sp.basic, sp.deep || null, sp.multi || {}, sp.play || null);
+                renderAllTabs('sp', sp.basic, sp.deep || null, sp.multi || {}, sp.play || null, sp.ext || null);
             }
             refreshScoreTable();
         };
@@ -727,6 +735,7 @@
             const doDeep  = !!lastEnhancedResults;
             const doMulti = Object.keys(aiResults).length > 0;
             const doPlay  = !!lastPlayResults;
+            const doExt   = !!lastExtResults;
             // PC テーブル
             renderScanScoreTable(
                 computeBasicScore(lastResults),
@@ -736,7 +745,8 @@
                 {
                     scoreBodyId: 'scanScoreBody', scoreTableId: 'scanScoreTable', scoreBlockId: 'scoreBlockDesktop',
                     playEnabled: doPlay, playScore: doPlay ? computePlayScore(lastPlayResults) : null,
-                    state: { playResults: lastPlayResults }
+                    extEnabled: doExt, extScore: doExt ? computeExtScore(lastExtResults) : null,
+                    state: { playResults: lastPlayResults, extResults: lastExtResults }
                 }
             );
             // SP テーブル（スナップショットがある場合のみ）
@@ -745,6 +755,7 @@
                 const spDeep  = !!sp.deep;
                 const spMulti = sp.multi && Object.keys(sp.multi).length > 0;
                 const spPlay  = !!sp.play;
+                const spExt   = !!sp.ext;
                 renderScanScoreTable(
                     computeBasicScore(sp.basic),
                     spDeep  ? computeDeepScore(sp.deep)   : null,
@@ -753,7 +764,8 @@
                     {
                         scoreBodyId: 'scanScoreBodyMobile', scoreTableId: 'scanScoreTableMobile', scoreBlockId: 'scoreBlockMobile',
                         playEnabled: spPlay, playScore: spPlay ? computePlayScore(sp.play) : null,
-                        state: { basicResults: sp.basic, deepResults: sp.deep, multiAiData: sp.multi, playResults: sp.play }
+                        extEnabled: spExt, extScore: spExt ? computeExtScore(sp.ext) : null,
+                        state: { basicResults: sp.basic, deepResults: sp.deep, multiAiData: sp.multi, playResults: sp.play, extResults: sp.ext }
                     }
                 );
             }
@@ -1053,7 +1065,7 @@
             const wb = XLSX.utils.book_new();
 
             // PC シート
-            const pcRows = buildReportRows(lastResults, lastResults.url, aiResults, lastEnhancedResults, batchNavConsistency);
+            const pcRows = buildReportRows(lastResults, lastResults.url, aiResults, lastEnhancedResults, batchNavConsistency, lastPlayResults, lastExtResults);
             const pcStats = buildStats(lastResults, lastEnhancedResults, aiResults);
             const pcMeta = [
                 ['URL', lastResults.url],
@@ -1071,7 +1083,7 @@
             // SP シート（存在する場合）
             if (lastMobileScanSnapshot) {
                 const sp = lastMobileScanSnapshot;
-                const spRows = buildReportRows(sp.basic, lastResults.url, sp.multi || {}, sp.deep || null, null);
+                const spRows = buildReportRows(sp.basic, lastResults.url, sp.multi || {}, sp.deep || null, null, sp.play || null, sp.ext || null);
                 const spStats = buildStats(sp.basic, sp.deep || null, sp.multi || {});
                 const spMeta = [
                     ['URL', lastResults.url],
@@ -1097,6 +1109,7 @@
         // 高精度検査結果を保存（単一ページ）
         let lastEnhancedResults = null;
         let lastPlayResults = null;
+        let lastExtResults = null;
         let lastMobileScanSnapshot = null;
 
         async function runAIEvaluation(silent = false, options = {}) {
@@ -1215,11 +1228,11 @@
             // オプション設定ブロック
             lock($('optionsSection'));
             // SCANアクションエリアのチェックボックスのみ無効化（ボタンは runScan/batchCheck 内で disabled）
-            ['deepScanOpt','multiScanOpt','playScanOpt','batchEnhancedOpt','batchAIOpt','batchPlayOpt'].forEach(id => {
+            ['deepScanOpt','multiScanOpt','playScanOpt','extScanOpt','batchEnhancedOpt','batchAIOpt','batchPlayOpt','batchExtOpt'].forEach(id => {
                 const el = $(id);
                 if (el) { el.disabled = true; }
             });
-            ['deepScanLabel','multiScanLabel','playScanLabel','batchDeepLabel','batchAILabel','batchPlayLabel'].forEach(id => {
+            ['deepScanLabel','multiScanLabel','playScanLabel','extScanLabel','batchDeepLabel','batchAILabel','batchPlayLabel','batchExtLabel'].forEach(id => {
                 const el = $(id);
                 if (el) { el.style.opacity = '0.4'; el.style.pointerEvents = 'none'; }
             });
@@ -1234,6 +1247,7 @@
             lastResults = null;
             lastEnhancedResults = null;
             lastPlayResults = null;
+            lastExtResults = null;
             aiResults = {};
             manualDecisions.clear();
             manualImpacts.clear();
@@ -1242,10 +1256,12 @@
             batchEnhancedResults = {};
             batchAIResults = {};
             batchPlayResults = {};
+            batchExtResults = {};
             batchMobileResultsData = [];
             batchMobileEnhancedResults = {};
             batchMobileAIResults = {};
             batchMobilePlayResults = {};
+            batchMobileExtResults = {};
             batchViewportMode = 'desktop';
             lastMobileScanSnapshot = null;
             scanExecuted = false;
@@ -1295,14 +1311,14 @@
             unlock($('modeToggle'));
             document.querySelectorAll('.level-select-btn').forEach(unlock);
             unlock($('optionsSection'));
-            ['deepScanLabel','multiScanLabel','playScanLabel','batchDeepLabel','batchAILabel','batchPlayLabel'].forEach(id => unlock($(id)));
+            ['deepScanLabel','multiScanLabel','playScanLabel','extScanLabel','batchDeepLabel','batchAILabel','batchPlayLabel','batchExtLabel'].forEach(id => unlock($(id)));
             unlock($('viewportModeWrap'));
             // チェックボックスはGemini設定状態に応じて再判定
             ['deepScanOpt','batchEnhancedOpt'].forEach(id => {
                 const el = $(id);
                 if (el) { el.disabled = false; el.checked = true; }
             });
-            ['playScanOpt','batchPlayOpt'].forEach(id => {
+            ['playScanOpt','batchPlayOpt','extScanOpt','batchExtOpt'].forEach(id => {
                 const el = $(id);
                 if (el) { el.disabled = false; }
             });
@@ -1326,10 +1342,12 @@
         let batchEnhancedResults = {}; // url → enhanced results array
         let batchAIResults = {};       // url → processed aiResults object
         let batchPlayResults = {};     // url → play results array
+        let batchExtResults = {};      // url → ext results array
         let batchMobileResultsData = [];          // SP用（PC+SP時のみ使用）
         let batchMobileEnhancedResults = {};      // url → SP enhanced results
         let batchMobileAIResults = {};            // url → SP AI results
         let batchMobilePlayResults = {};          // url → SP play results
+        let batchMobileExtResults = {};           // url → SP ext results
         let batchViewportMode = 'desktop';        // 実行時のviewportMode
 
         function renderNavConsistency() {
@@ -1457,11 +1475,13 @@
             lastEnhancedResults = batchEnhancedResults[r.url] || null;
             aiResults = batchAIResults[r.url] || {};
             lastPlayResults = batchPlayResults[r.url] || null;
+            lastExtResults = batchExtResults[r.url] || null;
             displayResults(r.results, r.url);
             $('results').classList.add('visible');
             const deepEnabled  = !!lastEnhancedResults;
             const multiEnabled = Object.keys(aiResults).length > 0;
             const playEnabledBatch = !!lastPlayResults;
+            const extEnabledBatch  = !!lastExtResults;
             renderScanScoreTable(
                 computeBasicScore(lastResults),
                 deepEnabled  ? computeDeepScore(lastEnhancedResults) : null,
@@ -1469,7 +1489,8 @@
                 deepEnabled, multiEnabled,
                 {
                     scoreBodyId: 'scanScoreBody', scoreTableId: 'scanScoreTable', scoreBlockId: 'scoreBlockDesktop',
-                    playEnabled: playEnabledBatch, playScore: playEnabledBatch ? computePlayScore(lastPlayResults) : null
+                    playEnabled: playEnabledBatch, playScore: playEnabledBatch ? computePlayScore(lastPlayResults) : null,
+                    extEnabled: extEnabledBatch, extScore: extEnabledBatch ? computeExtScore(lastExtResults) : null
                 }
             );
             renderAllTabs('pc');
@@ -1480,9 +1501,11 @@
                 const mobileEnhanced = batchMobileEnhancedResults[mobileR.url] || null;
                 const mobileAI       = batchMobileAIResults[mobileR.url] || {};
                 const mobilePlay     = batchMobilePlayResults[mobileR.url] || null;
+                const mobileExt      = batchMobileExtResults[mobileR.url] || null;
                 const mDeepEnabled   = !!mobileEnhanced;
                 const mMultiEnabled  = Object.keys(mobileAI).length > 0;
                 const mPlayEnabled   = !!mobilePlay;
+                const mExtEnabled    = !!mobileExt;
                 renderScanScoreTable(
                     computeBasicScore(mobileR.results),
                     mDeepEnabled  ? computeDeepScore(mobileEnhanced) : null,
@@ -1491,10 +1514,11 @@
                     {
                         scoreBodyId: 'scanScoreBodyMobile', scoreTableId: 'scanScoreTableMobile', scoreBlockId: 'scoreBlockMobile',
                         playEnabled: mPlayEnabled, playScore: mPlayEnabled ? computePlayScore(mobilePlay) : null,
-                        state: { playResults: mobilePlay }
+                        extEnabled: mExtEnabled, extScore: mExtEnabled ? computeExtScore(mobileExt) : null,
+                        state: { playResults: mobilePlay, extResults: mobileExt }
                     }
                 );
-                renderAllTabs('sp', mobileR.results, mobileEnhanced, mobileAI, mobilePlay);
+                renderAllTabs('sp', mobileR.results, mobileEnhanced, mobileAI, mobilePlay, mobileExt);
             } else {
                 const mb = $('scoreBlockMobile');
                 if (mb) mb.style.display = 'none';
@@ -1534,11 +1558,12 @@
             const doEnhanced = $('batchEnhancedOpt').checked;
             const doAI = $('batchAIOpt').checked;
             const doPlayBatch = $('batchPlayOpt').checked;
+            const doExtBatch = $('batchExtOpt').checked;
             const viewportMode = getViewportMode();
             const runDesktop = viewportMode !== 'mobile';
             const runMobile  = viewportMode !== 'desktop';
             const viewCount  = (runDesktop ? 1 : 0) + (runMobile ? 1 : 0);
-            const phasesPerView = 1 + (doEnhanced ? 1 : 0) + (doAI ? 1 : 0) + (doPlayBatch ? 1 : 0);
+            const phasesPerView = 1 + (doEnhanced ? 1 : 0) + (doAI ? 1 : 0) + (doPlayBatch ? 1 : 0) + (doExtBatch ? 1 : 0);
             const totalPhases = phasesPerView * viewCount;
             batchViewportMode = viewportMode;
 
@@ -1558,6 +1583,7 @@
                     if (doEnhanced)  labels.push(vp ? `${vp} DEEP` : 'DEEP');
                     if (doAI)        labels.push(vp ? `${vp} MULTI` : 'MULTI');
                     if (doPlayBatch) labels.push(vp ? `${vp} PLAY` : 'PLAY');
+                    if (doExtBatch)  labels.push(vp ? `${vp} EXT` : 'EXT');
                 }
                 return labels;
             }
@@ -1696,7 +1722,29 @@
                         }
                     }
 
-                    return { resultsData, navConsistency, enhancedResults, aiResultsMap, playResultsMap, succeededCount };
+                    // EXT
+                    const extResultsMap = {};
+                    if (doExtBatch && successUrls.length > 0) {
+                        localPhase++;
+                        renderPhases(localPhase + 1);
+                        for (let i = 0; i < successUrls.length; i++) {
+                            const shortUrl = successUrls[i].replace(/^https?:\/\//, '').substring(0, 40);
+                            progressLabel.textContent = `${vPrefix}EXT SCANNING: ${shortUrl}`;
+                            progressSub.textContent = `${i + 1} / ${successUrls.length} URL`;
+                            setPhaseProgress(localPhase, i / successUrls.length);
+                            try {
+                                const { response: er, data: ed } = await fetchApiJson(apiUrl('/api/ext-check'), {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ url: successUrls[i], basicAuth, viewportPreset })
+                                }, '/api/ext-check');
+                                if (er.ok) extResultsMap[successUrls[i]] = ed.results;
+                            } catch (e) {}
+                            setPhaseProgress(localPhase, (i + 1) / successUrls.length);
+                        }
+                    }
+
+                    return { resultsData, navConsistency, enhancedResults, aiResultsMap, playResultsMap, extResultsMap, succeededCount };
                 }
 
                 // --- PC（デスクトップ） ---
@@ -1707,6 +1755,7 @@
                     batchEnhancedResults   = pc.enhancedResults;
                     batchAIResults         = pc.aiResultsMap;
                     batchPlayResults       = pc.playResultsMap;
+                    batchExtResults        = pc.extResultsMap;
                     renderBatchSummary();
                     renderBatchNav(0);
                     $('batchResults').style.display = 'block';
@@ -1722,6 +1771,7 @@
                         batchMobileEnhancedResults = sp.enhancedResults;
                         batchMobileAIResults       = sp.aiResultsMap;
                         batchMobilePlayResults     = sp.playResultsMap;
+                        batchMobileExtResults      = sp.extResultsMap;
                     } else {
                         // SPのみ: メイン変数として扱う
                         batchResultsData       = sp.resultsData;
@@ -1729,6 +1779,7 @@
                         batchEnhancedResults   = sp.enhancedResults;
                         batchAIResults         = sp.aiResultsMap;
                         batchPlayResults       = sp.playResultsMap;
+                        batchExtResults        = sp.extResultsMap;
                         renderBatchSummary();
                         renderBatchNav(0);
                         $('batchResults').style.display = 'block';
@@ -1736,7 +1787,7 @@
                 }
 
                 progressFill.style.width = '100%';
-                const phasesDone = [doEnhanced ? 'DEEP' : null, doAI ? 'MULTI' : null, doPlayBatch ? 'PLAY' : null].filter(Boolean).join('/');
+                const phasesDone = [doEnhanced ? 'DEEP' : null, doAI ? 'MULTI' : null, doPlayBatch ? 'PLAY' : null, doExtBatch ? 'EXT' : null].filter(Boolean).join('/');
                 const viewLabel  = viewportMode === 'both' ? 'PC+SP' : viewportMode === 'mobile' ? 'SP' : 'PC';
                 const succeededCount = batchResultsData.filter(r => r.success).length;
                 progressLabel.textContent = `完了（${viewLabel}${phasesDone ? ` / ${phasesDone}` : ''}）: ${succeededCount}/${batchResultsData.length}件`;
@@ -1765,6 +1816,7 @@
             const doDeep = $('deepScanOpt').checked;
             const doMulti = $('multiScanOpt').checked;
             const doPlay = $('playScanOpt').checked;
+            const doExt = $('extScanOpt').checked;
             const viewportMode = getViewportMode();
             const runDesktop = viewportMode !== 'mobile';
             const runMobile = viewportMode !== 'desktop';
@@ -1774,7 +1826,7 @@
             btn.disabled = true;
 
             // --- 進捗インジケーター ---
-            const phasesPerView = 1 + (doDeep ? 1 : 0) + (doMulti ? 1 : 0) + (doPlay ? 1 : 0);
+            const phasesPerView = 1 + (doDeep ? 1 : 0) + (doMulti ? 1 : 0) + (doPlay ? 1 : 0) + (doExt ? 1 : 0);
             const totalPhases = phasesPerView * viewCount;
             const progress      = $('singleProgress');
             const progressFill  = $('singleProgressFill');
@@ -1792,6 +1844,7 @@
                 if (doDeep) phaseLabels.push(prefix ? `${prefix} DEEP` : 'DEEP');
                 if (doMulti) phaseLabels.push(prefix ? `${prefix} MULTI` : 'MULTI');
                 if (doPlay) phaseLabels.push(prefix ? `${prefix} PLAY` : 'PLAY');
+                if (doExt) phaseLabels.push(prefix ? `${prefix} EXT` : 'EXT');
             };
             if (runDesktop && runMobile) {
                 pushPhaseLabels('PC');
@@ -1832,7 +1885,8 @@
                     basic: null,
                     deep: null,
                     multi: null,
-                    play: null
+                    play: null,
+                    ext: null
                 };
                 const labelPrefix = viewLabel ? `${viewLabel} ` : '';
 
@@ -1915,11 +1969,14 @@
                                 ...scoreTableIds,
                                 playEnabled: doPlay,
                                 playScore: snapshot.play ? computePlayScore(snapshot.play) : null,
+                                extEnabled: doExt,
+                                extScore: snapshot.ext ? computeExtScore(snapshot.ext) : null,
                                 state: {
                                     basicResults: snapshot.basic,
                                     deepResults: doDeep ? snapshot.deep : null,
                                     multiAiData: snapshot.multi,
-                                    playResults: snapshot.play
+                                    playResults: snapshot.play,
+                                    extResults: snapshot.ext
                                 }
                             }
                         );
@@ -1950,17 +2007,58 @@
                                 ...scoreTableIds,
                                 playEnabled: true,
                                 playScore: computePlayScore(snapshot.play),
+                                extEnabled: doExt,
+                                extScore: snapshot.ext ? computeExtScore(snapshot.ext) : null,
                                 state: {
                                     basicResults: snapshot.basic,
                                     deepResults: doDeep ? snapshot.deep : null,
                                     multiAiData: doMulti ? snapshot.multi : null,
-                                    playResults: snapshot.play
+                                    playResults: snapshot.play,
+                                    extResults: snapshot.ext
                                 }
                             }
                         );
                     } catch (e) {
                         clearInterval(tPlay);
                         progressLabel.textContent = `${labelPrefix}PLAYWRIGHT エラー: ${e.message}`;
+                    }
+                    localPhaseIndex++;
+                }
+
+                // --- EXT ---
+                if (doExt && snapshot.basic) {
+                    const extPhase = phaseOffset + localPhaseIndex;
+                    progressLabel.textContent = `${labelPrefix}EXT SCANNING（IBM ACE + 拡張検査）...`;
+                    renderSinglePhases(extPhase + 1);
+                    const tExt = startPhaseTimer(extPhase);
+                    try {
+                        await runExtCheck(true, { viewportPreset });
+                        clearInterval(tExt);
+                        setSinglePhaseProgress(extPhase, 1);
+                        snapshot.ext = cloneData(lastExtResults);
+                        renderScanScoreTable(
+                            computeBasicScore(snapshot.basic),
+                            doDeep ? computeDeepScore(snapshot.deep) : null,
+                            doMulti ? computeMultiScore(snapshot.multi) : null,
+                            doDeep, doMulti,
+                            {
+                                ...scoreTableIds,
+                                playEnabled: doPlay,
+                                playScore: snapshot.play ? computePlayScore(snapshot.play) : null,
+                                extEnabled: true,
+                                extScore: computeExtScore(snapshot.ext),
+                                state: {
+                                    basicResults: snapshot.basic,
+                                    deepResults: doDeep ? snapshot.deep : null,
+                                    multiAiData: doMulti ? snapshot.multi : null,
+                                    playResults: snapshot.play,
+                                    extResults: snapshot.ext
+                                }
+                            }
+                        );
+                    } catch (e) {
+                        clearInterval(tExt);
+                        progressLabel.textContent = `${labelPrefix}EXT SCAN エラー: ${e.message}`;
                     }
                 }
                 return snapshot;
@@ -2020,12 +2118,13 @@
                 lastEnhancedResults = cloneData(primarySnapshot?.deep || null);
                 aiResults = primarySnapshot?.multi ? cloneData(primarySnapshot.multi) : {};
                 lastPlayResults = primarySnapshot?.play ? cloneData(primarySnapshot.play) : null;
+                lastExtResults = primarySnapshot?.ext ? cloneData(primarySnapshot.ext) : null;
                 lastMobileScanSnapshot = runMobile ? cloneData(mobileSnapshot) : null;
 
                 refreshScoreTable();
                 renderAllTabs('pc');
                 if (runMobile && mobileSnapshot) {
-                    renderAllTabs('sp', mobileSnapshot.basic, mobileSnapshot.deep || null, mobileSnapshot.multi || {}, mobileSnapshot.play || null);
+                    renderAllTabs('sp', mobileSnapshot.basic, mobileSnapshot.deep || null, mobileSnapshot.multi || {}, mobileSnapshot.play || null, mobileSnapshot.ext || null);
                 }
                 $('results').classList.add('visible');
                 $('exportArea').classList.add('visible');
@@ -2320,6 +2419,36 @@
                      score: Math.round(pass / getTargetScList().length * 100) };
         }
 
+        function computeExtScore(extData) {
+            if (!extData || !extData.length) return null;
+            const scSet = new Set(getTargetScList());
+            const rank = { fail: 0, pass: 1, unverified: 2, na: 3 };
+            const scMap = {};
+            function merge(sc, status) {
+                if (!sc || !scSet.has(sc)) return;
+                const cur = scMap[sc];
+                if (!cur || rank[status] < rank[cur.status]) scMap[sc] = { status };
+            }
+            extData.forEach(r => {
+                const rawStatus = r.status === 'fail' ? 'fail'
+                    : r.status === 'pass' ? 'pass'
+                    : r.status === 'not_applicable' ? 'na' : 'unverified';
+                const d = applyDecisionToStatus(`EXT:${r.sc}`, rawStatus, 'serious');
+                splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status));
+            });
+            let fail = 0, pass = 0, na = 0, unverified = 0;
+            Object.values(scMap).forEach(({ status }) => {
+                if (status === 'fail') fail++;
+                else if (status === 'pass') pass++;
+                else if (status === 'na') na++;
+                else unverified++;
+            });
+            return { total: fail + pass + na + unverified,
+                     critical: 0, serious: fail, moderate: 0, minor: 0,
+                     pass, na, unverified,
+                     score: Math.round(pass / getTargetScList().length * 100) };
+        }
+
         function computeMultiScore(aiData) {
             if (!aiData) return null;
             const lo = { 'A': 1, 'AA': 2, 'AAA': 3 };
@@ -2343,7 +2472,7 @@
                      score: Math.round(pass / getTargetScList().length * 100) };
         }
 
-        function computeTotalScore(basicResults, deepResults, multiAiData, playResults) {
+        function computeTotalScore(basicResults, deepResults, multiAiData, playResults, extResults) {
             const rank = { fail: 0, pass: 1, unverified: 2, na: 3 };
             const scMap = {}; // sc → { result, impact }
             const lo = { 'A': 1, 'AA': 2, 'AAA': 3 };
@@ -2399,6 +2528,15 @@
                     splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, d.impact));
                 });
             }
+            if (extResults) {
+                extResults.forEach(r => {
+                    if (!r.sc) return;
+                    const rawStatus = r.status === 'fail' ? 'fail' : r.status === 'pass' ? 'pass'
+                               : r.status === 'not_applicable' ? 'na' : 'unverified';
+                    const d = applyDecisionToStatus(`EXT:${r.sc}`, rawStatus, 'serious');
+                    splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, d.impact));
+                });
+            }
 
             const imp = { critical: 0, serious: 0, moderate: 0, minor: 0 };
             let pass = 0, na = 0, unverified = 0, fail = 0;
@@ -2421,6 +2559,7 @@
             DEEP: 'badge-deep',
             MULTI: 'badge-multi',
             PLAY: 'badge-play',
+            EXT: 'badge-ext',
             BATCH: 'badge-batch'
         };
 
@@ -2458,7 +2597,7 @@
         // ============================================================
         // 全タブ再描画（BASIC + DEEP + MULTI の結果をマージ）
         // ============================================================
-        function renderAllTabs(suffix = 'pc', basic = lastResults, deep = lastEnhancedResults, multi = aiResults, play = lastPlayResults) {
+        function renderAllTabs(suffix = 'pc', basic = lastResults, deep = lastEnhancedResults, multi = aiResults, play = lastPlayResults, ext = lastExtResults) {
             const lo    = { 'A': 1, 'AA': 2, 'AAA': 3 };
             const lim   = lo[targetLevel] || 2;
 
@@ -2537,10 +2676,24 @@
                 });
             }
 
+            // EXT results
+            if (ext) {
+                ext.forEach(r => {
+                    if (!r.sc) return;
+                    if (!splitCompositeSc(r.sc).some(sc => scSet.has(sc))) return;
+                    const dkey = `EXT:${r.sc}`;
+                    const defaultBucket = r.status === 'fail' ? 'serious'
+                        : r.status === 'pass' ? 'pass'
+                        : r.status === 'not_applicable' ? 'na' : 'unverified';
+                    const dest = applyDecision(dkey, defaultBucket, 'serious');
+                    (buckets[dest] || buckets.unverified).push({ src: 'EXT', type: 'ext', data: r, dkey });
+                });
+            }
+
             // SC 3.2.3/3.2.4 ナビゲーション一貫性はカード表示せず情報バーで表示
 
             // 各タブを描画（バッジ数はSC単位のTOTALスコアに合わせる）
-            const ts = computeTotalScore(basic, deep || null, Object.keys(multi || {}).length > 0 ? multi : null, play || null);
+            const ts = computeTotalScore(basic, deep || null, Object.keys(multi || {}).length > 0 ? multi : null, play || null, ext || null);
             // スコア表のTOTAL行と同じ正規化（未カバーSCをunverifiedに補完）
             const _fixedTotal = getTargetScList().length;
             const _tsUsed = (ts.critical||0) + (ts.serious||0) + (ts.moderate||0) + (ts.minor||0) + (ts.pass||0) + (ts.na||0);
@@ -2598,6 +2751,13 @@
                             const countText = r.violations && r.violations.length ? `検出件数：${r.violations.length}件` : '';
                             return renderCardItem(no, src, r.status === 'fail' ? 'serious' : null, r.sc, null, r.sc ? `SC ${r.sc}` : 'PLAY検査', r.message || '', countText, locs, dkey);
                         }
+                        if (type === 'ext') {
+                            const r    = data;
+                            const locs = (r.violations || []).slice(0, 8);
+                            const countText = r.violations && r.violations.length ? `検出件数：${r.violations.length}件` : '';
+                            const title = r.name || (r.sc ? `SC ${r.sc}` : 'EXT検査');
+                            return renderCardItem(no, src, r.status === 'fail' ? 'serious' : null, r.sc, null, title, r.message || '', countText, locs, dkey);
+                        }
                         return '';
                     }).join('')
                     : EMPTY;
@@ -2613,17 +2773,21 @@
             const scoreBlockId = options.scoreBlockId || null;
             const playEnabled = !!options.playEnabled;
             const playScore   = options.playScore || null;
+            const extEnabled  = !!options.extEnabled;
+            const extScore    = options.extScore || null;
             const state = options.state || {};
             const basicResults = state.basicResults !== undefined ? state.basicResults : lastResults;
             const deepResults = state.deepResults !== undefined ? state.deepResults : (deepEnabled ? lastEnhancedResults : null);
             const multiAiData = state.multiAiData !== undefined ? state.multiAiData : (multiEnabled && Object.keys(aiResults).length > 0 ? aiResults : null);
             const playData    = state.playResults  !== undefined ? state.playResults  : (playEnabled ? lastPlayResults : null);
+            const extData     = state.extResults   !== undefined ? state.extResults   : (extEnabled ? lastExtResults : null);
 
             const totalScore = computeTotalScore(
                 basicResults,
                 deepEnabled ? deepResults : null,
                 multiEnabled ? multiAiData : null,
-                playEnabled ? playData : null
+                playEnabled ? playData : null,
+                extEnabled ? extData : null
             );
 
             // WCAGレベルごとの固定項目数で正規化
@@ -2654,6 +2818,7 @@
             const nd = normalize(deepScore);
             const nm = normalize(multiScore);
             const np = normalize(playScore);
+            const ne = normalize(extScore);
 
             function scoreChip(score) {
                 if (score === null || score === undefined) return DASH;
@@ -2696,11 +2861,13 @@
             const deepLabel  = `DEEP<br><span class="score-row-sub">ヒューリスティック検査</span>`;
             const multiLabel = `MULTI<br><span class="score-row-sub">AI 検査</span>`;
             const playLabel  = `PLAY<br><span class="score-row-sub">Playwright 検査</span>`;
+            const extLabel   = `EXT<br><span class="score-row-sub">IBM ACE + 拡張検査</span>`;
             body.innerHTML =
                 row(basicLabel, 'label-basic', nb, true, false) +
                 row(deepLabel, 'label-deep', nd, deepEnabled, false) +
                 row(multiLabel, 'label-multi', nm, multiEnabled, false) +
                 row(playLabel, 'label-play', np, playEnabled, false) +
+                row(extLabel, 'label-ext', ne, extEnabled, false) +
                 row('TOTAL', 'label-total', normalize(totalScore), true, true);
 
             const table = $(scoreTableId);
@@ -2737,9 +2904,11 @@
         }
 
         // 列構成: [No, 検査種別, SC, 検査項目, 適合レベル, 結果, 場所, 検出数, 重要度, 詳細, 改善案]
-        function buildReportRows(results, url, aiData, enhancedData, navConsistency) {
+        function buildReportRows(results, url, aiData, enhancedData, navConsistency, playData, extData) {
             if (aiData === undefined) aiData = aiResults;
             if (enhancedData === undefined) enhancedData = lastEnhancedResults;
+            if (playData === undefined) playData = lastPlayResults;
+            if (extData === undefined) extData = lastExtResults;
             const impactJa = { critical: '緊急', serious: '重大', moderate: '中程度', minor: '軽微' };
             const levelOrder = { 'A': 1, 'AA': 2, 'AAA': 3 };
             const targetLevelNum = levelOrder[targetLevel] || 2;
@@ -2843,6 +3012,57 @@
                 });
             }
 
+            // --- PLAY（Playwright）検査結果 ---
+            if (playData && playData.length > 0) {
+                const reportScSet = new Set(getTargetScList());
+                const scLevelMap = {};
+                Object.entries({ A: WCAG_SC.A, AA: WCAG_SC.AA, AAA: WCAG_SC.AAA }).forEach(([lv, list]) => {
+                    list.forEach(sc => { scLevelMap[sc] = lv; });
+                });
+                const playStatusMap = { pass: '合格', fail: '不合格', error: 'エラー', not_applicable: '対象外', unverified: '判定不能' };
+                playData.forEach(r => {
+                    if (!splitCompositeSc(r.sc).some(sc => reportScSet.has(sc))) return;
+                    const level = scLevelMap[r.sc] || 'A';
+                    const violations = r.violations || [];
+                    const decP = manualDecisions.get(`PLAY:${r.sc}`);
+                    const resultP = decP ? (decP === 'ok' ? '合格' : decP === 'ng' ? '不合格' : playStatusMap[r.status] || r.status)
+                                        : playStatusMap[r.status] || r.status;
+                    rows.push([
+                        String(itemNo++), 'PLAY', r.sc, r.name || `SC ${r.sc}`, level,
+                        resultP,
+                        violations.slice(0, 3).join('\n'),
+                        violations.length > 0 ? String(violations.length) : '',
+                        '', r.message || '', ''
+                    ]);
+                });
+            }
+
+            // --- EXT（拡張）検査結果 ---
+            if (extData && extData.length > 0) {
+                const reportScSet = new Set(getTargetScList());
+                const scLevelMap = {};
+                Object.entries({ A: WCAG_SC.A, AA: WCAG_SC.AA, AAA: WCAG_SC.AAA }).forEach(([lv, list]) => {
+                    list.forEach(sc => { scLevelMap[sc] = lv; });
+                });
+                const extStatusMap = { pass: '合格', fail: '不合格', error: 'エラー', not_applicable: '対象外', unverified: '判定不能' };
+                extData.forEach(r => {
+                    if (!r.sc) return;
+                    if (!splitCompositeSc(r.sc).some(sc => reportScSet.has(sc))) return;
+                    const level = scLevelMap[r.sc] || 'A';
+                    const violations = r.violations || [];
+                    const decE = manualDecisions.get(`EXT:${r.sc}`);
+                    const resultE = decE ? (decE === 'ok' ? '合格' : decE === 'ng' ? '不合格' : extStatusMap[r.status] || r.status)
+                                        : extStatusMap[r.status] || r.status;
+                    rows.push([
+                        String(itemNo++), 'EXT', r.sc, r.name || `SC ${r.sc}`, level,
+                        resultE,
+                        violations.slice(0, 3).join('\n'),
+                        violations.length > 0 ? String(violations.length) : '',
+                        '', r.message || '', ''
+                    ]);
+                });
+            }
+
             // --- SC 3.2.3/3.2.4 ナビゲーション一貫性（一括検査のみ）---
             if (navConsistency) {
                 const nc = navConsistency;
@@ -2891,13 +3111,13 @@
                 const pages = [];
 
                 // PC rows
-                const pcRows = buildReportRows(lastResults, baseUrl, aiResults, lastEnhancedResults, batchNavConsistency);
+                const pcRows = buildReportRows(lastResults, baseUrl, aiResults, lastEnhancedResults, batchNavConsistency, lastPlayResults, lastExtResults);
 
                 let mergedRows;
                 if (lastMobileScanSnapshot) {
                     // SP rows を結合し 1 URL = 1 シートに統合
                     const sp = lastMobileScanSnapshot;
-                    const spRows = buildReportRows(sp.basic, baseUrl, sp.multi || {}, sp.deep || null, null);
+                    const spRows = buildReportRows(sp.basic, baseUrl, sp.multi || {}, sp.deep || null, null, sp.play || null, sp.ext || null);
                     const sep = Array(11).fill('');
                     mergedRows = [
                         Object.assign([...sep], { 0: '＜PC VIEW＞' }),
@@ -2942,13 +3162,13 @@
                 const hasMobile = batchMobileResultsData.length > 0;
 
                 batchResultsData.filter(r => r.success).forEach((r, i) => {
-                    const pcRows = buildReportRows(r.results, r.url, batchAIResults[r.url] || {}, batchEnhancedResults[r.url] || null, batchNavConsistency);
+                    const pcRows = buildReportRows(r.results, r.url, batchAIResults[r.url] || {}, batchEnhancedResults[r.url] || null, batchNavConsistency, batchPlayResults[r.url] || null, batchExtResults[r.url] || null);
 
                     // SP データ（PC+SP モード時）は同一シートに統合
                     const mobileR = hasMobile ? batchMobileResultsData[i] : null;
                     let mergedRows;
                     if (mobileR?.success) {
-                        const spRows = buildReportRows(mobileR.results, mobileR.url, batchMobileAIResults[mobileR.url] || {}, batchMobileEnhancedResults[mobileR.url] || null, null);
+                        const spRows = buildReportRows(mobileR.results, mobileR.url, batchMobileAIResults[mobileR.url] || {}, batchMobileEnhancedResults[mobileR.url] || null, null, batchMobilePlayResults[mobileR.url] || null, batchMobileExtResults[mobileR.url] || null);
                         const sep = Array(11).fill('');
                         mergedRows = [
                             Object.assign([...sep], { 0: '＜PC VIEW＞' }),
@@ -3098,6 +3318,39 @@
             } catch (e) {
                 const msg = e.name === 'AbortError' ? 'PLAYWRIGHTタイムアウト（6分超過）' : e.message;
                 if (!silent) console.warn('[PLAYWRIGHT] エラー:', msg);
+                throw e;
+            }
+        }
+
+        async function runExtCheck(silent = false, options = {}) {
+            const url = document.getElementById('urlInput').value.trim();
+            if (!url) { if (!silent) alert('URLを入力してください'); return; }
+
+            try {
+                const basicUser = document.getElementById('basicUser').value.trim();
+                const basicPass = document.getElementById('basicPass').value.trim();
+                const body = { url, viewportPreset: options.viewportPreset || 'desktop' };
+                if (basicUser && basicPass) body.basicAuth = { user: basicUser, pass: basicPass };
+
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 7 * 60 * 1000);
+                let rData;
+                try {
+                    const r = await fetchApiJson(apiUrl('/api/ext-check'), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body),
+                        signal: controller.signal
+                    }, '/api/ext-check');
+                    if (!r.response.ok) throw new Error(r.data.error || 'EXT SCAN失敗');
+                    rData = r.data;
+                } finally {
+                    clearTimeout(timer);
+                }
+                lastExtResults = rData.results;
+            } catch (e) {
+                const msg = e.name === 'AbortError' ? 'EXT SCANタイムアウト（7分超過）' : e.message;
+                if (!silent) console.warn('[EXT] エラー:', msg);
                 throw e;
             }
         }

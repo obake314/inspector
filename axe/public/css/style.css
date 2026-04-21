@@ -8,6 +8,7 @@
   --color-deep:#304C89;
   --color-multi:#0D7A5F;
   --color-play:#7B4DC8;
+  --color-ext:#D97706;
   --color-white:#fff;
   --color-crilical: #7f1d1d;
   --color-serious: #dc2626;
@@ -316,6 +317,9 @@ h1 {
 .scan-option-text-play {
   color: var(--color-play);
 }
+.scan-option-text-ext {
+  color: var(--color-ext);
+}
 .scan-option-checkbox {
   appearance: none;
   -webkit-appearance: none;
@@ -512,6 +516,9 @@ h1 {
 .scoretable tbody td.label-play{
   color: var(--color-play);
 }
+.scoretable tbody td.label-ext{
+  color: var(--color-ext);
+}
 .scoretable tbody td.label-basic{
   color: var(--color-basic);
 }
@@ -676,6 +683,9 @@ h1 {
 }
 .badge-play{
   background: var(--color-play);
+}
+.badge-ext{
+  background: var(--color-ext);
 }
 
 .badge.critical {

@@ -1,6 +1,6 @@
 # SPEC_WEB
 
-最終更新: 2026-04-21（PLAY SCAN拡張: 15項目化・スキャン中UI無効化・Roboto Condensedフォント・バッジ実数化・GAS PERMISSION_DENIED修正）
+最終更新: 2026-04-21（EXT SCAN新設: IBM Equal Access + Lighthouse相当 + CDP拡張検査・PLAY/EXT行をレポートに追加）
 
 ## 対象
 
@@ -64,6 +64,39 @@
 | フォーカス順序 | 2.4.3 | tabindex > 0 の有無・視覚的読み順からの逸脱を検出 |
 | フォーカスが隠れない（最低限） | 2.4.11 | fixed/sticky 要素によるフォーカス完全隠蔽を検出 |
 
+### EXT SCAN
+
+- API: `POST /api/ext-check`
+- エンジン: Playwright + IBM Equal Access Checker + ネイティブDOM検査 + CDP
+- npm: `accessibility-checker-engine`（IBM ACE エンジン; `ace-window.js` をページ内注入）
+- 入力: `{ url, basicAuth?, viewportPreset? }`
+- 出力: `{ success, url, results: [{ source, sc, status, violations[], message, name }], checkedAt }`
+- source: `IBM_ACE` / `EXT_NATIVE` / `EXT_CDP`
+- status: `pass` / `fail` / `unverified` / `error`
+- APIコスト不要（ローカルブラウザ実行）
+- タイムアウト: サーバー6分 / クライアント7分
+
+#### EXT SCAN 検査内容
+
+| 種別 | SC | 内容 |
+|---|---|---|
+| IBM ACE | 複数SC | axe-coreとは異なるルールセット（50+ルール）で違反を検出・SC別に集約 |
+| ネイティブ | 4.1.1 | 重複ID検出（`[id]`全列挙） |
+| ネイティブ | 2.4.1 | `<main>` / `role="main"` の有無・スキップナビゲーションの確認 |
+| ネイティブ | 2.1.1 | スクロール可能要素（overflow:auto/scroll）に tabindex がないものを検出 |
+| ネイティブ | 2.4.6 | 見出し階層のスキップ（h1→h3 等）・h1 欠落/複数を検出 |
+| CDP拡張 | 2.1.4 | Chrome DevTools Protocol でキーボードイベントリスナーと accesskey を検出 |
+
+#### IBM ACE ルール → WCAG SC マッピング（主要）
+
+`WCAG20_Img_HasAlt`→1.1.1, `RPT_Elem_UniqueId`→4.1.1, `WCAG20_A_HasText`→2.4.4, `WCAG20_Html_HasLang`→3.1.1, `WCAG20_Doc_HasTitle`→2.4.2, `WCAG20_Input_ExplicitLabel`→1.3.1, `Rpt_Aria_ValidRole`→4.1.2, `WCAG21_Style_Viewport`→1.4.4 など50+ルール
+
+#### EXT SCAN スコア行
+
+- スコアテーブルに `EXT` 行を追加（amber色 `#D97706`）
+- `computeExtScore()` でSC単位に集約（`computePlayScore()` と同じ方式）
+- `computeTotalScore()` の第5引数として EXT 結果を統合
+
 ## UI構成
 
 - 単一チェック / 一括チェックのモード切替（初回スキャン後は切替禁止）
@@ -72,12 +105,12 @@
   - `SPのみ`（iPhone SE）
   - `PC+SP`
 - レベル選択: A / AA / AAA（AAAは設定で表示）
-- 単一スキャン: URL + `DEEP SCAN` / `MULTI SCAN` / `PLAY SCAN`
+- 単一スキャン: URL + `DEEP SCAN` / `MULTI SCAN` / `PLAYWRIGHT` / `EXT SCAN`
 - 一括スキャン: URL複数入力（最大10件）
 - Basic認証入力（BASIC/DEEPで利用）
 - 結果表示:
-  - PC VIEW ブロック: PCスコアテーブル（BASIC/DEEP/MULTI/PLAY/TOTAL）＋ PCスコア詳細タブ
-  - SP VIEW ブロック: SPスコアテーブル（BASIC/DEEP/MULTI/PLAY/TOTAL）＋ SPスコア詳細タブ
+  - PC VIEW ブロック: PCスコアテーブル（BASIC/DEEP/MULTI/PLAY/EXT/TOTAL）＋ PCスコア詳細タブ
+  - SP VIEW ブロック: SPスコアテーブル（BASIC/DEEP/MULTI/PLAY/EXT/TOTAL）＋ SPスコア詳細タブ
   - 各ブロックのスコア詳細タブ（緊急/重大/中程度/軽微/合格/該当なし/未検証）はそれぞれ独立して操作
   - タブ横の数字はそのタブに表示されるカードの実数（items.length）を表示。ただし0件のタブはSC単位集計値にフォールバック
 - クリアボタン（エクスポートエリア右端）:
@@ -92,6 +125,8 @@
 1. `check(url, { viewportPreset })`（BASIC）
 2. `runEnhancedCheck(true, { viewportPreset })`（DEEP、有効時）
 3. `runAIEvaluation(true, { viewportPreset })`（MULTI、有効時）
+4. `runPlaywrightCheck(true, { viewportPreset })`（PLAY、有効時）
+5. `runExtCheck(true, { viewportPreset })`（EXT、有効時）
 
 ビュー選択別の動作:
 
@@ -109,7 +144,7 @@
 - API: `POST /api/batch-check`
 - 入力: `{ urls[], level, basicAuth?, viewportPreset? }`
 - 上限: 10 URL
-- フェーズ: BASIC → DEEP（任意）→ MULTI（任意）
+- フェーズ: BASIC → DEEP（任意）→ MULTI（任意）→ PLAY（任意）→ EXT（任意）
 - ビュー選択（`viewportModeWrap`）は単一チェックと共通。選択値に応じて以下のビューで実行:
   - `PCのみ`: `desktop` 固定
   - `SPのみ`: `mobile`（iphone-se）固定
@@ -123,18 +158,24 @@
   - `batchMobileResultsData`: SPデータ（`PC+SP` 時のみ使用）
   - `batchMobileEnhancedResults`: `url → SP DEEP results`
   - `batchMobileAIResults`: `url → SP MULTI results`
+  - `batchPlayResults`: `url → PLAY results`
+  - `batchExtResults`: `url → EXT results`
+  - `batchMobilePlayResults`: `url → SP PLAY results`
+  - `batchMobileExtResults`: `url → SP EXT results`
   - `batchViewportMode`: 実行時の viewportMode 値
 
 ## スコアテーブル仕様
 
 ### 行ラベルとサブテキスト
 
-| 行 | ラベル | サブテキスト（`.score-row-sub`） |
-|---|---|---|
-| BASIC | `BASIC` | `axe-core 自動検査` |
-| DEEP  | `DEEP`  | `SC別ヒューリスティック検査 (A/AA)` または `(A/AA/AAA β)` |
-| MULTI | `MULTI` | `AI 総合評価`（選択中モデル名は設定に依存） |
-| TOTAL | `TOTAL` | なし |
+| 行 | ラベル | サブテキスト（`.score-row-sub`） | 色 |
+|---|---|---|---|
+| BASIC | `BASIC` | `axe-core 自動検査` | `#3581B8` |
+| DEEP  | `DEEP`  | `ヒューリスティック検査` | `#304C89` |
+| MULTI | `MULTI` | `AI 検査` | `#0D7A5F` |
+| PLAY  | `PLAY`  | `Playwright 検査` | `#7B4DC8` |
+| EXT   | `EXT`   | `IBM ACE + 拡張検査` | `#D97706` |
+| TOTAL | `TOTAL` | なし | — |
 
 ### DEEP / MULTI チェックボックス tooltip
 

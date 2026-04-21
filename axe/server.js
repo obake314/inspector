@@ -3418,6 +3418,7 @@ app.post('/api/drive-cleanup', async (req, res) => {
 // PLAYWRIGHT: Playwright アクセシビリティ検査
 // ============================================================
 const { chromium } = require('playwright');
+const aceWindowPath = require.resolve('accessibility-checker-engine/ace-window.js');
 
 /**
  * SC 4.1.2 - アクセシブルネーム・ロール監査（アクセシビリティスナップショット使用）
@@ -3943,6 +3944,396 @@ async function pw_check_2_4_11_focus_obscured(page) {
     return { sc: '2.4.11', status: 'error', violations: [], message: e.message };
   }
 }
+
+// ============================================================
+// EXT SCAN: IBM Equal Access + Lighthouse相当 + CDP拡張検査
+// ============================================================
+
+// IBM ACE ルール → WCAG SC マッピング（主要ルール）
+const IBM_RULE_SC_MAP = {
+  'WCAG20_Img_HasAlt':                  '1.1.1',
+  'WCAG20_Img_TitleEmptyWhenAltNull':   '1.1.1',
+  'WCAG20_Img_PresentationImgHasNonNullAlt': '1.1.1',
+  'WCAG20_Input_ExplicitLabel':         '1.3.1',
+  'WCAG20_Input_LabelBefore':           '1.3.1',
+  'WCAG20_Input_LabelAfter':            '1.3.1',
+  'WCAG20_Label_RefValid':              '1.3.1',
+  'WCAG20_Fieldset_HasLegend':          '1.3.1',
+  'WCAG20_Table_Structure':             '1.3.1',
+  'WCAG20_Table_CapSummRedundant':      '1.3.1',
+  'RPT_Table_DataHeadingsAria':         '1.3.1',
+  'WCAG20_Input_Autocomplete':          '1.3.5',
+  'WCAG20_Text_Emoticons':              '1.3.3',
+  'WCAG21_Input_Autocomplete':          '1.3.5',
+  'RPT_Media_VideoObjectTrigger':       '1.2.1',
+  'WCAG20_Object_HasText':              '1.1.1',
+  'RPT_Elem_UniqueId':                  '4.1.1',
+  'WCAG20_A_HasText':                   '2.4.4',
+  'WCAG20_A_InSkipNav':                 '2.4.1',
+  'RPT_Navigation_Skippable':           '2.4.1',
+  'WCAG20_Frame_HasTitle':              '2.4.1',
+  'WCAG20_Body_FirstASkips_Native_Host_Sematics': '2.4.1',
+  'WCAG20_Doc_HasTitle':                '2.4.2',
+  'WCAG20_Html_HasLang':                '3.1.1',
+  'WCAG20_Html_Lang_Valid':             '3.1.1',
+  'WCAG20_Elem_Lang_Valid':             '3.1.2',
+  'WCAG20_Input_LabelBefore':           '1.3.1',
+  'Rpt_Aria_ValidRole':                 '4.1.2',
+  'Rpt_Aria_RequiredProperties':        '4.1.2',
+  'Rpt_Aria_ValidPropertyValue':        '4.1.2',
+  'Rpt_Aria_OrphanedContent_Native_Host_Sematics': '1.3.1',
+  'Rpt_Aria_RegionLabel_Implicit':      '2.4.1',
+  'WCAG20_Input_VisibleLabel':          '2.4.6',
+  'RPT_Label_UniqueFor':                '1.3.1',
+  'WCAG20_Select_HasOptGroup':          '1.3.1',
+  'WCAG20_A_TargetAndText':             '3.2.5',
+  'WCAG20_Elem_UniqueAccessKey':        '2.1.4',
+  'WCAG20_Img_LinkTextNotRedundant':    '2.4.4',
+  'RPT_List_UseMarkup':                 '1.3.1',
+  'RPT_Blockquote_HasCite':             '1.3.1',
+  'WCAG20_Input_HasOnchange':           '3.2.2',
+  'WCAG20_Select_NoChangeAction':       '3.2.2',
+  'WCAG20_Blink_AlwaysTriggers':        '2.2.2',
+  'RPT_Marquee_Trigger':                '2.2.2',
+  'WCAG20_Meta_RedirectZero':           '2.2.1',
+  'RPT_Media_AltBrief':                 '1.1.1',
+  'WCAG20_Style_BackgroundImage':       '1.1.1',
+  'RPT_Embed_HasNoEmbed':               '1.1.1',
+  'WCAG21_Style_Viewport':              '1.4.4',
+  'WCAG22_Label_Tooltip_Required':      '3.3.2',
+};
+
+function ibmRuleToSC(ruleId) {
+  if (IBM_RULE_SC_MAP[ruleId]) return IBM_RULE_SC_MAP[ruleId];
+  // WCAG21_X_Y → 2.1 型のパターンを推定
+  const m = ruleId.match(/^WCAG(\d)(\d)_/);
+  if (m) return `${m[1]}.${m[2]}.x`;
+  return null;
+}
+
+/** EXT: IBM Equal Access Checker */
+async function ext_check_ibm_ace(page) {
+  try {
+    await page.addScriptTag({ path: aceWindowPath });
+    await page.waitForFunction(() => !!(window.ace && window.ace.Checker), { timeout: 10000 });
+    const raw = await page.evaluate(async () => {
+      try {
+        const checker = new window.ace.Checker();
+        const report = await checker.check(document, ['IBM_Accessibility']);
+        return (report && report.results) ? report.results : [];
+      } catch (e) {
+        return { _error: e.message };
+      }
+    });
+    if (!Array.isArray(raw)) return { source: 'IBM_ACE', sc: null, status: 'error', violations: [], message: raw._error || 'ACE実行エラー' };
+
+    // VIOLATION/POTENTIAL のみ抽出
+    const fails = raw.filter(r => Array.isArray(r.value) && r.value[1] === 'FAIL' && r.value[0] !== 'PASS');
+    // SC別に集約
+    const scMap = {};
+    fails.forEach(r => {
+      const sc = ibmRuleToSC(r.ruleId);
+      if (!sc) return;
+      if (!scMap[sc]) scMap[sc] = { ruleId: r.ruleId, sc, violations: [], message: r.message };
+      const loc = r.path && r.path.dom ? r.path.dom : (r.snippet ? r.snippet.slice(0, 80) : '');
+      if (loc && !scMap[sc].violations.includes(loc)) scMap[sc].violations.push(loc);
+    });
+    return Object.values(scMap).map(s => ({
+      source: 'IBM_ACE',
+      sc: s.sc,
+      status: 'fail',
+      violations: s.violations.slice(0, 10),
+      message: `IBM ACE: SC ${s.sc} - ${s.ruleId} (${s.violations.length}件)`,
+      name: `IBM Equal Access: SC ${s.sc}`
+    }));
+  } catch (e) {
+    return [{ source: 'IBM_ACE', sc: null, status: 'error', violations: [], message: e.message }];
+  }
+}
+
+/** EXT: SC 4.1.1 - 重複ID検出（ネイティブ） */
+async function ext_check_4_1_1_dup_id(page) {
+  try {
+    const result = await page.evaluate(() => {
+      const all = Array.from(document.querySelectorAll('[id]'));
+      const seen = {};
+      const dups = [];
+      all.forEach(el => {
+        if (!el.id) return;
+        seen[el.id] = (seen[el.id] || 0) + 1;
+      });
+      Object.keys(seen).forEach(id => {
+        if (seen[id] > 1) dups.push(`id="${id}" (${seen[id]}件)`);
+      });
+      return dups;
+    });
+    return {
+      source: 'EXT_NATIVE',
+      sc: '4.1.1',
+      status: result.length === 0 ? 'pass' : 'fail',
+      violations: result.slice(0, 15),
+      message: result.length === 0
+        ? '重複IDは検出されませんでした'
+        : `${result.length}個の重複IDを検出`,
+      name: 'SC 4.1.1: 重複ID検出'
+    };
+  } catch (e) {
+    return { source: 'EXT_NATIVE', sc: '4.1.1', status: 'error', violations: [], message: e.message };
+  }
+}
+
+/** EXT: SC 2.4.1 - ランドマーク領域（Lighthouse相当） */
+async function ext_check_2_4_1_landmarks(page) {
+  try {
+    const result = await page.evaluate(() => {
+      const hasMain = !!(
+        document.querySelector('main') ||
+        document.querySelector('[role="main"]')
+      );
+      const hasNav = !!(
+        document.querySelector('nav') ||
+        document.querySelector('[role="navigation"]')
+      );
+      const hasSkip = !!(
+        document.querySelector('a[href^="#"]') ||
+        document.querySelector('[class*="skip"]') ||
+        document.querySelector('[id*="skip"]')
+      );
+      const issues = [];
+      if (!hasMain) issues.push('<main>要素またはrole="main"が存在しません');
+      if (!hasNav) issues.push('<nav>要素またはrole="navigation"が存在しません');
+      if (!hasSkip) issues.push('スキップナビゲーションリンクが見当たりません');
+      return { issues, hasMain, hasNav, hasSkip };
+    });
+    return {
+      source: 'EXT_NATIVE',
+      sc: '2.4.1',
+      status: result.issues.length === 0 ? 'pass' : 'fail',
+      violations: result.issues,
+      message: result.issues.length === 0
+        ? 'ランドマーク領域とスキップナビゲーションが確認できました'
+        : result.issues.join('; '),
+      name: 'SC 2.4.1: ランドマーク領域'
+    };
+  } catch (e) {
+    return { source: 'EXT_NATIVE', sc: '2.4.1', status: 'error', violations: [], message: e.message };
+  }
+}
+
+/** EXT: SC 2.1.1 - スクロール可能領域のキーボードアクセス（Lighthouse相当） */
+async function ext_check_2_1_1_scrollable(page) {
+  try {
+    const violations = await page.evaluate(() => {
+      const results = [];
+      const all = Array.from(document.querySelectorAll('*'));
+      all.forEach(el => {
+        const style = getComputedStyle(el);
+        const overflowY = style.overflowY;
+        const overflowX = style.overflowX;
+        const isScrollable = (overflowY === 'auto' || overflowY === 'scroll' ||
+                              overflowX === 'auto' || overflowX === 'scroll');
+        if (!isScrollable) return;
+        const rect = el.getBoundingClientRect();
+        if (rect.width < 50 || rect.height < 50) return;
+        const tabindex = el.getAttribute('tabindex');
+        const role = el.getAttribute('role');
+        const isNativeScrollable = ['textarea', 'select'].includes(el.tagName.toLowerCase());
+        if (isNativeScrollable) return;
+        if (!tabindex || parseInt(tabindex) < 0) {
+          const tag = el.tagName.toLowerCase();
+          const id = el.id ? `#${el.id}` : '';
+          const cls = el.className ? `.${String(el.className).split(' ')[0]}` : '';
+          results.push(`${tag}${id}${cls} (overflow:${overflowY}/${overflowX})`);
+        }
+      });
+      return results.slice(0, 10);
+    });
+    return {
+      source: 'EXT_NATIVE',
+      sc: '2.1.1',
+      status: violations.length === 0 ? 'pass' : 'fail',
+      violations,
+      message: violations.length === 0
+        ? 'スクロール可能な要素はすべてキーボードでアクセス可能です'
+        : `${violations.length}個のスクロール可能要素にtabindexがありません`,
+      name: 'SC 2.1.1: スクロール領域キーボードアクセス'
+    };
+  } catch (e) {
+    return { source: 'EXT_NATIVE', sc: '2.1.1', status: 'error', violations: [], message: e.message };
+  }
+}
+
+/** EXT: SC 2.4.6 - 見出し階層順序（Lighthouse相当） */
+async function ext_check_2_4_6_heading_order(page) {
+  try {
+    const result = await page.evaluate(() => {
+      const headings = Array.from(document.querySelectorAll('h1,h2,h3,h4,h5,h6'));
+      const issues = [];
+      let prevLevel = 0;
+      headings.forEach(h => {
+        const level = parseInt(h.tagName[1]);
+        if (prevLevel > 0 && level > prevLevel + 1) {
+          const text = h.textContent.trim().slice(0, 40);
+          issues.push(`h${prevLevel}の次にh${level}（スキップ）: "${text}"`);
+        }
+        prevLevel = level;
+      });
+      const h1Count = headings.filter(h => h.tagName === 'H1').length;
+      if (h1Count === 0) issues.push('h1要素が存在しません');
+      if (h1Count > 1) issues.push(`h1が${h1Count}個あります（1個推奨）`);
+      return issues;
+    });
+    return {
+      source: 'EXT_NATIVE',
+      sc: '2.4.6',
+      status: result.length === 0 ? 'pass' : 'fail',
+      violations: result.slice(0, 10),
+      message: result.length === 0
+        ? '見出し階層は正しい順序です'
+        : `見出し階層に${result.length}件の問題を検出`,
+      name: 'SC 2.4.6: 見出し階層順序'
+    };
+  } catch (e) {
+    return { source: 'EXT_NATIVE', sc: '2.4.6', status: 'error', violations: [], message: e.message };
+  }
+}
+
+/** EXT: SC 2.1.4 - CDPイベントリスナーによるキーボードショートカット検出 */
+async function ext_check_2_1_4_cdp_shortcuts(page) {
+  try {
+    const cdpSession = await page.context().newCDPSession(page);
+    const { root: { nodeId: rootNodeId } } = await cdpSession.send('DOM.getDocument', { depth: 1 });
+
+    // keydown/keypress ハンドラを持つ要素を探索
+    const targetNodes = await page.evaluate(() => {
+      const interactive = Array.from(document.querySelectorAll('body, [role], button, a, input, [tabindex]'));
+      return interactive.slice(0, 30).map(el => ({
+        selector: el.id ? `#${el.id}` : el.tagName.toLowerCase(),
+        objectId: null
+      }));
+    });
+
+    const shortcuts = [];
+    for (const n of targetNodes.slice(0, 20)) {
+      try {
+        const obj = await page.evaluateHandle(sel => {
+          try { return document.querySelector(sel); } catch { return document.body; }
+        }, n.selector);
+        const { result } = await cdpSession.send('Runtime.callFunctionOn', {
+          functionDeclaration: 'function() { return this; }',
+          objectId: (await cdpSession.send('DOM.resolveNode', { nodeId: rootNodeId })).object.objectId,
+          returnByValue: false
+        }).catch(() => ({ result: null }));
+
+        if (result && result.objectId) {
+          const listeners = await cdpSession.send('DOMDebugger.getEventListeners', {
+            objectId: result.objectId, depth: 1
+          }).catch(() => ({ listeners: [] }));
+          const kbListeners = (listeners.listeners || []).filter(l =>
+            l.type === 'keydown' || l.type === 'keypress' || l.type === 'keyup'
+          );
+          if (kbListeners.length > 0) shortcuts.push(`${n.selector}: ${kbListeners.map(l => l.type).join(',')}`);
+        }
+      } catch (_) { /* スキップ */ }
+    }
+    await cdpSession.detach().catch(() => {});
+
+    // 別途DOM静的チェックも実行
+    const accesskeys = await page.evaluate(() => {
+      return Array.from(document.querySelectorAll('[accesskey]')).slice(0, 10).map(el => {
+        const tag = el.tagName.toLowerCase();
+        const id = el.id ? `#${el.id}` : '';
+        return `${tag}${id} accesskey="${el.getAttribute('accesskey')}"`;
+      });
+    });
+
+    const violations = [...accesskeys];
+    if (shortcuts.length > 0) violations.push(`キーボードイベントハンドラ検出: ${shortcuts.slice(0, 3).join(', ')}`);
+
+    return {
+      source: 'EXT_CDP',
+      sc: '2.1.4',
+      status: violations.length === 0 ? 'pass' : 'unverified',
+      violations: violations.slice(0, 10),
+      message: violations.length === 0
+        ? '文字キーショートカットは検出されませんでした'
+        : `${violations.length}件の潜在的なショートカット要素を検出（無効化・変更手段の手動確認が必要）`,
+      name: 'SC 2.1.4: 文字キーショートカット（CDP拡張）'
+    };
+  } catch (e) {
+    return { source: 'EXT_CDP', sc: '2.1.4', status: 'error', violations: [], message: e.message };
+  }
+}
+
+app.post('/api/ext-check', async (req, res) => {
+  const { url, basicAuth, viewportPreset } = req.body;
+  if (!url) return res.status(400).json({ error: 'URLを指定してください' });
+
+  const HANDLER_TIMEOUT = 6 * 60 * 1000;
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    if (!res.headersSent) res.status(504).json({ error: 'EXT SCANがタイムアウトしました（6分超過）' });
+  }, HANDLER_TIMEOUT);
+
+  let browser;
+  try {
+    browser = await chromium.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+    });
+    const preset = (viewportPreset || 'desktop').toLowerCase();
+    const viewport = (preset.includes('mobile') || preset.includes('iphone') || preset.includes('sp'))
+      ? { width: 375, height: 812 }
+      : { width: 1280, height: 800 };
+
+    const contextOptions = { viewport };
+    if (basicAuth && basicAuth.user && basicAuth.pass) {
+      contextOptions.httpCredentials = { username: basicAuth.user, password: basicAuth.pass };
+    }
+    const context = await browser.newContext(contextOptions);
+    const page = await context.newPage();
+
+    await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
+    await page.waitForTimeout(1000);
+
+    const withTimeout = (fn, ms = 30000) =>
+      Promise.race([fn(), new Promise(r => setTimeout(() => r([{ source: 'EXT', sc: null, status: 'unverified', violations: [], message: 'タイムアウト' }]), ms))]);
+
+    const results = [];
+
+    // IBM ACE 検査（複数SC同時取得）
+    const aceResults = await withTimeout(() => ext_check_ibm_ace(page));
+    if (Array.isArray(aceResults)) results.push(...aceResults);
+    else results.push(aceResults);
+
+    // リロードして他の検査
+    await page.reload({ waitUntil: 'networkidle' }).catch(() => {});
+    await page.waitForTimeout(500);
+
+    // ネイティブ検査
+    results.push(await withTimeout(() => ext_check_4_1_1_dup_id(page)));
+    results.push(await withTimeout(() => ext_check_2_4_1_landmarks(page)));
+    results.push(await withTimeout(() => ext_check_2_1_1_scrollable(page)));
+    results.push(await withTimeout(() => ext_check_2_4_6_heading_order(page)));
+
+    // CDP拡張検査
+    results.push(await withTimeout(() => ext_check_2_1_4_cdp_shortcuts(page)));
+
+    await page.close();
+
+    // 配列をフラット化して単一アイテム結果に統一
+    const flat = results.flat().filter(r => r && r.sc);
+    console.log(`[EXT] 完了: ${flat.length}件 (${url})`);
+    if (!timedOut) res.json({ success: true, url, results: flat, checkedAt: new Date().toISOString() });
+  } catch (error) {
+    console.error('[EXT] Error:', error);
+    if (!timedOut && !res.headersSent) res.status(500).json({ error: error.message });
+  } finally {
+    clearTimeout(timer);
+    if (browser) await browser.close();
+  }
+});
 
 app.post('/api/playwright-check', async (req, res) => {
   const { url, basicAuth, viewportPreset } = req.body;

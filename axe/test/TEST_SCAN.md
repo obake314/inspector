@@ -530,3 +530,53 @@
 - 期待結果
   - ラベルなし要素がある場合: `sc: "3.3.2"`, `status: "fail"`, violationsにその要素のセレクタが含まれる
   - すべてラベルあり: `status: "pass"`
+
+## T-SCAN-54: EXT SCAN エンドポイント基本動作
+
+- 手順
+  1. `POST /axe/api/ext-check` with `{url: "https://example.com"}`
+- 期待結果
+  - `success: true`
+  - `results[]` に `source: "IBM_ACE"` / `"EXT_NATIVE"` / `"EXT_CDP"` のアイテムが含まれる
+  - 各 result に `sc`, `status`, `violations[]`, `message` が含まれる
+  - サーバーログに `[EXT] 完了: N件` と出力される
+
+## T-SCAN-55: EXT SCAN - IBM Equal Access
+
+- 手順
+  1. `<img>` に alt なし / `id` 重複 / `lang` なしのテストページで EXT SCAN を実行
+- 期待結果
+  - `source: "IBM_ACE"`, `sc: "1.1.1"` の fail 結果が含まれる
+  - IBM ACE が検出した violations に要素セレクタまたは HTML スニペットが含まれる
+
+## T-SCAN-56: EXT SCAN - 重複ID検出（4.1.1）
+
+- 手順
+  1. `<div id="foo">` が2つ以上あるページで EXT SCAN を実行
+- 期待結果
+  - `source: "EXT_NATIVE"`, `sc: "4.1.1"`, `status: "fail"`
+  - violations に `id="foo" (2件)` の形式で含まれる
+
+## T-SCAN-57: EXT SCAN - ランドマーク検出（2.4.1）
+
+- 手順
+  1. `<main>` がないページで EXT SCAN を実行
+- 期待結果
+  - `source: "EXT_NATIVE"`, `sc: "2.4.1"`, `status: "fail"`
+  - violations に `<main>要素またはrole="main"が存在しません` が含まれる
+
+## T-SCAN-58: EXT SCAN チェックボックス - スキャン中無効化
+
+- 手順
+  1. EXT SCAN チェックボックスをオンにして SCAN を開始する
+- 期待結果
+  - スキャン中: `extScanOpt` checkbox が `disabled`、`extScanLabel` が `opacity:0.4`
+  - スキャン完了後: disabled 解除・opacity 復元
+
+## T-SCAN-59: EXT SCAN スコアテーブル行表示
+
+- 手順
+  1. EXT SCAN をオンにしてスキャン実行
+- 期待結果
+  - スコアテーブルに `EXT | IBM ACE + 拡張検査` 行が amber色（#D97706）で表示される
+  - TOTAL 行に EXT の結果が統合される
