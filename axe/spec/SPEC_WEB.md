@@ -106,7 +106,7 @@
   - `SPのみ`（iPhone SE）
   - `PC+SP`
 - レベル選択: A / AA / AAA（AAAは設定で表示）
-- 単一スキャン: URL + `DEEP SCAN` / `MULTI SCAN` / `PLAYWRIGHT` / `EXT SCAN`
+- 単一スキャン: URL + `DEEP` / `MULTI` / `PLAYWRIGHT` / `EXT` チェックボックス
 - 一括スキャン: URL複数入力（最大10件）
 - Basic認証入力（BASIC/DEEPで利用）
 - 結果表示:
@@ -150,7 +150,7 @@
   - `PCのみ`: `desktop` 固定
   - `SPのみ`: `mobile`（iphone-se）固定
   - `PC+SP`: デスクトップパイプライン完了後、モバイルパイプラインを連続実行
-- 進捗チップ（`PC+SP` 時）: `PC BASIC → PC DEEP → PC MULTI → SP BASIC → SP DEEP → SP MULTI`
+- 進捗チップ（`PC+SP` 時）: 選択フェーズに応じて `PC BASIC → PC DEEP → PC MULTI → PC PLAY → PC EXT → SP BASIC → ...` の順で表示
 - 結果格納:
   - `batchResultsData`: PCデータ（SPのみ時はSPデータ）
   - `batchEnhancedResults`: `url → DEEP results`
@@ -233,6 +233,10 @@
 - `POST /api/batch-check`
 - `POST /api/enhanced-check`
 - `POST /api/ai-evaluate`
+- `POST /api/playwright-check`
+- `POST /api/ext-check`
+- `GET /api/sheets-status`
+- `POST /api/export-report`
 
 ## UI操作制約
 
@@ -240,13 +244,13 @@
   - 単一/一括モード切替（`#modeToggle`）
   - ビュー選択ラジオ（`PCのみ` / `SPのみ` / `PC+SP`）
   - 対象レベル切替（`.level-select-btn`）
-  - DEEP SCAN / MULTI SCAN / PLAYWRIGHT / EXT SCAN チェックボックス
+  - `DEEP` / `MULTI` / `PLAYWRIGHT` / `EXT` チェックボックス
   - オプション設定ブロック（`#optionsSection`）
 - スキャン中はボタンを `loading` 状態に変更
 
 ## SCANアクション配置
 
-- SCAN / BATCH ボタンと DEEP SCAN / MULTI SCAN / PLAYWRIGHT / EXT SCAN チェックボックスはオプション設定ブロックの下（`#scanActionSection`）に配置
+- `SCAN` / `BATCH` ボタンと `DEEP` / `MULTI` / `PLAYWRIGHT` / `EXT` チェックボックスはオプション設定ブロックの下（`#scanActionSection`）に配置
 - 単一モード: `#singleScanControls` を表示
 - 一括モード: `#batchScanControls` を表示（モード切替時に連動）
 
@@ -255,7 +259,7 @@
 - カード構成: `[バッジ] [SC番号] [レベル] タイトル ▼ / サマリー / 件数 / 検出箇所`
 - SC番号は数字のみ表示（"SC" プレフィックスなし）
 - カード内 `[No.n]` 要素は表示しない
-- バッジ色: BASIC `#3581B8` / DEEP `#304C89` / MULTI `#0D7A5F` / BATCH `#334155`
+- バッジ色: BASIC `#3581B8` / DEEP `#304C89` / MULTI `#0D7A5F` / PLAY `#7B4DC8` / EXT `#D97706` / BATCH `#334155`
 
 ## 一括検査サマリーテーブル
 
