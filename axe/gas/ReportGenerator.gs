@@ -214,10 +214,12 @@ function generateReport(info) {
 
   body.appendParagraph('── 報告書終了 ──')
     .setAlignment(DocumentApp.HorizontalAlignment.CENTER)
-    .editAsText().setFontSize(9).setForegroundColor('#777');
+    .editAsText().setFontSize(9).setForegroundColor('#777777');
 
   doc.saveAndClose();
-  return doc.getUrl();
+  var docUrl = doc.getUrl();
+  Logger.log('Generated Document URL: ' + docUrl); // 生成されたドキュメントのURLをログに出力
+  return docUrl;
 }
 
 /* ============================================================
