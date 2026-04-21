@@ -1,78 +1,78 @@
-# AXE INSPECTOR
+# ACCESSIBILITY INSPECTOR
 
-axe-core + Puppeteer + **Gemini AI** を使用したアクセシビリティチェッカー。
+WCAG 2.2 のアクセシビリティ監査を、axe-core、Puppeteer、Playwright、AI評価、IBM Equal Access Checker で実行するWebアプリです。
 
-最終更新: 2026-04-03 17:00
+READMEは初回セットアップと運用の入口です。UI/API/スコア計算の詳細仕様は [SPEC_WEB.md](spec/SPEC_WEB.md) を参照してください。
 
-## 機能
+最終更新: 2026-04-21
 
-### 1. 自動チェック（axe-core）
-- WCAG 2.2 Level A / AA / AAA
-- 違反項目の詳細表示
-- 修正方法の提案（日本語）
+## 主な機能
 
-### 2. 🤖 AI自動評価（Gemini）NEW!
-手動チェック項目をAIが自動評価:
-- スクリーンショット + HTML を解析
-- 各項目の合格/不合格を判定
-- 改善提案を自動生成
-- 確信度も表示
+- BASIC: axe-core による自動検査
+- DEEP: Puppeteerベースの追加ヒューリスティック検査
+- MULTI: Gemini / Claude / OpenAI を選択できるAI評価
+- PLAY: Playwright によるキーボード・フォーカス・DOM静的検査
+- EXT: IBM Equal Access Checker + ネイティブDOM検査 + CDP拡張検査
+- PC / SP / PC+SP ビュー別スキャン
+- 単一URL / 最大10URLの一括スキャン
+- Google Sheets 出力と GAS による報告書生成
 
 ## セットアップ
 
 ```bash
-cd a11y-checker
+cd axe
 npm install
 ```
-
-## 環境変数
-
-```bash
-# Gemini API キー（AI評価に必要）
-export GEMINI_API_KEY="your-api-key"
-
-# ポート番号（オプション、デフォルト: 3000）
-export PORT=3000
-```
-
-### Gemini API キーの取得方法
-1. [Google AI Studio](https://makersuite.google.com/app/apikey) にアクセス
-2. 「Create API Key」をクリック
-3. キーをコピーして環境変数に設定
 
 ## 起動
 
 ```bash
-GEMINI_API_KEY="your-key" npm start
+npm start
 ```
 
-http://localhost:3000 を開く。
+ブラウザで `http://localhost:3000` を開きます。
 
-## 使い方
+## 設定
 
-1. URLを入力して「チェック」
-2. 自動チェック結果を確認
-3. 「手動チェック」タブに移動
-4. 「AI評価を実行」ボタンをクリック
-5. AIが各項目を評価（1-2分）
-6. 結果を確認、必要に応じて手動で修正
+画面右上の設定から、AI APIキー、Google Sheets連携、アプリパスワードを保存できます。保存内容は `axe/.settings.json` に保持されます。
 
-## 費用
+環境変数でも設定できます。
 
-Gemini 1.5 Flash を使用:
-- 約 $0.01〜0.02 / 1ページ
-- 無料枠あり（1日1500リクエストまで）
+```bash
+PORT=3000
+APP_PASSWORD=your-password
+AI_PROVIDER=gemini
+GEMINI_API_KEY=your-gemini-key
+ANTHROPIC_API_KEY=your-anthropic-key
+OPENAI_API_KEY=your-openai-key
+GOOGLE_SERVICE_ACCOUNT_KEY_PATH=/path/to/service-account.json
+GOOGLE_DRIVE_FOLDER_ID=your-drive-folder-id
+```
 
-## API
+設定値の詳細は [SPEC_ENV.md](spec/SPEC_ENV.md) を参照してください。
 
-### POST /api/check
-axe-coreによる自動チェック
+## 基本的な使い方
 
-### POST /api/ai-evaluate  
-Gemini AIによる手動項目の自動評価
+1. URLを入力します。
+2. 必要に応じてビュー、対象レベル、Basic認証、除外ルールを設定します。
+3. `DEEP` / `MULTI` / `PLAYWRIGHT` / `EXT` を必要に応じて有効化します。
+4. `SCAN` または `BATCH` を実行します。
+5. スコアテーブルと詳細タブで結果を確認します。
+6. 必要に応じてGoogle Sheetsへ出力します。
+
+## ドキュメント
+
+- [SPEC_WEB.md](spec/SPEC_WEB.md): Web UI、スキャンAPI、スコア、表示仕様
+- [SPEC_ENV.md](spec/SPEC_ENV.md): 環境、配信、デプロイ仕様
+- [SPEC_SHEET.md](spec/SPEC_SHEET.md): Sheets / GAS 報告書仕様
+- [TEST_SCAN.md](test/TEST_SCAN.md): スキャン機能の確認項目
+- [TEST_SETTING.md](test/TEST_SETTING.md): 設定画面と接続確認項目
+- [TEST_OUTPUT.md](test/TEST_OUTPUT.md): Sheets出力確認項目
+- [TEST_REPORT.md](test/TEST_REPORT.md): GAS報告書確認項目
+- [TEST_DEPLOY.md](test/TEST_DEPLOY.md): デプロイ後確認項目
 
 ## 注意事項
 
-- AI評価にはGemini APIキーが必要
-- AI判定は参考情報。最終判断は人間が行うこと
-- 大量のページをチェックする場合はレート制限に注意
+- MULTIは選択したAIプロバイダーのAPIキーが必要です。未設定時は手動確認扱いのフォールバックになります。
+- PLAYとEXTはローカルブラウザを使うためAPIコストは不要ですが、対象ページやURL数に応じて時間がかかります。
+- AI判定は参考情報です。最終判断は人間が行ってください。

@@ -1,7 +1,7 @@
 {
   "name": "wcag-accessibility-checker",
   "version": "2.0.0",
-  "description": "AXE INSPECTOR",
+  "description": "ACCESSIBILITY INSPECTOR",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
