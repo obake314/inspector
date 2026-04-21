@@ -413,9 +413,11 @@
 
 ## フォント仕様
 
-- 本文・UI全般: `"Roboto Condensed", "Poppins", "Noto Sans JP", sans-serif`（CSS変数 `--font-basic`）
-- Roboto Condensedは英数字・ラテン文字をカバー、日本語は Noto Sans JP にフォールバック
-- Google Fonts: `Roboto+Condensed:wght@400;500;600;700` + `Poppins:wght@400;500;600` + `Noto+Sans+JP:wght@400;500;600`
+- 日本語が入りうる本文・UI: `"Noto Sans JP", sans-serif`（CSS変数 `--font-basic`）
+- 英語・数字のみのUI: `"Roboto Condensed", sans-serif`（CSS変数 `--font-latin`）
+- `body` は `--font-basic` を既定にし、英語・数字のみの固定ラベル、件数、スコア、SC番号、URLスキャン種別などに限定して `--font-latin` を指定する
+- Google Fonts: `Roboto+Condensed:wght@400;500;600;700` + `Noto+Sans+JP:wght@400;500;600`
+- 旧英数字フォントは読み込み・CSS変数のいずれにも使用しない
 
 ## 既知の実装差異
 

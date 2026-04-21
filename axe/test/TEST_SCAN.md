@@ -607,3 +607,16 @@
   - 1URLの単一スキャン由来は単一URL入力欄へ戻る
   - 複数URLまたは一括スキャン由来は一括URL欄へ戻り、URL件数表示も更新される
   - 再セット時に前回結果とUIロックがクリアされ、再度SCANできる
+
+## T-SCAN-62: UIフォント割り当て
+
+- 手順
+  1. `public/index.html` の Google Fonts 読み込みを確認する
+  2. `public/css/style.css` のフォント変数と主要UIセレクタを確認する
+- 期待結果
+  - Google Fonts の読み込みに旧英数字フォントが含まれない
+  - `--font-basic` が `"Noto Sans JP", sans-serif`
+  - `--font-latin` が `"Roboto Condensed", sans-serif`
+  - `body` は `--font-basic` を既定にする
+  - 日本語が入りうる本文・メッセージ・操作ボタンは `--font-basic` のまま表示される
+  - 英語・数字のみの固定ラベル、件数、スコア、SC番号、URLスキャン種別は `--font-latin` で表示される

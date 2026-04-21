@@ -14,7 +14,8 @@
   --color-serious: #dc2626;
   --color-moderate: #d97706;
   --color-minor: #6b7280;
-  --font-basic:"Roboto Condensed", "Poppins", "Noto Sans JP", sans-serif;
+  --font-basic:"Noto Sans JP", sans-serif;
+  --font-latin:"Roboto Condensed", sans-serif;
   --space-m:16px;
   --space-s:8px;
   --space-l:24px;
@@ -57,6 +58,7 @@ header {
 }
 
 h1 {
+  font-family: var(--font-latin);
   font-size: 30px;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -185,6 +187,7 @@ h1 {
 }
 
 .level-select-btn {
+  font-family: var(--font-latin);
   background: var(--navy-200);
   border: 1px solid var(--navy-400);
   padding: var(--space-s) var(--space-m);
@@ -242,17 +245,20 @@ h1 {
   outline: none;
   border-color: var(--navy-700);
 }
+#urlInput {
+  font-family: var(--font-latin);
+}
 .url-input::placeholder {
   color: var(--navy-400);
 }
 .check-btn {
+  font-family: var(--font-latin);
   background: var(--navy-700);
   color: var(--color-white);
   border: none;
   padding: var(--space-m) var(--space-l);
   font-size: var(--font-size-m);
   font-weight: 500;
-  font-family: var(--font-basic);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -305,6 +311,7 @@ h1 {
   background: var(--navy-200);
 }
 .scan-option-text {
+  font-family: var(--font-latin);
   font-size: var(--font-size-m);
   font-weight: 600;
   letter-spacing: 0.01em;
@@ -464,6 +471,7 @@ h1 {
   text-align: center;
 }
 .summary-item .count {
+  font-family: var(--font-latin);
   font-size: 26px;
   font-weight: 600;
   color: var(--navy-700);
@@ -487,6 +495,7 @@ h1 {
   background: var(--color-white)
 }
 .scoretable-title {
+  font-family: var(--font-latin);
   padding: var(--space-m);
   font-size: var(--font-size-s);
   font-weight: 700;
@@ -529,8 +538,12 @@ h1 {
 .scoretable tbody td.label-basic{
   color: var(--color-basic);
 }
+.score-label {
+  font-family: var(--font-latin);
+}
 
 .score-row-sub {
+  font-family: var(--font-basic);
   display: block;
   font-size: 10px;
   font-weight: 400;
@@ -540,10 +553,16 @@ h1 {
 }
 
 .score-total{
+  font-family: var(--font-latin);
   font-size: var(--font-size-s);
 }
 .score-chip{
+  font-family: var(--font-latin);
   font-size: 20px;
+}
+.score-num,
+.score-dash {
+  font-family: var(--font-latin);
 }
 
 .tabs {
@@ -571,6 +590,7 @@ h1 {
   border-bottom-color: var(--navy-700);
 }
 .tab-num {
+  font-family: var(--font-latin);
   display: inline-block;
   background: var(--navy-200);
   color: var(--navy-700);
@@ -616,6 +636,7 @@ h1 {
   gap: 4px;
 }
 .level-btn {
+  font-family: var(--font-latin);
   background: var(--navy-200);
   border: 1px solid var(--navy-200);
   padding: 4pxvar(--space-s);
@@ -725,6 +746,7 @@ h1 {
   flex-wrap: wrap;
 }
 .wcag-ref {
+  font-family: var(--font-latin);
   font-size: var(--font-size-m);
   color: var(--navy-400);
 }
@@ -834,12 +856,14 @@ h1 {
   background: var(--navy-200);
 }
 .item-no {
+  font-family: var(--font-latin);
   font-size: var(--font-size-s);
   color: var(--navy-400);
   min-width: 28px;
   flex-shrink: 0;
 }
 .item-sc {
+  font-family: var(--font-latin);
   font-size: var(--font-size-s);
   color: var(--navy-400);
   background: var(--navy-200);
@@ -847,6 +871,7 @@ h1 {
   flex-shrink: 0;
 }
 .item-level {
+  font-family: var(--font-latin);
   font-size: var(--font-size-s);
   font-weight: 600;
   color: var(--navy-400);
@@ -1000,6 +1025,7 @@ h1 {
   color: var(--navy-700);
 }
 .timeout-retry-scans {
+  font-family: var(--font-latin);
   flex: 0 0 auto;
   color: var(--color-ext);
   font-size: var(--font-size-s);
@@ -1020,6 +1046,17 @@ h1 {
   margin-left: auto;
   color: var(--navy-400);
   border-color: var(--navy-200);
+}
+#csvBtn,
+#reportBtn,
+#batchReportBtn {
+  font-family: var(--font-latin);
+}
+#exportArea {
+  font-family: var(--font-latin);
+}
+#clearBtn {
+  font-family: var(--font-basic);
 }
 .export-btn.clear-btn:hover {
   color: var(--color-crilical);
@@ -1126,6 +1163,7 @@ h1 {
   margin-top: var(--space-m);
 }
 .batch-count {
+  font-family: var(--font-latin);
   font-size: var(--font-size-m);
   color: var(--navy-400);
 }
@@ -1137,6 +1175,9 @@ h1 {
   display: block;
 }
 
+.phase-chip {
+  font-family: var(--font-latin);
+}
 .batch-progress .phase-chip {
   padding: 0 var(--space-s);
 }
@@ -1174,6 +1215,7 @@ h1 {
   margin: 0;
 }
 .batch-page-btn {
+  font-family: var(--font-latin);
   background: var(--color-white);
   border: 1px solid var(--navy-200);
   padding: var(--space-s) var(--space-m);
@@ -1327,10 +1369,12 @@ h1 {
   line-height: 1.3;
 }
 .batchsum-total {
+  font-family: var(--font-latin);
   font-size: 11px;
   color: var(--navy-400);
 }
 .batchsum-score-value {
+  font-family: var(--font-latin);
   font-size: 18px;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -1341,6 +1385,7 @@ h1 {
 
 /* 数値セル */
 .batchsum-num {
+  font-family: var(--font-latin);
   display: inline-block;
   font-size: 14px;
   font-weight: 600;
@@ -1378,6 +1423,9 @@ footer a {
 footer a:hover {
   text-decoration: underline;
 }
+footer small {
+  font-family: var(--font-latin);
+}
 /* Login overlay */
 .login-overlay {
   position: fixed;
@@ -1403,6 +1451,7 @@ footer a:hover {
   text-align: center;
 }
 .login-box h2 {
+  font-family: var(--font-latin);
   font-size: var(--font-size-m);
   font-weight: 600;
   margin-bottom: var(--space-s);
@@ -1582,6 +1631,7 @@ footer a:hover {
 }
 
 .help-btn button{
+    font-family: var(--font-latin);
     border: none;
     width: 28px;
     height: 28px;
@@ -1641,6 +1691,7 @@ footer a:hover {
   flex-wrap: wrap;
 }
 .config-status-item {
+  font-family: var(--font-latin);
   font-size: var(--font-size-s);
   display: flex;
   align-items: center;
@@ -1673,18 +1724,21 @@ footer a:hover {
   padding: 4px 10px;
 }
 .config-status-ai .st-label {
+  font-family: var(--font-latin);
   font-size: 10px;
   letter-spacing: 0.05em;
   opacity: 0.7;
   line-height: 1;
 }
 .config-status-ai .st-model {
+  font-family: var(--font-latin);
   font-size: 12px;
   font-weight: 600;
   line-height: 1.3;
   white-space: nowrap;
 }
 .config-status-ai .st-key {
+  font-family: var(--font-latin);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
