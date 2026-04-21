@@ -96,6 +96,7 @@
 - スコアテーブルに `EXT` 行を追加（amber色 `#D97706`）
 - `computeExtScore()` でSC単位に集約（`computePlayScore()` と同じ方式）
 - `computeTotalScore()` の第5引数として EXT 結果を統合
+- `extScanOpt` / `batchExtOpt` のチェックON時は `#D97706` 背景で選択状態を明示する
 
 ## UI構成
 
@@ -177,10 +178,13 @@
 | EXT   | `EXT`   | `IBM ACE + 拡張検査` | `#D97706` |
 | TOTAL | `TOTAL` | なし | — |
 
-### DEEP / MULTI チェックボックス tooltip
+### スキャンオプションチェックボックス tooltip / 表示
 
 - `deepScanLabel` / `batchDeepLabel`: `title` 属性にDEEP SCANの検査内容・所要時間を記載
 - `multiScanLabel` / `batchAILabel`: `title` 属性にMULTI SCANの評価内容・所要時間・AI APIキー必須を記載
+- `playScanLabel` / `batchPlayLabel`: `title` 属性にPLAYWRIGHTの検査内容・所要時間を記載
+- `extScanLabel` / `batchExtLabel`: `title` 属性にEXT SCANの検査内容・所要時間を記載
+- チェックON時の背景色: DEEP `#304C89` / MULTI `#0D7A5F` / PLAY `#7B4DC8` / EXT `#D97706`
 
 ### 列
 
@@ -236,13 +240,13 @@
   - 単一/一括モード切替（`#modeToggle`）
   - ビュー選択ラジオ（`PCのみ` / `SPのみ` / `PC+SP`）
   - 対象レベル切替（`.level-select-btn`）
-  - DEEP SCAN / MULTI SCAN チェックボックス
+  - DEEP SCAN / MULTI SCAN / PLAYWRIGHT / EXT SCAN チェックボックス
   - オプション設定ブロック（`#optionsSection`）
 - スキャン中はボタンを `loading` 状態に変更
 
 ## SCANアクション配置
 
-- SCAN / DEEP SCAN / MULTI SCAN ボタン・チェックボックスはオプション設定ブロックの下（`#scanActionSection`）に配置
+- SCAN / BATCH ボタンと DEEP SCAN / MULTI SCAN / PLAYWRIGHT / EXT SCAN チェックボックスはオプション設定ブロックの下（`#scanActionSection`）に配置
 - 単一モード: `#singleScanControls` を表示
 - 一括モード: `#batchScanControls` を表示（モード切替時に連動）
 

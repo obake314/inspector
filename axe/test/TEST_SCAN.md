@@ -94,7 +94,7 @@
      - 「単一チェック / 一括チェック」切替
      - ビュー選択（`PCのみ / SPのみ / PC+SP`）
      - 「対象レベル」（A/AA）切替
-     - DEEP SCAN / MULTI SCAN チェックボックス
+     - DEEP SCAN / MULTI SCAN / PLAYWRIGHT / EXT SCAN チェックボックス
      - オプション設定（Basic認証、除外ルール）
 - 期待結果
   - 上記すべてが操作不可（`pointer-events: none` / `disabled`）
@@ -461,7 +461,7 @@
 - 手順
   1. 一括スキャンモードで複数 URL を入力
   2. `PLAY SCAN` チェックボックスを有効化
-  3. `BATCH SCAN` ボタンをクリック
+  3. `BATCH` ボタンをクリック
 - 期待結果
   - プログレスに `PLAY SCANNING: <url>` ラベルが URL ごとに表示される
   - 一括スキャン完了後、各 URL の詳細タブに PLAY 結果が表示される
@@ -490,7 +490,7 @@
 ## T-SCAN-49: スキャン中 BATCH PLAYWRIGHT チェックボックス無効化
 
 - 手順
-  1. 一括スキャンモードで BATCH SCAN ボタンを押してスキャンを開始する
+  1. 一括スキャンモードで `BATCH` ボタンを押してスキャンを開始する
   2. スキャン実行中に PLAYWRIGHT チェックボックスとラベルの状態を確認
 - 期待結果
   - 一括スキャン側の PLAYWRIGHT チェックボックスが `disabled` になる
@@ -571,6 +571,7 @@
   1. EXT SCAN チェックボックスをオンにして SCAN を開始する
 - 期待結果
   - スキャン中: `extScanOpt` checkbox が `disabled`、`extScanLabel` が `opacity:0.4`
+  - 一括スキャン時: `batchExtOpt` checkbox が `disabled`、`batchExtLabel` が `opacity:0.4`
   - スキャン完了後: disabled 解除・opacity 復元
 
 ## T-SCAN-59: EXT SCAN スコアテーブル行表示
@@ -580,3 +581,12 @@
 - 期待結果
   - スコアテーブルに `EXT | IBM ACE + 拡張検査` 行が amber色（#D97706）で表示される
   - TOTAL 行に EXT の結果が統合される
+
+## T-SCAN-60: EXT SCAN チェックボックス - 選択状態表示
+
+- 手順
+  1. 単一スキャンで EXT SCAN チェックボックスをオンにする
+  2. 一括スキャンで EXT SCAN チェックボックスをオンにする
+- 期待結果
+  - `extScanOpt` / `batchExtOpt` が `checked` になる
+  - チェックON時の背景色が amber（#D97706）になり、白いチェックマークが視認できる

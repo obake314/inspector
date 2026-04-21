@@ -366,6 +366,12 @@ h1 {
   border-color: var(--navy-700);
 }
 
+#batchExtOpt:checked,
+.scan-option-checkbox#extScanOpt:checked {
+  background: var(--color-ext);
+  border-color: var(--navy-700);
+}
+
 .scan-option-checkbox:checked::after {
   transform: rotate(45deg) scale(1);
 }
