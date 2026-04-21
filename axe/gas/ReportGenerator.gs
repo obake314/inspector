@@ -86,7 +86,21 @@ function showReportDialog() {
     '  b.disabled=true;b.textContent="生成中...";m.style.color="#666";m.textContent="報告書を生成しています...";',
     '  var sel=[];document.querySelectorAll(".chip.on").forEach(function(c){sel.push(c.dataset.n)});',
     '  google.script.run',
-    '    .withSuccessHandler(function(url){if(url)window.open(url,"_blank");google.script.host.close()})',
+    '    .withSuccessHandler(function(url){',
+    '      if(url){',
+    '        var newWindow = window.open(url, "_blank");',
+    '        if (!newWindow || newWindow.closed || typeof newWindow.closed === "undefined") {',
+    '          m.style.color="#d32f2f";',
+    '          m.innerHTML = "ポップアップがブロックされました。報告書は<a href=\\"" + url + "\\" target=\\"_blank\\" onclick=\\"google.script.host.close()\\">こちら</a>から開いてください。";',
+    '          b.disabled = false; b.textContent = "報告書を生成";',
+    '        } else {',
+    '          google.script.host.close();',
+    '        }',
+    '      } else {',
+    '        m.style.color="#d32f2f"; m.textContent = "報告書のURLが取得できませんでした。";',
+    '        b.disabled = false; b.textContent = "報告書を生成";',
+    '      }',
+    '    })',
     '    .withFailureHandler(function(e){b.disabled=false;b.textContent="報告書を生成";m.style.color="#d32f2f";m.textContent="エラー: "+e.message})',
     '    .generateReport({company:document.getElementById("v_company").value,siteName:document.getElementById("v_siteName").value,author:document.getElementById("v_author").value,createdDate:document.getElementById("v_date").value,version:document.getElementById("v_version").value,tabs:sel});',
     '}',
@@ -142,12 +156,11 @@ function generateReport(info) {
 
   // デフォルトスタイル
   var defaultStyle = {};
-  defaultStyle[DocumentApp.Attribute.FONT_SIZE] = 10;
-  defaultStyle[DocumentApp.Attribute.FONT_FAMILY] = 'Arial';
+  defaultStyle[DocumentApp.Attribute.FONT_SIZE] = 12;
+  defaultStyle[DocumentApp.Attribute.FONT_FAMILY] = 'Noto Sans JP';
   body.setAttributes(defaultStyle);
 
   var totalScore = calcTotalScore_(pages);
-  var criterionGroups = buildCriterionGroups_(pages);
   var issues = buildIssueList_(pages);
 
   appendCover_(body, info);
@@ -157,48 +170,40 @@ function generateReport(info) {
   body.appendParagraph(
     '本報告書は、' + info.siteName + 'に対して実施したアクセシビリティ評価の結果をまとめたものです。評価は ' +
     info.standard + ' を基準として実施しました。'
-  ).editAsText().setFontSize(10);
+  ).editAsText().setFontSize(12);
 
   appendHeading_(body, '総合評価結果', 2);
   appendSummaryTable_(body, totalScore);
   body.appendParagraph(buildExecutiveSummary_(info, totalScore, issues))
-    .editAsText().setFontSize(10);
+    .editAsText().setFontSize(12);
 
   appendHeading_(body, '2. 評価概要', 1);
   appendHeading_(body, '2.1 評価方法', 2);
   appendBullets_(body, [
-    '自動テスト: axe-core による WCAG 関連ルールの検査',
-    '高精度検査: Puppeteer によるページ操作、キーボード操作、表示状態の確認',
-    'AI 評価: HTML、スクリーンショット、検査結果をもとにした達成基準単位の補助判定',
-    '手動確認: AI または自動検査で判断できない項目の目視レビュー前提項目を抽出'
+    '自動化ツールによるWCAG達成基準の適合性評価',
+    'ヘッドレスブラウザを用いたページ操作、キーボード操作、表示状態の確認',
+    '大規模言語モデル（LLM）によるHTML、スクリーンショット、検査結果の総合評価',
+    '自動化ツールで判断できない項目の目視レビュー'
   ]);
 
   appendHeading_(body, '2.2 評価対象ページ', 2);
   appendTargetPagesTable_(body, pages);
 
   body.appendPageBreak();
-  appendHeading_(body, '3. WCAG 2.2 達成基準別評価結果', 1);
-  body.appendParagraph(
-    'WCAG 2.2 の4原則（知覚可能・操作可能・理解可能・堅牢）に基づき、Level A・Level AA の各達成基準を評価しました。' +
-    '【2.2新規】と記載された項目は WCAG 2.2 で追加された達成基準です。'
-  ).editAsText().setFontSize(10);
-  appendCriteriaSections_(body, criterionGroups);
-
-  body.appendPageBreak();
-  appendHeading_(body, '4. 問題点一覧と改善推奨', 1);
+  appendHeading_(body, '3. 問題点一覧と改善推奨', 1);
   body.appendParagraph('以下の表に、評価で発見された問題点と推奨される改善対応策をまとめます。重要度は「高」「中」「低」の3段階で示します。')
-    .editAsText().setFontSize(10);
+    .editAsText().setFontSize(12);
   appendIssuesTable_(body, issues);
 
-  appendHeading_(body, '5. 改善ロードマップ', 1);
+  appendHeading_(body, '4. 改善ロードマップ', 1);
   body.appendParagraph('以下の優先度に従って改善を実施することを推奨します。')
-    .editAsText().setFontSize(10);
+    .editAsText().setFontSize(12);
   appendRoadmapTable_(body, issues, info.createdDate);
 
-  appendHeading_(body, '6. 推奨事項', 1);
-  appendHeading_(body, '6.1 短期的な改善推奨（3ヶ月以内）', 2);
+  appendHeading_(body, '5. 推奨事項', 1);
+  appendHeading_(body, '5.1 短期的な改善推奨（3ヶ月以内）', 2);
   appendBullets_(body, buildShortTermRecommendations_(issues));
-  appendHeading_(body, '6.2 中長期的な組織的取り組み', 2);
+  appendHeading_(body, '5.2 中長期的な組織的取り組み', 2);
   appendBullets_(body, [
     '開発プロセスにアクセシビリティチェックを組み込み、リリース前の回帰確認を継続する。',
     'デザインシステムにコントラスト、フォーカス表示、フォームラベル、ターゲットサイズの基準を明文化する。',
@@ -206,7 +211,7 @@ function generateReport(info) {
     '障害のある実ユーザー、スクリーンリーダー利用者、キーボード利用者を含むユーザーテストを定期的に実施する。'
   ]);
 
-  appendHeading_(body, '7. 参照規格・ツール', 1);
+  appendHeading_(body, '6. 参照規格・ツール', 1);
   appendReferenceTable_(body, info);
 
   appendHeading_(body, '改訂履歴', 1);
@@ -214,7 +219,7 @@ function generateReport(info) {
 
   body.appendParagraph('── 報告書終了 ──')
     .setAlignment(DocumentApp.HorizontalAlignment.CENTER)
-    .editAsText().setFontSize(9).setForegroundColor('#777777');
+    .editAsText().setFontSize(12).setForegroundColor('#777777');
 
   doc.saveAndClose();
   var docUrl = doc.getUrl();
@@ -255,10 +260,10 @@ function normalizeReportInfo_(info, pages) {
 function appendCover_(body, info) {
   body.appendParagraph('アクセシビリティ評価報告書')
     .setAlignment(DocumentApp.HorizontalAlignment.CENTER)
-    .editAsText().setBold(true).setFontSize(24).setForegroundColor('#1f2937');
+    .editAsText().setFontSize(24).setForegroundColor('#1f2937');
   body.appendParagraph('WCAG 2.2 Level AA 準拠審査')
     .setAlignment(DocumentApp.HorizontalAlignment.CENTER)
-    .editAsText().setBold(true).setFontSize(14).setForegroundColor('#4b5563');
+    .editAsText().setFontSize(14).setForegroundColor('#4b5563');
   body.appendParagraph('').setSpacingAfter(16);
 
   var meta = [
@@ -273,7 +278,7 @@ function appendCover_(body, info) {
   styleTable_(table, {
     headerRows: 0,
     widths: [120, 360],
-    fontSize: 10,
+    fontSize: 12,
     firstColumnHeader: true
   });
 }
@@ -282,8 +287,8 @@ function appendHeading_(body, text, level) {
   var p = body.appendParagraph(text);
   p.setHeading(level === 1 ? DocumentApp.ParagraphHeading.HEADING1 : DocumentApp.ParagraphHeading.HEADING2);
   var t = p.editAsText();
-  t.setBold(true).setForegroundColor(level === 1 ? '#1f2937' : '#374151');
-  t.setFontSize(level === 1 ? 15 : 12);
+  t.setForegroundColor(level === 1 ? '#111827' : '#1f2937');
+  t.setFontSize(level === 1 ? 16 : 14);
   p.setSpacingBefore(level === 1 ? 12 : 8).setSpacingAfter(4);
   return p;
 }
@@ -292,7 +297,7 @@ function appendBullets_(body, items) {
   items.forEach(function(item) {
     body.appendListItem(item)
       .setGlyphType(DocumentApp.GlyphType.BULLET)
-      .editAsText().setFontSize(10).setForegroundColor('#111827');
+      .editAsText().setFontSize(12).setForegroundColor('#111827');
   });
 }
 
@@ -305,13 +310,13 @@ function appendSummaryTable_(body, totalScore) {
   styleTable_(table, {
     headerRows: 1,
     widths: [110, 110, 110, 110],
-    fontSize: 11,
+    fontSize: 12,
     centerColumns: [0, 1, 2, 3],
     headerBackground: '#e5e7eb',
     headerColor: '#111827'
   });
   for (var c = 0; c < table.getRow(1).getNumCells(); c++) {
-    table.getRow(1).getCell(c).editAsText().setBold(true).setFontSize(12);
+    table.getRow(1).getCell(c).editAsText().setFontSize(12);
   }
 }
 
@@ -323,8 +328,8 @@ function appendTargetPagesTable_(body, pages) {
   var table = body.appendTable(rows);
   styleTable_(table, {
     headerRows: 1,
-    widths: [38, 150, 320],
-    fontSize: 9,
+    widths: [38, 150, 290],
+    fontSize: 10,
     centerColumns: [0]
   });
 }
@@ -358,7 +363,7 @@ function appendCriteriaSections_(body, criterionGroups) {
     styleTable_(table, {
       headerRows: 1,
       widths: [62, 185, 45, 58, 190],
-      fontSize: 8,
+      fontSize: 9,
       centerColumns: [0, 2, 3],
       resultColumn: 3
     });
@@ -368,24 +373,23 @@ function appendCriteriaSections_(body, criterionGroups) {
 function appendIssuesTable_(body, issues) {
   if (!issues.length) {
     body.appendParagraph('今回の検査データでは、不合格として記録された問題はありません。要確認項目については別途目視確認を行ってください。')
-      .editAsText().setFontSize(10);
+      .editAsText().setFontSize(12);
     return;
   }
-  var rows = [['No.', '重要度', '問題の説明', '該当箇所', '推奨対応策']];
+  var rows = [['No.', '重要度', '問題の説明', '推奨対応策']];
   issues.forEach(function(issue, idx) {
     rows.push([
       String(idx + 1),
       issue.severity,
       issue.description,
-      issue.location,
       issue.suggestion
     ]);
   });
   var table = body.appendTable(rows);
   styleTable_(table, {
     headerRows: 1,
-    widths: [32, 44, 175, 140, 185],
-    fontSize: 8,
+    widths: [32, 44, 220, 180],
+    fontSize: 10,
     centerColumns: [0, 1]
   });
   for (var i = 1; i < table.getNumRows(); i++) {
@@ -393,7 +397,6 @@ function appendIssuesTable_(body, issues) {
     if (sev === '高') table.getRow(i).getCell(1).setBackgroundColor('#fee2e2');
     else if (sev === '中') table.getRow(i).getCell(1).setBackgroundColor('#fef3c7');
     else table.getRow(i).getCell(1).setBackgroundColor('#e5e7eb');
-    table.getRow(i).getCell(1).editAsText().setBold(true);
   }
 }
 
@@ -410,8 +413,8 @@ function appendRoadmapTable_(body, issues, createdDate) {
   var table = body.appendTable(rows);
   styleTable_(table, {
     headerRows: 1,
-    widths: [95, 100, 330],
-    fontSize: 9
+    widths: [90, 100, 290],
+    fontSize: 11
   });
 }
 
@@ -419,15 +422,14 @@ function appendReferenceTable_(body, info) {
   var table = body.appendTable([
     ['項目', '詳細'],
     ['審査基準', info.standard],
-    ['自動テストツール', 'axe-core / Puppeteer による自動検査'],
-    ['AI評価', 'HTML、スクリーンショット、検査結果をもとにした達成基準別の補助判定'],
-    ['手動確認対象', 'キーボード操作、フォーカス表示、フォーム、代替テキスト、コントラスト、ターゲットサイズ等'],
-    ['レポート生成', 'Google Sheets の検査結果を Google Apps Script で集計し、Google Docs として出力']
+    ['自動テストツール', '自動化ツールによる静的解析および動的解析'],
+    ['AI評価', '大規模言語モデル（LLM）による補助判定'],
+    ['手動確認対象', 'キーボード操作、フォーカス表示、フォーム、代替テキスト、コントラスト、ターゲットサイズ等']
   ]);
   styleTable_(table, {
     headerRows: 1,
-    widths: [130, 380],
-    fontSize: 9
+    widths: [120, 360],
+    fontSize: 11
   });
 }
 
@@ -438,8 +440,8 @@ function appendRevisionTable_(body, info) {
   ]);
   styleTable_(table, {
     headerRows: 1,
-    widths: [50, 100, 150, 220],
-    fontSize: 9,
+    widths: [50, 90, 120, 220],
+    fontSize: 11,
     centerColumns: [0, 1]
   });
 }
@@ -461,10 +463,9 @@ function styleTable_(table, opt) {
       cell.editAsText().setFontSize(fontSize).setForegroundColor('#111827');
       if (r < headerRows) {
         cell.setBackgroundColor(opt.headerBackground || '#374151');
-        cell.editAsText().setBold(true).setForegroundColor(opt.headerColor || '#ffffff');
+        cell.editAsText().setForegroundColor(opt.headerColor || '#ffffff');
       } else if (opt.firstColumnHeader && c === 0) {
         cell.setBackgroundColor('#f3f4f6');
-        cell.editAsText().setBold(true);
       } else if (r % 2 === 0) {
         cell.setBackgroundColor('#f9fafb');
       }
@@ -480,13 +481,13 @@ function styleResultCell_(cell) {
   var result = cell.getText().trim();
   if (result === '不合格') {
     cell.setBackgroundColor('#fee2e2');
-    cell.editAsText().setBold(true).setForegroundColor('#991b1b');
+    cell.editAsText().setForegroundColor('#991b1b');
   } else if (result === '要確認') {
     cell.setBackgroundColor('#fef3c7');
-    cell.editAsText().setBold(true).setForegroundColor('#92400e');
+    cell.editAsText().setForegroundColor('#92400e');
   } else if (result === '合格') {
     cell.setBackgroundColor('#dcfce7');
-    cell.editAsText().setBold(true).setForegroundColor('#166534');
+    cell.editAsText().setForegroundColor('#166534');
   } else if (result === '対象外') {
     cell.setBackgroundColor('#e5e7eb');
     cell.editAsText().setForegroundColor('#4b5563');
