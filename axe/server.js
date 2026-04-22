@@ -2897,6 +2897,7 @@ app.post('/api/ai-evaluate', async (req, res) => {
   const { url, checkItems, viewportPreset } = req.body;
   const safeCheckItems = Array.isArray(checkItems) ? checkItems : [];
   const provider = AI_PROVIDER || 'gemini';
+  _lastAiDebug = { provider, stage: 'received', url, itemCount: safeCheckItems.length, timestamp: new Date().toISOString() };
   const fallbackSuggestion = 'AI API設定後に再実行してください';
   const makeFallbackResults = (reason) => {
     return safeCheckItems.map((_, index) => ({
@@ -2934,6 +2935,7 @@ app.post('/api/ai-evaluate', async (req, res) => {
     const keyName = keyNameMap[provider] || 'AI_API_KEY';
     const reason = `${keyName} が未設定のため自動評価をスキップしました`;
     console.warn('[AI] ' + reason);
+    _lastAiDebug = { ..._lastAiDebug, stage: 'no_api_key', reason };
     return res.json({
       success: true,
       model: 'manual-fallback',
