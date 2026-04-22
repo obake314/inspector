@@ -2953,6 +2953,7 @@ app.post('/api/ai-evaluate', async (req, res) => {
     const preset = normalizeViewportPreset(viewportPreset);
     const activeModel = AI_MODEL_MAP[provider] || provider;
     console.log(`[${activeModel}] AI評価開始: ${url} (View ${preset})`);
+    _lastAiDebug = { ..._lastAiDebug, stage: 'browser_launch' };
     browser = await getBrowser();
     const page = await browser.newPage();
     
@@ -2996,6 +2997,7 @@ app.post('/api/ai-evaluate', async (req, res) => {
       .substring(0, 15000);
     
     await page.close();
+    _lastAiDebug = { ..._lastAiDebug, stage: 'page_done_calling_ai' };
 
     const itemsList = safeCheckItems.map((item, i) =>
       `${i}. ${item.text} (WCAG ${item.ref}, Level ${item.level}, カテゴリ: ${item.category})`
@@ -3183,6 +3185,7 @@ ${itemsList}
 
   } catch (error) {
     console.error('AI評価エラー発生:', error.message);
+    _lastAiDebug = { ..._lastAiDebug, stage: 'exception', error: error.message, stack: error.stack?.slice(0, 500) };
     res.status(500).json({ error: error.message });
   } finally {
     if (browser) {
