@@ -1,6 +1,6 @@
 # SPEC_WEB
 
-最終更新: 2026-04-22（MULTI SCANエラー種別明示・API制限/部分応答の明示・SC単位タブ集計整合・PLAY/EXT統合カード・予測時間表示を追加）
+最終更新: 2026-04-23（スキャン順序変更・SC権威マージ・MULTIスコア反映修正・PLAY→MULTI事前解決・OpenAI response_format対応・デバッグエンドポイント追加）
 
 ## 対象
 
@@ -172,13 +172,13 @@
 - API: `POST /api/batch-check`
 - 入力: `{ urls[], level, basicAuth?, viewportPreset? }`
 - 上限: 10 URL
-- フェーズ: BASIC → DEEP（任意）→ MULTI（任意）→ PLAY（任意）→ EXT（任意）
+- フェーズ: BASIC → EXT（任意）→ DEEP（任意）→ PLAY（任意）→ MULTI（任意）
 - 一括BASICのクライアント側タイムアウト: 10分
 - ビュー選択（`viewportModeWrap`）は単一チェックと共通。選択値に応じて以下のビューで実行:
   - `PCのみ`: `desktop` 固定
   - `SPのみ`: `mobile`（iphone-se）固定
   - `PC+SP`: デスクトップパイプライン完了後、モバイルパイプラインを連続実行
-- 進捗チップ（`PC+SP` 時）: 選択フェーズに応じて `PC BASIC → PC DEEP → PC MULTI → PC PLAY → PC EXT → SP BASIC → ...` の順で表示
+- 進捗チップ（`PC+SP` 時）: 選択フェーズに応じて `PC BASIC → PC EXT → PC DEEP → PC PLAY → PC MULTI → SP BASIC → ...` の順で表示
 - 結果格納:
   - `batchResultsData`: PCデータ（SPのみ時はSPデータ）
   - `batchEnhancedResults`: `url → DEEP results`
@@ -259,11 +259,16 @@
 
 ### TOTAL算出
 
-- SC単位で重複除去し、以下の優先順位でマージ
-- 優先順位: `fail > pass > unverified > na`
+- SC単位で重複除去し、スキャンソース別権威ルールでマージ（`computeTotalScore()`）
+- **基本優先順位**: `fail > pass > unverified > na`
   - `fail` が最優先（1つでも違反があればfail）
   - `pass` は `unverified` より優先（BASIC の incomplete が DEEP の pass を打ち消さない）
   - `na` は他のいずれの結果も存在しない場合のみ
+- **SC権威スキャン（`SC_AUTHORITY`）**: 特定SCはそのスキャンの結果が他のfail/passより優先される
+  - キーボード操作SC（2.1.1/2.1.2/2.1.4/2.4.3/2.4.7/2.4.11/2.4.12）→ **PLAYが権威**
+  - アクセシビリティ名/ロールSC（4.1.2/4.1.3/1.3.1/1.3.5）→ **EXTが権威**
+  - 権威スキャンの結果は他スキャンのfailより強く適用される（例: PLAYがpassなら2.4.7はpassになる）
+- **MULTIはギャップ補完のみ**: 他スキャンが`unverified`のSCのみMULTI結果を適用。BASIC/EXT/DEEP/PLAYが確定済みのSCには上書きしない
 
 ## Web系API一覧
 
@@ -421,14 +426,16 @@
 
 | プロバイダー | 関数 | トークンパラメーター | フォーマット指定 |
 |---|---|---|---|
-| Gemini Flash / Pro | `callGeminiAPI()` | `maxOutputTokens: 8192` | `responseMimeType: "application/json"` |
+| Gemini Flash | `callGeminiAPI()` | `maxOutputTokens: 8192` | `responseMimeType: "application/json"` |
+| Gemini 2.5 Pro | `callGeminiAPI()` | `maxOutputTokens: 32768`（思考トークン対応） | `responseMimeType: "application/json"` |
 | Claude Sonnet / Opus | `callClaudeAPI()` | `max_tokens: 8192` | なし（プロンプト指示） |
-| GPT-4o | `callOpenAIAPI()` | `max_tokens: 8192` | なし（プロンプト指示） |
-| GPT-5 / o3 / o1系 | `callOpenAIAPI()` | `max_completion_tokens: 8192` | なし（プロンプト指示） |
+| GPT-4o / o3 / GPT-5 | `callOpenAIAPI()` | `max_tokens: 8192`（o3/GPT-5は `max_completion_tokens`） | `response_format: { type: "json_object" }` + systemメッセージ |
 
-- `response_format: json_object` は**使用しない**。プロンプトがJSON配列を要求しており `json_object` モードと不整合になるため省略。
+- **OpenAI系は `response_format: { type: "json_object" }` を使用**。systemメッセージで `{"results":[...]}` ラッパー形式を指定し、プロンプトとの不整合を回避。
 - OpenAI 呼び出し時は `X-Client-Request-Id` を付与し、APIエラー時に OpenAI の `x-request-id` と合わせて返す
-- レスポンスパース順序: ① 直接 `JSON.parse`（配列またはオブジェクトラップ対応）→ ② 正規表現で `[...]` を抽出 → ③ `{"index":n,...}` を個別抽出
+- **JSONパース**: `extractJsonArray()` によるブラケットカウント方式。正規表現は文字列内の `]` や `}` に誤反応するため不使用
+  - ① マークダウンコードブロック除去 → ② `JSON.parse`（配列/オブジェクトラップ対応） → ③ ブラケットカウントで `[...]` を特定
+  - トークン上限で不完全なJSONの場合: `extractPartialItems()` で完結した `{...}` オブジェクトを個別救出
 - オブジェクトラップ形式（例: `{"results":[...]}`）は `Object.values().find(Array.isArray)` で内部配列を取り出す
 
 ### トークン上限検出
@@ -442,11 +449,28 @@
 | OpenAI / o3 | `completion.choices[0].finish_reason === 'length'` |
 
 - `callAI()` がフラグを伝播し、`/api/ai-evaluate` レスポンスに `tokenLimited: true` を含める
-- トークン上限時でも途中までパースした結果を正常系として返す。未返答分は `manual_required` にフォールバック
+- トークン上限で JSON が不完全な場合: `extractPartialItems()` で完結したオブジェクトを救出し部分結果として返す。未返答分は `manual_required` にフォールバック
 - UI: スコアテーブル MULTI 行ラベルのサブテキスト末尾に `<span class="score-token-warn">トークン上限</span>`（amber）を表示
 - UI: MULTI SCAN ステータスメッセージにも `<span class="ai-token-warn">トークン上限</span>` と詳細メッセージを表示
 - HTTP 429 / quota exceeded は `success: false` のAPIエラーとして返し、クライアント側で `manual_required` のフォールバックカードと `APIエラー` バッジを表示する
 - モデル未提供/未許可は `モデル利用不可`、AI応答のJSON解析失敗は `JSON解析失敗` バッジを表示する
+- エラーメッセージはプロバイダー別（OpenAI / Gemini / Claude）に異なる案内文を表示（`buildAICauseHint()`）
+  - Gemini 429: 無料枠上限の場合は gemini-flash への切替またはPay-as-you-go有効化を案内
+
+### PLAY→MULTI キーボード項目事前解決
+
+- `/api/ai-evaluate` リクエストに `playResults` を含めることで、PLAYスキャン済みSCのアイテムをAI呼び出し前に解決する
+- 対象: `manualCheckItems` の各アイテムの `ref`（WCAG SC）がPLAY結果に存在し、かつ `status !== 'unverified'` の場合
+- 解決済みアイテムはAIに送らず、`confidence: 0.95` の Playwright 自動テスト結果として適用
+- AIには残りの未解決アイテムのみ送信（トークン節約、`manual_required` 誤判定防止）
+- サーバーログ: `[MULTI] PLAY解決済: N件, AI送信: M件`
+
+### デバッグエンドポイント
+
+- `GET /api/last-ai-debug`: 直近のMULTI CHECK AI呼び出しの生データを返す
+  - フィールド: `provider`, `model`, `stage`（進行状態）, `length`, `tokenLimited`, `raw`（AIの生テキスト）, `timestamp`
+  - `stage` 値: `received` / `no_api_key` / `browser_launch` / `page_done_calling_ai` / `api_error` / `ai_responded` / `exception`
+  - JSON解析失敗の調査に使用
 
 ### ステータスインジケーター
 

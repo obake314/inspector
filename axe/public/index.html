@@ -1414,7 +1414,27 @@
                     const issueText = lastMultiIssue?.message ? `<div class="ai-status-note">${escapeHtml(lastMultiIssue.message)}</div>` : '';
                     status.innerHTML = `評価完了${issueWarn} <span class="ai-status-badge">合格: ${passCount} / 不合格: ${failCount} / 要手動: ${manualCount} / 該当なし: ${naCount}</span>${issueText}`;
                 }
-                // スコアとタブをMULTI結果で再描画
+                // スコアテーブルとタブをMULTI結果で再描画
+                {
+                    const doDeep  = !!lastEnhancedResults;
+                    const doMulti = Object.keys(aiResults).length > 0;
+                    const doPlay  = !!lastPlayResults;
+                    const doExt   = !!lastExtResults;
+                    renderScanScoreTable(
+                        computeBasicScore(lastResults),
+                        doDeep  ? computeDeepScore(lastEnhancedResults)  : null,
+                        doMulti ? computeMultiScore(aiResults)           : null,
+                        doDeep, doMulti,
+                        {
+                            scoreBodyId: 'scanScoreBody', scoreTableId: 'scanScoreTable', scoreBlockId: 'scoreBlockDesktop',
+                            playEnabled: doPlay, playScore: doPlay ? computePlayScore(lastPlayResults) : null,
+                            extEnabled: doExt,  extScore:  doExt  ? computeExtScore(lastExtResults)   : null,
+                            state: { playResults: lastPlayResults, extResults: lastExtResults },
+                            multiTokenLimited: lastMultiTokenLimited,
+                            multiIssue: lastMultiIssue
+                        }
+                    );
+                }
                 renderAllTabs('pc');
             } catch (error) {
                 const msg = error.name === 'AbortError' ? 'MULTI SCANがタイムアウトしました（10分超過）' : error.message;
@@ -2271,10 +2291,10 @@
             const phaseLabels = [];
             const pushPhaseLabels = (prefix) => {
                 phaseLabels.push(prefix ? `${prefix} BASIC` : 'BASIC');
-                if (doDeep) phaseLabels.push(prefix ? `${prefix} DEEP` : 'DEEP');
+                if (doExt)   phaseLabels.push(prefix ? `${prefix} EXT`   : 'EXT');
+                if (doDeep)  phaseLabels.push(prefix ? `${prefix} DEEP`  : 'DEEP');
+                if (doPlay)  phaseLabels.push(prefix ? `${prefix} PLAY`  : 'PLAY');
                 if (doMulti) phaseLabels.push(prefix ? `${prefix} MULTI` : 'MULTI');
-                if (doPlay) phaseLabels.push(prefix ? `${prefix} PLAY` : 'PLAY');
-                if (doExt) phaseLabels.push(prefix ? `${prefix} EXT` : 'EXT');
             };
             if (runDesktop && runMobile) {
                 pushPhaseLabels('PC');
@@ -2345,8 +2365,38 @@
                     }
                 );
 
-                // --- DEEP ---
                 let localPhaseIndex = 1;
+
+                // --- EXT ---
+                if (doExt && snapshot.basic) {
+                    const extPhase = phaseOffset + localPhaseIndex;
+                    progressLabel.textContent = `${labelPrefix}EXT SCANNING（IBM ACE + 拡張検査）...`;
+                    renderSinglePhases(extPhase + 1);
+                    const tExt = startPhaseTimer(extPhase);
+                    try {
+                        await runExtCheck(true, { viewportPreset });
+                        clearInterval(tExt);
+                        setSinglePhaseProgress(extPhase, 1);
+                        snapshot.ext = cloneData(lastExtResults);
+                        renderScanScoreTable(
+                            computeBasicScore(snapshot.basic),
+                            null, null, false, doMulti,
+                            {
+                                ...scoreTableIds,
+                                extEnabled: true, extScore: computeExtScore(snapshot.ext),
+                                state: { basicResults: snapshot.basic, extResults: snapshot.ext }
+                            }
+                        );
+                    } catch (e) {
+                        clearInterval(tExt);
+                        const msg = e.name === 'AbortError' ? 'タイムアウト（7分超過）' : e.message;
+                        if (isTimeoutLike(e, msg)) recordTimeoutRetry({ url, scanType: 'EXT', mode: 'single', viewportPreset, message: msg });
+                        progressLabel.textContent = `${labelPrefix}EXT SCAN エラー: ${msg}`;
+                    }
+                    localPhaseIndex++;
+                }
+
+                // --- DEEP ---
                 if (doDeep && snapshot.basic) {
                     const deepPhase = phaseOffset + localPhaseIndex;
                     progressLabel.textContent = `${labelPrefix}DEEP SCANNING（2〜4分かかります）...`;
@@ -2359,31 +2409,59 @@
                         snapshot.deep = cloneData(lastEnhancedResults);
                         renderScanScoreTable(
                             computeBasicScore(snapshot.basic),
-                            computeDeepScore(snapshot.deep),
-                            null,
-                            true,
-                            doMulti,
+                            computeDeepScore(snapshot.deep), null, true, doMulti,
                             {
                                 ...scoreTableIds,
-                                state: {
-                                    basicResults: snapshot.basic,
-                                    deepResults: snapshot.deep,
-                                    multiAiData: null
-                                }
+                                extEnabled: doExt, extScore: snapshot.ext ? computeExtScore(snapshot.ext) : null,
+                                state: { basicResults: snapshot.basic, deepResults: snapshot.deep, extResults: snapshot.ext }
                             }
                         );
                     } catch (e) {
                         clearInterval(tDeep);
                         const msg = e.name === 'AbortError' ? 'タイムアウト（9分超過）' : e.message;
-                        if (isTimeoutLike(e, msg)) {
-                            recordTimeoutRetry({ url, scanType: 'DEEP', mode: 'single', viewportPreset, message: msg });
-                        }
+                        if (isTimeoutLike(e, msg)) recordTimeoutRetry({ url, scanType: 'DEEP', mode: 'single', viewportPreset, message: msg });
                         progressLabel.textContent = `${labelPrefix}DEEP SCAN エラー: ${msg}`;
                     }
                     localPhaseIndex++;
                 }
 
-                // --- MULTI ---
+                // --- PLAY ---（キーボード検査はPLAYが権威スキャンのためMULTI前に実行）
+                if (doPlay && snapshot.basic) {
+                    const playPhase = phaseOffset + localPhaseIndex;
+                    progressLabel.textContent = `${labelPrefix}PLAYWRITING（キーボード・アクセシビリティツリー検査）...`;
+                    renderSinglePhases(playPhase + 1);
+                    const tPlay = startPhaseTimer(playPhase);
+                    try {
+                        await runPlaywrightCheck(true, { viewportPreset });
+                        clearInterval(tPlay);
+                        setSinglePhaseProgress(playPhase, 1);
+                        snapshot.play = cloneData(lastPlayResults);
+                        renderScanScoreTable(
+                            computeBasicScore(snapshot.basic),
+                            doDeep ? computeDeepScore(snapshot.deep) : null,
+                            null, doDeep, doMulti,
+                            {
+                                ...scoreTableIds,
+                                playEnabled: true, playScore: computePlayScore(snapshot.play),
+                                extEnabled: doExt, extScore: snapshot.ext ? computeExtScore(snapshot.ext) : null,
+                                state: {
+                                    basicResults: snapshot.basic,
+                                    deepResults: doDeep ? snapshot.deep : null,
+                                    playResults: snapshot.play,
+                                    extResults: snapshot.ext
+                                }
+                            }
+                        );
+                    } catch (e) {
+                        clearInterval(tPlay);
+                        const msg = e.name === 'AbortError' ? 'タイムアウト（6分超過）' : e.message;
+                        if (isTimeoutLike(e, msg)) recordTimeoutRetry({ url, scanType: 'PLAY', mode: 'single', viewportPreset, message: msg });
+                        progressLabel.textContent = `${labelPrefix}PLAYWRIGHT エラー: ${msg}`;
+                    }
+                    localPhaseIndex++;
+                }
+
+                // --- MULTI ---（PLAY結果を使ってキーボード項目を事前解決できる）
                 if (doMulti && snapshot.basic) {
                     const multiPhase = phaseOffset + localPhaseIndex;
                     progressLabel.textContent = `${labelPrefix}MULTI SCANNING...`;
@@ -2399,16 +2477,12 @@
                         renderScanScoreTable(
                             computeBasicScore(snapshot.basic),
                             doDeep ? computeDeepScore(snapshot.deep) : null,
-                            computeMultiScore(snapshot.multi),
-                            doDeep, true,
+                            computeMultiScore(snapshot.multi), doDeep, true,
                             {
                                 ...scoreTableIds,
-                                playEnabled: doPlay,
-                                playScore: snapshot.play ? computePlayScore(snapshot.play) : null,
-                                extEnabled: doExt,
-                                extScore: snapshot.ext ? computeExtScore(snapshot.ext) : null,
-                                multiTokenLimited: lastMultiTokenLimited,
-                                multiIssue: snapshot.multiIssue,
+                                playEnabled: doPlay, playScore: snapshot.play ? computePlayScore(snapshot.play) : null,
+                                extEnabled: doExt, extScore: snapshot.ext ? computeExtScore(snapshot.ext) : null,
+                                multiTokenLimited: lastMultiTokenLimited, multiIssue: snapshot.multiIssue,
                                 state: {
                                     basicResults: snapshot.basic,
                                     deepResults: doDeep ? snapshot.deep : null,
@@ -2421,99 +2495,10 @@
                     } catch (e) {
                         clearInterval(tMulti);
                         const msg = e.name === 'AbortError' ? 'タイムアウト（10分超過）' : e.message;
-                        if (isTimeoutLike(e, msg)) {
-                            recordTimeoutRetry({ url, scanType: 'MULTI', mode: 'single', viewportPreset, message: msg });
-                        }
+                        if (isTimeoutLike(e, msg)) recordTimeoutRetry({ url, scanType: 'MULTI', mode: 'single', viewportPreset, message: msg });
                         progressLabel.textContent = `${labelPrefix}MULTI SCAN エラー: ${msg}`;
                     }
                     localPhaseIndex++;
-                }
-
-                // --- PLAY ---
-                if (doPlay && snapshot.basic) {
-                    const playPhase = phaseOffset + localPhaseIndex;
-                    progressLabel.textContent = `${labelPrefix}PLAYWRITING（キーボード・アクセシビリティツリー検査）...`;
-                    renderSinglePhases(playPhase + 1);
-                    const tPlay = startPhaseTimer(playPhase);
-                    try {
-                        await runPlaywrightCheck(true, { viewportPreset });
-                        clearInterval(tPlay);
-                        setSinglePhaseProgress(playPhase, 1);
-                        snapshot.play = cloneData(lastPlayResults);
-                        renderScanScoreTable(
-                            computeBasicScore(snapshot.basic),
-                            doDeep ? computeDeepScore(snapshot.deep) : null,
-                            doMulti ? computeMultiScore(snapshot.multi) : null,
-                            doDeep, doMulti,
-                            {
-                                ...scoreTableIds,
-                                playEnabled: true,
-                                playScore: computePlayScore(snapshot.play),
-                                extEnabled: doExt,
-                                extScore: snapshot.ext ? computeExtScore(snapshot.ext) : null,
-                                multiTokenLimited: snapshot.multiTokenLimited || false,
-                                multiIssue: snapshot.multiIssue || null,
-                                state: {
-                                    basicResults: snapshot.basic,
-                                    deepResults: doDeep ? snapshot.deep : null,
-                                    multiAiData: doMulti ? snapshot.multi : null,
-                                    playResults: snapshot.play,
-                                    extResults: snapshot.ext
-                                }
-                            }
-                        );
-                    } catch (e) {
-                        clearInterval(tPlay);
-                        const msg = e.name === 'AbortError' ? 'タイムアウト（6分超過）' : e.message;
-                        if (isTimeoutLike(e, msg)) {
-                            recordTimeoutRetry({ url, scanType: 'PLAY', mode: 'single', viewportPreset, message: msg });
-                        }
-                        progressLabel.textContent = `${labelPrefix}PLAYWRIGHT エラー: ${msg}`;
-                    }
-                    localPhaseIndex++;
-                }
-
-                // --- EXT ---
-                if (doExt && snapshot.basic) {
-                    const extPhase = phaseOffset + localPhaseIndex;
-                    progressLabel.textContent = `${labelPrefix}EXT SCANNING（IBM ACE + 拡張検査）...`;
-                    renderSinglePhases(extPhase + 1);
-                    const tExt = startPhaseTimer(extPhase);
-                    try {
-                        await runExtCheck(true, { viewportPreset });
-                        clearInterval(tExt);
-                        setSinglePhaseProgress(extPhase, 1);
-                        snapshot.ext = cloneData(lastExtResults);
-                        renderScanScoreTable(
-                            computeBasicScore(snapshot.basic),
-                            doDeep ? computeDeepScore(snapshot.deep) : null,
-                            doMulti ? computeMultiScore(snapshot.multi) : null,
-                            doDeep, doMulti,
-                            {
-                                ...scoreTableIds,
-                                playEnabled: doPlay,
-                                playScore: snapshot.play ? computePlayScore(snapshot.play) : null,
-                                extEnabled: true,
-                                extScore: computeExtScore(snapshot.ext),
-                                multiTokenLimited: snapshot.multiTokenLimited || false,
-                                multiIssue: snapshot.multiIssue || null,
-                                state: {
-                                    basicResults: snapshot.basic,
-                                    deepResults: doDeep ? snapshot.deep : null,
-                                    multiAiData: doMulti ? snapshot.multi : null,
-                                    playResults: snapshot.play,
-                                    extResults: snapshot.ext
-                                }
-                            }
-                        );
-                    } catch (e) {
-                        clearInterval(tExt);
-                        const msg = e.name === 'AbortError' ? 'タイムアウト（7分超過）' : e.message;
-                        if (isTimeoutLike(e, msg)) {
-                            recordTimeoutRetry({ url, scanType: 'EXT', mode: 'single', viewportPreset, message: msg });
-                        }
-                        progressLabel.textContent = `${labelPrefix}EXT SCAN エラー: ${msg}`;
-                    }
                 }
                 return snapshot;
             }
@@ -2962,31 +2947,62 @@
 
         function computeTotalScore(basicResults, deepResults, multiAiData, playResults, extResults) {
             const rank = { fail: 0, pass: 1, unverified: 2, na: 3 };
-            const scMap = {}; // sc → { result, impact }
+            const scMap = {}; // sc → { result, impact, source }
             const lo = { 'A': 1, 'AA': 2, 'AAA': 3 };
             const lim = lo[targetLevel] || 2;
             const scSet = new Set(getTargetScList());
 
-            function merge(sc, result, impact) {
+            // キーボード操作SCはPLAY、アクセシビリティ名/ロールSCはEXTが権威スキャン
+            const SC_AUTHORITY = {
+                '2.1.1':'PLAY','2.1.2':'PLAY','2.1.4':'PLAY',
+                '2.4.3':'PLAY','2.4.7':'PLAY','2.4.11':'PLAY','2.4.12':'PLAY',
+                '4.1.2':'EXT','4.1.3':'EXT','1.3.1':'EXT','1.3.5':'EXT',
+            };
+
+            function merge(sc, result, impact, source) {
                 if (!sc || !scSet.has(sc)) return;
                 const cur = scMap[sc];
-                if (!cur || rank[result] < rank[cur.result]) {
-                    scMap[sc] = { result, impact: impact || cur?.impact || null };
+                // MULTIはunverifiedのSCのみ補完する（他スキャンの確定結果を上書きしない）
+                if (source === 'MULTI' && cur && cur.result !== 'unverified') return;
+                const authority = SC_AUTHORITY[sc];
+                if (!cur) {
+                    scMap[sc] = { result, impact: impact || null, source };
+                    return;
+                }
+                // 権威スキャンの結果は他のfail/passより優先
+                if (authority && source === authority) {
+                    scMap[sc] = { result, impact: impact || cur.impact || null, source };
+                    return;
+                }
+                // 現在の結果が権威スキャン由来なら上書き不可
+                if (authority && cur.source === authority) return;
+                // 通常のステータス優先度
+                if (rank[result] < rank[cur.result]) {
+                    scMap[sc] = { result, impact: impact || cur.impact || null, source };
                 }
             }
 
             if (basicResults) {
                 (basicResults.violations || []).forEach(v => {
                     const d = applyDecisionToStatus(`BASIC:${v.id}`, 'fail', v.impact);
-                    merge(extractSCFromTags(v.tags), d.status, d.impact);
+                    merge(extractSCFromTags(v.tags), d.status, d.impact, 'BASIC');
                 });
                 (basicResults.passes    || []).forEach(v => {
                     const d = applyDecisionToStatus(`BASIC:pass:${v.id}`, 'pass', null);
-                    merge(extractSCFromTags(v.tags), d.status, d.impact);
+                    merge(extractSCFromTags(v.tags), d.status, d.impact, 'BASIC');
                 });
                 (basicResults.incomplete|| []).forEach(v => {
                     const d = applyDecisionToStatus(`BASIC:${v.id}`, 'unverified', v.impact);
-                    merge(extractSCFromTags(v.tags), d.status, d.impact);
+                    merge(extractSCFromTags(v.tags), d.status, d.impact, 'BASIC');
+                });
+            }
+            if (extResults) {
+                extResults.forEach(r => {
+                    if (!r.sc) return;
+                    const rawStatus = r.status === 'fail' ? 'fail' : r.status === 'pass' ? 'pass'
+                               : r.status === 'not_applicable' ? 'na' : 'unverified';
+                    const d = applyDecisionToStatus(`EXT:${r.sc}`, rawStatus, 'serious');
+                    splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, d.impact, 'EXT'));
                 });
             }
             if (deepResults) {
@@ -2994,7 +3010,15 @@
                     const rawStatus = r.status === 'fail' ? 'fail' : r.status === 'pass' ? 'pass'
                                : r.status === 'not_applicable' ? 'na' : 'unverified';
                     const d = applyDecisionToStatus(`DEEP:${r.sc}`, rawStatus, 'serious');
-                    splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, d.impact));
+                    splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, d.impact, 'DEEP'));
+                });
+            }
+            if (playResults) {
+                playResults.forEach(r => {
+                    const rawStatus = r.status === 'fail' ? 'fail' : r.status === 'pass' ? 'pass'
+                               : r.status === 'not_applicable' ? 'na' : 'unverified';
+                    const d = applyDecisionToStatus(`PLAY:${r.sc}`, rawStatus, 'serious');
+                    splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, d.impact, 'PLAY'));
                 });
             }
             if (multiAiData) {
@@ -3005,24 +3029,7 @@
                                : r.status === 'fail' ? 'fail'
                                : r.status === 'not_applicable' ? 'na' : 'unverified';
                     const d = applyDecisionToStatus(`MULTI:${i}`, rawStatus, 'serious');
-                    merge(item.ref, d.status, d.impact);
-                });
-            }
-            if (playResults) {
-                playResults.forEach(r => {
-                    const rawStatus = r.status === 'fail' ? 'fail' : r.status === 'pass' ? 'pass'
-                               : r.status === 'not_applicable' ? 'na' : 'unverified';
-                    const d = applyDecisionToStatus(`PLAY:${r.sc}`, rawStatus, 'serious');
-                    splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, d.impact));
-                });
-            }
-            if (extResults) {
-                extResults.forEach(r => {
-                    if (!r.sc) return;
-                    const rawStatus = r.status === 'fail' ? 'fail' : r.status === 'pass' ? 'pass'
-                               : r.status === 'not_applicable' ? 'na' : 'unverified';
-                    const d = applyDecisionToStatus(`EXT:${r.sc}`, rawStatus, 'serious');
-                    splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, d.impact));
+                    merge(item.ref, d.status, d.impact, 'MULTI');
                 });
             }
 

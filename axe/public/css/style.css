@@ -369,25 +369,21 @@ h1 {
 #batchEnhancedOpt:checked,
 .scan-option-checkbox#deepScanOpt:checked {
   background: var(--color-deep);
-  border-color: var(--navy-700);
 }
 
 #batchAIOpt:checked,
 .scan-option-checkbox#multiScanOpt:checked {
   background: var(--color-multi);
-  border-color: var(--navy-700);
 }
 
 #batchPlayOpt:checked,
 .scan-option-checkbox#playScanOpt:checked {
   background: var(--color-play);
-  border-color: var(--navy-700);
 }
 
 #batchExtOpt:checked,
 .scan-option-checkbox#extScanOpt:checked {
   background: var(--color-ext);
-  border-color: var(--navy-700);
 }
 
 .scan-option-checkbox:checked::after {
@@ -550,17 +546,19 @@ h1 {
 }
 .score-label {
   font-family: var(--font-latin);
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 500;
 }
-
 .score-row-sub {
-  font-family: var(--font-basic);
-  display: block;
-  font-size: 10px;
-  font-weight: 400;
-  opacity: 0.72;
-  letter-spacing: 0.02em;
-  margin-top: 2px;
-  white-space: nowrap;
+    font-family: var(--font-basic);
+    display: block;
+    font-size: 14px;
+    font-weight: 400;
+    letter-spacing: 0;
+    margin-top: 2px;
+    white-space: nowrap;
+    line-height: 1;
 }
 
 .score-token-warn {
@@ -1816,6 +1814,8 @@ footer small {
 
 .config-status-item .st {
   font-weight: 600;
+  line-height: 1;
+  font-size: var(--font-size-m);
 }
 .config-status-item.ok {
   border-color: var(--color-multi);
@@ -1843,7 +1843,7 @@ footer small {
 }
 .config-status-ai .st-model {
   font-family: var(--font-latin);
-  font-size: var(--font-size-s);
+  font-size: var(--font-size-m);
   font-weight: 600;
   line-height: 1.3;
   white-space: nowrap;
