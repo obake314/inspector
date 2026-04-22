@@ -712,3 +712,14 @@
   - DEEP / PLAY / EXT の結果が `UNIFIED` カードとして表示される
   - カード展開時に検出ツール名、検出内容、検出箇所が表示される
   - `.tab-num` はBASIC単独ではなくTOTAL統合スコアと一致する
+
+## T-SCAN-70: npm test スモークテスト
+
+- 手順
+  1. `cd axe`
+  2. `npm test` を実行する
+- 期待結果
+  - `server.js` の構文チェックが通る
+  - `public/index.html` 内インラインスクリプトの構文チェックが通る
+  - `gas/ReportGenerator.gs` の構文チェックが通る
+  - 終了コードが `0` になる

@@ -267,6 +267,14 @@
 - `GET /api/sheets-status`
 - `POST /api/export-report`
 
+## テストコマンド
+
+- `npm test`
+  - `server.js` の Node 構文チェック
+  - `public/index.html` 内インラインスクリプトの構文チェック
+  - `gas/ReportGenerator.gs` の構文チェック
+- 実体: `scripts/smoke-test.js`
+
 ## UI操作制約
 
 - スキャン実行後は以下の全要素を操作不可にロック（`lockScanUI()` 呼び出し）
