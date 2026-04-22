@@ -1338,6 +1338,40 @@
             }));
         }
 
+        function mapAiResultsByOriginalIndex(results, filteredItems) {
+            const out = {};
+            const items = Array.isArray(filteredItems) ? filteredItems : [];
+            const list = Array.isArray(results) ? results : [];
+            const originalIndexes = new Set(items.map(item => item.index).filter(index => index !== undefined));
+            const numericIndexes = list
+                .map(result => Number(result?.index))
+                .filter(index => Number.isInteger(index));
+            const sequentialHits = numericIndexes.filter(index => !!items[index]).length;
+            const originalHits = numericIndexes.filter(index => originalIndexes.has(index)).length;
+            const preferOriginalIndex = originalHits > sequentialHits;
+
+            list.forEach((result, order) => {
+                const idx = Number(result?.index);
+                let originalIndex;
+                if (Number.isInteger(idx)) {
+                    if (preferOriginalIndex && originalIndexes.has(idx)) {
+                        originalIndex = idx;
+                    } else if (items[idx]?.index !== undefined) {
+                        originalIndex = items[idx].index;
+                    } else if (originalIndexes.has(idx)) {
+                        originalIndex = idx;
+                    }
+                }
+                if (originalIndex === undefined && items[order]?.index !== undefined) {
+                    originalIndex = items[order].index;
+                }
+                if (originalIndex !== undefined) {
+                    out[originalIndex] = { ...result, index: originalIndex };
+                }
+            });
+            return out;
+        }
+
         async function runAIEvaluation(silent = false, options = {}) {
             if (!lastResults?.url) {
                 if (!silent) alert('先にURLをチェックしてください');
@@ -1398,21 +1432,16 @@
                 }
 
                 // 結果を適用
-                aiResults = {};
+                aiResults = mapAiResultsByOriginalIndex(data.results || [], filteredItems);
                 lastMultiIssue = buildMultiIssue(data);
                 lastMultiTokenLimited = !!(data.tokenLimited || data.partialResults || data.rateLimited || data.quotaExceeded);
                 let passCount = 0, failCount = 0, manualCount = 0, naCount = 0;
 
-                data.results.forEach((result) => {
-                    const idx = result.index;
-                    const originalIndex = filteredItems[idx]?.index;
-                    if (originalIndex !== undefined) {
-                        aiResults[originalIndex] = result;
-                        if (result.status === 'pass') passCount++;
-                        else if (result.status === 'not_applicable') naCount++;
-                        else if (result.status === 'fail') failCount++;
-                        else if (result.status === 'manual_required') manualCount++;
-                    }
+                Object.values(aiResults).forEach((result) => {
+                    if (result.status === 'pass') passCount++;
+                    else if (result.status === 'not_applicable') naCount++;
+                    else if (result.status === 'fail') failCount++;
+                    else if (result.status === 'manual_required') manualCount++;
                 });
 
                 if (!silent) {
@@ -1656,7 +1685,17 @@
                         <td colspan="8" class="batchsum-td batchsum-error">${r.error}</td>
                     </tr>`;
                 }
-                const sc = computeBasicScore(r.results);
+                const deep = batchEnhancedResults[r.url] || null;
+                const multi = batchAIResults[r.url] || null;
+                const play = batchPlayResults[r.url] || null;
+                const ext = batchExtResults[r.url] || null;
+                const sc = normalizeScoreToTarget(computeTotalScore(
+                    r.results,
+                    deep,
+                    Object.keys(multi || {}).length > 0 ? multi : null,
+                    play,
+                    ext
+                ));
                 const scoreClass = sc.score >= 80 ? 'is-high' : sc.score >= 50 ? 'is-mid' : 'is-low';
                 const d = (n, tone) => n > 0
                     ? `<span class="batchsum-num is-pos tone-${tone}">${n}</span>`
@@ -2038,22 +2077,14 @@
                                     clearTimeout(aiTimer);
                                 }
                                 if (ar && ar.ok) {
-                                    const processed = {};
-                                    (ad.results || []).forEach(result => {
-                                        const orig = filteredItems[result.index]?.index;
-                                        if (orig !== undefined) processed[orig] = result;
-                                    });
+                                    const processed = mapAiResultsByOriginalIndex(ad.results || [], filteredItems);
                                     aiResultsMap[successUrls[i]] = processed;
                                     aiTokenLimitedMap[successUrls[i]] = !!(ad.tokenLimited || ad.partialResults);
                                     aiIssueMap[successUrls[i]] = buildMultiIssue(ad);
                                     console.log(`[BATCH-MULTI] ${successUrls[i]}: ${(ad.results || []).length} 結果${ad.tokenLimited ? ' [トークン上限]' : ad.partialResults ? ' [部分応答]' : ''}`);
                                 } else {
                                     const errorMsg = ad?.error || 'MULTI SCAN失敗';
-                                    const processed = {};
-                                    makeClientFallbackAiResults(filteredItems, errorMsg).forEach(result => {
-                                        const orig = filteredItems[result.index]?.index;
-                                        if (orig !== undefined) processed[orig] = result;
-                                    });
+                                    const processed = mapAiResultsByOriginalIndex(makeClientFallbackAiResults(filteredItems, errorMsg), filteredItems);
                                     aiResultsMap[successUrls[i]] = processed;
                                     aiTokenLimitedMap[successUrls[i]] = true;
                                     aiIssueMap[successUrls[i]] = buildMultiIssue(ad) || { label: 'APIエラー', message: errorMsg };
