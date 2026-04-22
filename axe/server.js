@@ -840,6 +840,21 @@ async function check_2_5_8_target_size(page) {
       const selectors = ['a', 'button', 'input:not([type="hidden"])', 'select', 'textarea', '[onclick]', '[role="button"]', '[role="link"]', '[role="checkbox"]', '[role="radio"]'];
       const violations = [];
       const seen = new Set();
+      const srOnlyPattern = /(^|[\s_-])(sr-only|screen-reader|screenreader|screen-reader-text|visually-hidden|visuallyhidden|visually_hidden|hidden-visually|u-hidden-visually|a11y-hidden|assistive-text|accessible-hidden|reader-only)([\s_-]|$)/i;
+      function isScreenReaderOnlyElement(el) {
+        let current = el;
+        while (current && current !== document.body && current.nodeType === Node.ELEMENT_NODE) {
+          const marker = [
+            current.id,
+            current.getAttribute('class'),
+            current.getAttribute('data-testid'),
+            current.getAttribute('data-test')
+          ].filter(Boolean).join(' ');
+          if (srOnlyPattern.test(marker)) return true;
+          current = current.parentElement;
+        }
+        return false;
+      }
       for (const sel of selectors) {
         for (const el of document.querySelectorAll(sel)) {
           if (seen.has(el)) continue;
@@ -853,14 +868,18 @@ async function check_2_5_8_target_size(page) {
             const hasAfter = idx < siblings.length - 1 && siblings[idx + 1].nodeType === 3 && siblings[idx + 1].textContent.trim();
             if (hasBefore || hasAfter) continue;
           }
+          if (isScreenReaderOnlyElement(el)) continue;
           const rect = el.getBoundingClientRect();
           if (rect.width === 0 && rect.height === 0) continue;
           if (rect.width < 24 || rect.height < 24) {
             const tag = el.tagName.toLowerCase();
             const id = el.id ? `#${el.id}` : '';
+            const cls = el.getAttribute('class')
+              ? '.' + el.getAttribute('class').trim().split(/\s+/).slice(0, 2).join('.')
+              : '';
             const text = (el.textContent || el.value || el.getAttribute('aria-label') || '').trim().slice(0, 30);
             violations.push({
-              selector: `${tag}${id}`.slice(0, 60),
+              selector: `${tag}${id}${cls}`.slice(0, 80),
               text,
               width: Math.round(rect.width),
               height: Math.round(rect.height)
@@ -876,7 +895,7 @@ async function check_2_5_8_target_size(page) {
       sc: '2.5.8', name: 'ターゲットサイズ（24×24px）',
       status: result.length === 0 ? 'pass' : 'fail',
       message: result.length === 0
-        ? '全インタラクティブ要素が24×24px以上'
+        ? '全インタラクティブ要素が24×24px以上（スクリーンリーダー専用要素を除く）'
         : `${result.length}個の要素がサイズ不足`,
       violations: result.map(v => `${v.selector} [${v.width}×${v.height}px] "${v.text}"`)
     };
