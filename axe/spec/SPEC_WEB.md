@@ -22,6 +22,7 @@
 - 入力: `{ url, includeAAA?, basicAuth?, viewportPreset? }`
 - 出力: `{ success, viewportPreset, results: [{ sc, name, status, message, violations[] }], includeAAA }`
 - SC 2.5.8 ターゲットサイズ検査では、class/id/data属性に `sr-only` / `screen-reader` / `screen-reader-text` / `visually-hidden` / `assistive-text` 等のスクリーンリーダー専用マーカーを持つ要素とその配下を24×24px判定から除外する
+- SC 2.3.1 点滅検査では、WordPress標準 lightbox 由来の `turn-on-visibility` / `turn-off-visibility` / `lightbox-zoom-in` / `lightbox-zoom-out` keyframes を点滅候補から除外する
 - AAA βは一時停止中。フロントUIはコメントアウトし、`includeAAA` が送信されてもサーバー側で `false` 固定として扱う。
 - status: `pass` / `fail` / `not_applicable` / `manual_required` / `error`
 - タイムアウト仕様:

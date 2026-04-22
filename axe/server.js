@@ -1816,11 +1816,18 @@ async function check_2_3_1_three_flashes(page) {
   try {
     const result = await page.evaluate(() => {
       const issues = [];
+      const ignoredKeyframes = new Set([
+        'turn-on-visibility',
+        'turn-off-visibility',
+        'lightbox-zoom-in',
+        'lightbox-zoom-out'
+      ]);
       // @keyframes で急速な色変化を検出
       for (const sheet of document.styleSheets) {
         try {
           for (const rule of sheet.cssRules || []) {
             if (rule.type === CSSRule.KEYFRAMES_RULE) {
+              if (ignoredKeyframes.has(rule.name)) continue;
               const keys = Array.from(rule.cssRules || []);
               // 明暗反転を0%→50%→100%でチェック
               if (keys.length >= 3) {

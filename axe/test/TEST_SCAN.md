@@ -773,3 +773,13 @@
   - 404 / モデル権限エラーは `モデル利用不可` として表示される
   - 401 / 403 / 429 / quota / billing / unsupported parameter は `APIエラー` として表示され、原因候補に確認先が出る
   - UI の詳細文から OpenAI Dashboard / Rate limits / Billing / Project権限のどこを確認すべきか判断できる
+
+## T-SCAN-75: DEEP SCAN 2.3.1 WordPress lightbox keyframes除外
+
+- 手順
+  1. `turn-on-visibility` / `turn-off-visibility` / `lightbox-zoom-in` / `lightbox-zoom-out` の `@keyframes` を含むWordPress標準lightboxページで DEEP SCAN を実行する
+  2. 別名の `@keyframes` で `opacity: 0` または `visibility: hidden` を含むテストCSSを追加して DEEP SCAN を実行する
+  3. SC 2.3.1 の結果を確認する
+- 期待結果
+  - WordPress標準lightbox由来の4つの keyframes は `点滅を含む可能性のあるアニメーション` に表示されない
+  - allowlist外の点滅候補 keyframes は引き続き検出される
