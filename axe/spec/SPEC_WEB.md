@@ -467,6 +467,10 @@
 
 - ファイル: `gas/ReportGenerator.gs` / `gas/appsscript.json`
 - 機能: スプレッドシートのメニュー「報告書」→ Google Docs 達成基準リストを生成
+- Google Docs のフォント: `REPORT_DOC_FONT_FAMILY = 'Noto Sans JP'`
+  - `body.setAttributes()` で本文デフォルトに指定
+  - `styleTable_()` で表セルのテキストにも指定
+  - 生成完了直前に `applyDocumentFont_(body)` で本文・見出し・リスト・表セルを再帰的に走査し、全テキスト要素へ `Noto Sans JP` を適用
 - 必要スコープ（`appsscript.json`）:
   - `https://www.googleapis.com/auth/spreadsheets`
   - `https://www.googleapis.com/auth/documents`

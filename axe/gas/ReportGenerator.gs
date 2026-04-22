@@ -15,6 +15,8 @@
  *   旧7列:   検査項目番号 | 検査項目 | 結果 | 場所 | 検出数 | 詳細 | 改善案
  */
 
+var REPORT_DOC_FONT_FAMILY = 'Noto Sans JP';
+
 /* ============================================================
    メニュー
    ============================================================ */
@@ -157,7 +159,7 @@ function generateReport(info) {
   // デフォルトスタイル
   var defaultStyle = {};
   defaultStyle[DocumentApp.Attribute.FONT_SIZE] = 12;
-  defaultStyle[DocumentApp.Attribute.FONT_FAMILY] = 'Noto Sans JP';
+  defaultStyle[DocumentApp.Attribute.FONT_FAMILY] = REPORT_DOC_FONT_FAMILY;
   body.setAttributes(defaultStyle);
 
   var totalScore = calcTotalScore_(pages);
@@ -221,6 +223,7 @@ function generateReport(info) {
     .setAlignment(DocumentApp.HorizontalAlignment.CENTER)
     .editAsText().setFontSize(12).setForegroundColor('#777777');
 
+  applyDocumentFont_(body);
   doc.saveAndClose();
   var docUrl = doc.getUrl();
   Logger.log('Generated Document URL: ' + docUrl); // 生成されたドキュメントのURLをログに出力
@@ -460,7 +463,10 @@ function styleTable_(table, opt) {
     for (var c = 0; c < row.getNumCells(); c++) {
       var cell = row.getCell(c);
       if (widths[c]) cell.setWidth(widths[c]);
-      cell.editAsText().setFontSize(fontSize).setForegroundColor('#111827');
+      cell.editAsText()
+        .setFontFamily(REPORT_DOC_FONT_FAMILY)
+        .setFontSize(fontSize)
+        .setForegroundColor('#111827');
       if (r < headerRows) {
         cell.setBackgroundColor(opt.headerBackground || '#374151');
         cell.editAsText().setForegroundColor(opt.headerColor || '#ffffff');
@@ -473,6 +479,29 @@ function styleTable_(table, opt) {
     }
     if (opt.resultColumn !== undefined && r >= headerRows) {
       styleResultCell_(row.getCell(opt.resultColumn));
+    }
+  }
+}
+
+function applyDocumentFont_(body) {
+  applyFontFamilyRecursive_(body);
+}
+
+function applyFontFamilyRecursive_(element) {
+  if (!element) return;
+  try {
+    if (element.getType && element.getType() === DocumentApp.ElementType.TEXT) {
+      element.asText().setFontFamily(REPORT_DOC_FONT_FAMILY);
+    } else if (typeof element.editAsText === 'function') {
+      element.editAsText().setFontFamily(REPORT_DOC_FONT_FAMILY);
+    }
+  } catch (e) {
+    // テーブルなど一部要素は editAsText 非対応のため子要素側で適用する
+  }
+
+  if (typeof element.getNumChildren === 'function' && typeof element.getChild === 'function') {
+    for (var i = 0; i < element.getNumChildren(); i++) {
+      applyFontFamilyRecursive_(element.getChild(i));
     }
   }
 }
