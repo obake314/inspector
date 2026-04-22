@@ -3073,6 +3073,7 @@ ${itemsList}
     } catch (apiError) {
       const { httpStatus, payload } = buildAIErrorResponse(apiError, provider, activeModel);
       console.warn('[AI] ' + payload.error);
+      _lastAiDebug = { ..._lastAiDebug, stage: 'api_error', httpStatus, error: payload.error, rawError: apiError?.message };
       return res.status(httpStatus).json(payload);
     }
     console.log('AI応答受信, 長さ:', aiResponse.length);
