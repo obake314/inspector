@@ -799,7 +799,13 @@
                     scoreBodyId: 'scanScoreBody', scoreTableId: 'scanScoreTable', scoreBlockId: 'scoreBlockDesktop',
                     playEnabled: doPlay, playScore: doPlay ? computePlayScore(lastPlayResults) : null,
                     extEnabled: doExt, extScore: doExt ? computeExtScore(lastExtResults) : null,
-                    state: { playResults: lastPlayResults, extResults: lastExtResults },
+                    state: {
+                        basicResults: lastResults,
+                        deepResults: lastEnhancedResults,
+                        multiAiData: doMulti ? aiResults : null,
+                        playResults: lastPlayResults,
+                        extResults: lastExtResults
+                    },
                     multiTokenLimited: lastMultiTokenLimited,
                     multiIssue: lastMultiIssue
                 }
@@ -1415,26 +1421,7 @@
                     status.innerHTML = `評価完了${issueWarn} <span class="ai-status-badge">合格: ${passCount} / 不合格: ${failCount} / 要手動: ${manualCount} / 該当なし: ${naCount}</span>${issueText}`;
                 }
                 // スコアテーブルとタブをMULTI結果で再描画
-                {
-                    const doDeep  = !!lastEnhancedResults;
-                    const doMulti = Object.keys(aiResults).length > 0;
-                    const doPlay  = !!lastPlayResults;
-                    const doExt   = !!lastExtResults;
-                    renderScanScoreTable(
-                        computeBasicScore(lastResults),
-                        doDeep  ? computeDeepScore(lastEnhancedResults)  : null,
-                        doMulti ? computeMultiScore(aiResults)           : null,
-                        doDeep, doMulti,
-                        {
-                            scoreBodyId: 'scanScoreBody', scoreTableId: 'scanScoreTable', scoreBlockId: 'scoreBlockDesktop',
-                            playEnabled: doPlay, playScore: doPlay ? computePlayScore(lastPlayResults) : null,
-                            extEnabled: doExt,  extScore:  doExt  ? computeExtScore(lastExtResults)   : null,
-                            state: { playResults: lastPlayResults, extResults: lastExtResults },
-                            multiTokenLimited: lastMultiTokenLimited,
-                            multiIssue: lastMultiIssue
-                        }
-                    );
-                }
+                refreshScoreTable();
                 renderAllTabs('pc');
             } catch (error) {
                 const msg = error.name === 'AbortError' ? 'MULTI SCANがタイムアウトしました（10分超過）' : error.message;
