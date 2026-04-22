@@ -285,6 +285,7 @@
                             <span class="scan-option-text scan-option-text-ext">EXT</span>
                         </label>
                     </div>
+                    <div id="singleScanEstimate" class="scan-estimate"></div>
                     <div class="batch-progress" id="singleProgress">
                         <div class="batch-progress-header">
                             <div class="batch-progress-label" id="singleProgressLabel">CHECKING...</div>
@@ -315,6 +316,7 @@
                         </label>
                         <span class="batch-count" id="batchCount">0 / 10</span>
                     </div>
+                    <div id="batchScanEstimate" class="scan-estimate"></div>
                 </div>
             </div>
         </div>
@@ -714,6 +716,34 @@
             { text: "カスタムウィジェットのroleが意味的に正確（例: role='button'が実際にボタン動作をする）", ref: "4.1.2", level: "A", category: "ARIA" }
         ];
 
+        // manualCheckItems に含まれない SC の日本語名補完
+        const wcagScNamesExtra = {
+            '1.1.1': 'テキストによる代替', '1.2.1': '音声のみ及び映像のみ', '1.2.2': 'キャプション（収録済）',
+            '1.2.3': '音声解説又はメディアに対する代替（収録済）', '1.2.4': 'キャプション（ライブ）',
+            '1.2.5': '音声解説（収録済）', '1.3.1': '情報及び関係性', '1.3.2': '意味のある順序',
+            '1.3.3': '感覚的特徴', '1.3.4': '表示の向き', '1.3.5': '入力目的の特定',
+            '1.4.1': '色の使用', '1.4.2': '音声制御', '1.4.3': 'テキストのコントラスト',
+            '1.4.4': 'テキストのサイズ変更', '1.4.5': '文字画像', '1.4.10': 'リフロー',
+            '1.4.11': '非テキストのコントラスト', '1.4.12': 'テキストの間隔',
+            '1.4.13': 'ホバー又はフォーカスで表示されるコンテンツ',
+            '2.1.1': 'キーボード', '2.1.2': 'キーボードトラップなし',
+            '2.4.1': 'ブロックスキップ', '2.4.2': 'ページタイトル', '2.4.3': 'フォーカス順序',
+            '2.4.4': 'リンクの目的（リンクのみ）', '2.4.5': '複数の手段',
+            '2.4.6': '見出し及びラベル', '2.4.7': 'フォーカスの可視性',
+            '2.4.11': 'フォーカスの非隠蔽（最低限）', '3.1.1': 'ページの言語', '3.1.2': '一部分の言語',
+            '3.2.1': 'フォーカス時', '3.2.2': '入力時', '3.3.1': 'エラーの特定',
+            '3.3.2': 'ラベル又は説明', '3.3.3': 'エラー修正の提案', '3.3.4': 'エラー回避（法的・金融・データ）',
+            '4.1.1': '構文解析', '4.1.2': '名前・役割・値', '4.1.3': 'ステータスメッセージ',
+            '2.5.3': '名前に含まれるラベル',
+        };
+        function getScName(sc) {
+            if (!sc) return '';
+            // manualCheckItems から最初にヒットするものを使う
+            const fromItems = manualCheckItems.find(it => it.ref === sc);
+            if (fromItems) return fromItems.text;
+            return wcagScNamesExtra[sc] || '';
+        }
+
         let lastResults = null;
         const manualDecisions = new Map(); // key → 'ok'|'ng'|'hold'
         const manualImpacts   = new Map(); // key → 'critical'|'serious'|'moderate'|'minor'（NG時の重要度）
@@ -764,7 +794,8 @@
                     scoreBodyId: 'scanScoreBody', scoreTableId: 'scanScoreTable', scoreBlockId: 'scoreBlockDesktop',
                     playEnabled: doPlay, playScore: doPlay ? computePlayScore(lastPlayResults) : null,
                     extEnabled: doExt, extScore: doExt ? computeExtScore(lastExtResults) : null,
-                    state: { playResults: lastPlayResults, extResults: lastExtResults }
+                    state: { playResults: lastPlayResults, extResults: lastExtResults },
+                    multiTokenLimited: lastMultiTokenLimited
                 }
             );
             // SP テーブル（スナップショットがある場合のみ）
@@ -1254,6 +1285,7 @@
 
         // AI評価結果を保存
         let aiResults = {};
+        let lastMultiTokenLimited = false;
         // 高精度検査結果を保存（単一ページ）
         let lastEnhancedResults = null;
         let lastPlayResults = null;
@@ -1315,6 +1347,7 @@
 
                 // 結果を適用
                 aiResults = {};
+                lastMultiTokenLimited = !!data.tokenLimited;
                 let passCount = 0, failCount = 0, manualCount = 0, naCount = 0;
 
                 data.results.forEach((result) => {
@@ -1330,7 +1363,8 @@
                 });
 
                 if (!silent) {
-                    status.innerHTML = `評価完了 <span class="ai-status-badge">合格: ${passCount} / 不合格: ${failCount} / 要手動: ${manualCount} / 該当なし: ${naCount}</span>`;
+                    const tokenWarn = lastMultiTokenLimited ? ' <span class="ai-token-warn">⚠ トークン上限</span>' : '';
+                    status.innerHTML = `評価完了${tokenWarn} <span class="ai-status-badge">合格: ${passCount} / 不合格: ${failCount} / 要手動: ${manualCount} / 該当なし: ${naCount}</span>`;
                 }
             } catch (error) {
                 const msg = error.name === 'AbortError' ? 'MULTI SCANがタイムアウトしました（10分超過）' : error.message;
@@ -1384,6 +1418,7 @@
         modeButtons.forEach(btn => btn.addEventListener('click', () => {
             if (scanExecuted) return;
             setMode(btn.dataset.mode);
+            renderScanEstimate();
         }));
 
         // スキャン実行後に全UI入力要素をロック
@@ -1417,17 +1452,20 @@
             lastPlayResults = null;
             lastExtResults = null;
             aiResults = {};
+            lastMultiTokenLimited = false;
             manualDecisions.clear();
             manualImpacts.clear();
             batchResultsData = [];
             batchNavConsistency = null;
             batchEnhancedResults = {};
             batchAIResults = {};
+            batchAITokenLimitedMap = {};
             batchPlayResults = {};
             batchExtResults = {};
             batchMobileResultsData = [];
             batchMobileEnhancedResults = {};
             batchMobileAIResults = {};
+            batchMobileAITokenLimitedMap = {};
             batchMobilePlayResults = {};
             batchMobileExtResults = {};
             batchViewportMode = 'desktop';
@@ -1507,11 +1545,13 @@
         let batchNavConsistency = null;
         let batchEnhancedResults = {}; // url → enhanced results array
         let batchAIResults = {};       // url → processed aiResults object
+        let batchAITokenLimitedMap = {};  // url → bool (token limit flag)
         let batchPlayResults = {};     // url → play results array
         let batchExtResults = {};      // url → ext results array
         let batchMobileResultsData = [];          // SP用（PC+SP時のみ使用）
         let batchMobileEnhancedResults = {};      // url → SP enhanced results
         let batchMobileAIResults = {};            // url → SP AI results
+        let batchMobileAITokenLimitedMap = {};    // url → bool (SP token limit flag)
         let batchMobilePlayResults = {};          // url → SP play results
         let batchMobileExtResults = {};           // url → SP ext results
         let batchViewportMode = 'desktop';        // 実行時のviewportMode
@@ -1640,6 +1680,7 @@
             // --- PC ---
             lastEnhancedResults = batchEnhancedResults[r.url] || null;
             aiResults = batchAIResults[r.url] || {};
+            lastMultiTokenLimited = !!batchAITokenLimitedMap[r.url];
             lastPlayResults = batchPlayResults[r.url] || null;
             lastExtResults = batchExtResults[r.url] || null;
             displayResults(r.results, r.url);
@@ -1656,7 +1697,8 @@
                 {
                     scoreBodyId: 'scanScoreBody', scoreTableId: 'scanScoreTable', scoreBlockId: 'scoreBlockDesktop',
                     playEnabled: playEnabledBatch, playScore: playEnabledBatch ? computePlayScore(lastPlayResults) : null,
-                    extEnabled: extEnabledBatch, extScore: extEnabledBatch ? computeExtScore(lastExtResults) : null
+                    extEnabled: extEnabledBatch, extScore: extEnabledBatch ? computeExtScore(lastExtResults) : null,
+                    multiTokenLimited: lastMultiTokenLimited
                 }
             );
             renderAllTabs('pc');
@@ -1666,6 +1708,7 @@
             if (mobileR?.success) {
                 const mobileEnhanced = batchMobileEnhancedResults[mobileR.url] || null;
                 const mobileAI       = batchMobileAIResults[mobileR.url] || {};
+                const mobileTokenLimited = !!batchMobileAITokenLimitedMap[mobileR.url];
                 const mobilePlay     = batchMobilePlayResults[mobileR.url] || null;
                 const mobileExt      = batchMobileExtResults[mobileR.url] || null;
                 const mDeepEnabled   = !!mobileEnhanced;
@@ -1681,7 +1724,8 @@
                         scoreBodyId: 'scanScoreBodyMobile', scoreTableId: 'scanScoreTableMobile', scoreBlockId: 'scoreBlockMobile',
                         playEnabled: mPlayEnabled, playScore: mPlayEnabled ? computePlayScore(mobilePlay) : null,
                         extEnabled: mExtEnabled, extScore: mExtEnabled ? computeExtScore(mobileExt) : null,
-                        state: { playResults: mobilePlay, extResults: mobileExt }
+                        state: { playResults: mobilePlay, extResults: mobileExt },
+                        multiTokenLimited: mobileTokenLimited
                     }
                 );
                 renderAllTabs('sp', mobileR.results, mobileEnhanced, mobileAI, mobilePlay, mobileExt);
@@ -1849,6 +1893,7 @@
                     const successUrls = resultsData.filter(r => r.success).map(r => r.url);
                     const enhancedResults = {};
                     const aiResultsMap = {};
+                    const aiTokenLimitedMap = {};
                     let localPhase = phaseOffset + 1;
 
                     // DEEP
@@ -1928,7 +1973,8 @@
                                         if (orig !== undefined) processed[orig] = result;
                                     });
                                     aiResultsMap[successUrls[i]] = processed;
-                                    console.log(`[BATCH-MULTI] ${successUrls[i]}: ${ad.results.length} 結果`);
+                                    aiTokenLimitedMap[successUrls[i]] = !!ad.tokenLimited;
+                                    console.log(`[BATCH-MULTI] ${successUrls[i]}: ${ad.results.length} 結果${ad.tokenLimited ? ' [トークン上限]' : ''}`);
                                 } else {
                                     const errorMsg = ad?.error || 'MULTI SCAN失敗';
                                     if (isTimeoutLike(null, errorMsg)) {
@@ -2045,18 +2091,19 @@
                         }
                     }
 
-                    return { resultsData, navConsistency, enhancedResults, aiResultsMap, playResultsMap, extResultsMap, succeededCount };
+                    return { resultsData, navConsistency, enhancedResults, aiResultsMap, aiTokenLimitedMap, playResultsMap, extResultsMap, succeededCount };
                 }
 
                 // --- PC（デスクトップ） ---
                 if (runDesktop) {
                     const pc = await runBatchViewport('desktop', runMobile ? 'PC' : '', 0);
-                    batchResultsData       = pc.resultsData;
-                    batchNavConsistency    = pc.navConsistency;
-                    batchEnhancedResults   = pc.enhancedResults;
-                    batchAIResults         = pc.aiResultsMap;
-                    batchPlayResults       = pc.playResultsMap;
-                    batchExtResults        = pc.extResultsMap;
+                    batchResultsData         = pc.resultsData;
+                    batchNavConsistency      = pc.navConsistency;
+                    batchEnhancedResults     = pc.enhancedResults;
+                    batchAIResults           = pc.aiResultsMap;
+                    batchAITokenLimitedMap   = pc.aiTokenLimitedMap;
+                    batchPlayResults         = pc.playResultsMap;
+                    batchExtResults          = pc.extResultsMap;
                     renderBatchSummary();
                     renderBatchNav(0);
                     $('batchResults').style.display = 'block';
@@ -2068,19 +2115,21 @@
                     const sp = await runBatchViewport('mobile', runDesktop ? 'SP' : '', spOffset);
                     if (runDesktop) {
                         // PC+SP両方: SPデータを専用変数に格納
-                        batchMobileResultsData     = sp.resultsData;
-                        batchMobileEnhancedResults = sp.enhancedResults;
-                        batchMobileAIResults       = sp.aiResultsMap;
-                        batchMobilePlayResults     = sp.playResultsMap;
-                        batchMobileExtResults      = sp.extResultsMap;
+                        batchMobileResultsData          = sp.resultsData;
+                        batchMobileEnhancedResults      = sp.enhancedResults;
+                        batchMobileAIResults            = sp.aiResultsMap;
+                        batchMobileAITokenLimitedMap    = sp.aiTokenLimitedMap;
+                        batchMobilePlayResults          = sp.playResultsMap;
+                        batchMobileExtResults           = sp.extResultsMap;
                     } else {
                         // SPのみ: メイン変数として扱う
-                        batchResultsData       = sp.resultsData;
-                        batchNavConsistency    = sp.navConsistency;
-                        batchEnhancedResults   = sp.enhancedResults;
-                        batchAIResults         = sp.aiResultsMap;
-                        batchPlayResults       = sp.playResultsMap;
-                        batchExtResults        = sp.extResultsMap;
+                        batchResultsData         = sp.resultsData;
+                        batchNavConsistency      = sp.navConsistency;
+                        batchEnhancedResults     = sp.enhancedResults;
+                        batchAIResults           = sp.aiResultsMap;
+                        batchAITokenLimitedMap   = sp.aiTokenLimitedMap;
+                        batchPlayResults         = sp.playResultsMap;
+                        batchExtResults          = sp.extResultsMap;
                         renderBatchSummary();
                         renderBatchNav(0);
                         $('batchResults').style.display = 'block';
@@ -2269,6 +2318,7 @@
                         clearInterval(tMulti);
                         setSinglePhaseProgress(multiPhase, 1);
                         snapshot.multi = cloneData(aiResults);
+                        snapshot.multiTokenLimited = lastMultiTokenLimited;
                         renderScanScoreTable(
                             computeBasicScore(snapshot.basic),
                             doDeep ? computeDeepScore(snapshot.deep) : null,
@@ -2280,6 +2330,7 @@
                                 playScore: snapshot.play ? computePlayScore(snapshot.play) : null,
                                 extEnabled: doExt,
                                 extScore: snapshot.ext ? computeExtScore(snapshot.ext) : null,
+                                multiTokenLimited: lastMultiTokenLimited,
                                 state: {
                                     basicResults: snapshot.basic,
                                     deepResults: doDeep ? snapshot.deep : null,
@@ -2322,6 +2373,7 @@
                                 playScore: computePlayScore(snapshot.play),
                                 extEnabled: doExt,
                                 extScore: snapshot.ext ? computeExtScore(snapshot.ext) : null,
+                                multiTokenLimited: snapshot.multiTokenLimited || false,
                                 state: {
                                     basicResults: snapshot.basic,
                                     deepResults: doDeep ? snapshot.deep : null,
@@ -2364,6 +2416,7 @@
                                 playScore: snapshot.play ? computePlayScore(snapshot.play) : null,
                                 extEnabled: true,
                                 extScore: computeExtScore(snapshot.ext),
+                                multiTokenLimited: snapshot.multiTokenLimited || false,
                                 state: {
                                     basicResults: snapshot.basic,
                                     deepResults: doDeep ? snapshot.deep : null,
@@ -2924,6 +2977,117 @@
 
 
         // ============================================================
+        // DEEP/PLAY/EXT の結果を SC 単位に統合（課題1）
+        // 同一 SC に複数ソースがある場合、最優先ステータスを代表とする
+        // ============================================================
+        function buildScUnifiedMap(deep, play, ext, scSet) {
+            const STATUS_RANK = { fail: 0, unverified: 1, pass: 2, na: 3 };
+            const map = new Map(); // SC → { consolidatedStatus, impact, primaryDkey, sources[] }
+
+            function addSource(sc, status, impact, sourceEntry) {
+                const scs = sc ? splitCompositeSc(sc).filter(s => scSet.has(s)) : [];
+                if (!scs.length) return;
+                const primarySc = scs[0];
+                if (!map.has(primarySc)) {
+                    map.set(primarySc, { consolidatedStatus: status, impact: impact || 'serious', primaryDkey: sourceEntry.dkey, sources: [sourceEntry] });
+                } else {
+                    const entry = map.get(primarySc);
+                    if ((STATUS_RANK[status] ?? 9) < (STATUS_RANK[entry.consolidatedStatus] ?? 9)) {
+                        entry.consolidatedStatus = status;
+                        entry.impact = impact || 'serious';
+                        entry.primaryDkey = sourceEntry.dkey;
+                    }
+                    entry.sources.push(sourceEntry);
+                }
+            }
+
+            if (deep) deep.forEach(r => {
+                if (!splitCompositeSc(r.sc).some(s => scSet.has(s))) return;
+                const st = r.status === 'fail' ? 'fail' : r.status === 'pass' ? 'pass' : r.status === 'not_applicable' ? 'na' : 'unverified';
+                addSource(r.sc, st, st === 'fail' ? 'serious' : null, { src: 'DEEP', type: 'deep', data: r, dkey: `DEEP:${r.sc}` });
+            });
+            if (play) play.forEach(r => {
+                if (!splitCompositeSc(r.sc).some(s => scSet.has(s))) return;
+                const st = r.status === 'fail' ? 'fail' : r.status === 'pass' ? 'pass' : r.status === 'not_applicable' ? 'na' : 'unverified';
+                addSource(r.sc, st, st === 'fail' ? 'serious' : null, { src: 'PLAY', type: 'play', data: r, dkey: `PLAY:${r.sc}` });
+            });
+            if (ext) ext.forEach(r => {
+                if (!r.sc || !splitCompositeSc(r.sc).some(s => scSet.has(s))) return;
+                const st = r.status === 'fail' ? 'fail' : r.status === 'pass' ? 'pass' : r.status === 'not_applicable' ? 'na' : 'unverified';
+                addSource(r.sc, st, st === 'fail' ? 'serious' : null, { src: 'EXT', type: 'ext', data: r, dkey: `EXT:${r.sc}` });
+            });
+
+            return map;
+        }
+
+        // DEEP/PLAY/EXT 統合カード描画（課題1・課題2）
+        function renderUnifiedCard(no, sc, level, entry, applyDecisionFn) {
+            const dkey = entry.primaryDkey;
+            const dec = dkey ? manualDecisions.get(dkey) : null;
+            const decisionClass = dec === 'ok' ? 'item-card-dec-ok' : dec === 'ng' ? 'item-card-dec-ng' : dec === 'hold' ? 'item-card-dec-hold' : '';
+            const { consolidatedStatus, impact, sources } = entry;
+
+            // ソース別バッジ（重複なし）
+            const srcLabels = [...new Set(sources.map(s => s.src))];
+            const srcBadges = srcLabels.map(src => `<span class="badge ${srcBadgeClasses[src] || ''}">${src}</span>`).join('');
+            const scBadge  = sc ? `<span class="item-sc">${escapeHtml(sc)}</span>` : '';
+            const lvBadge  = level ? `<span class="item-level">${escapeHtml(level)}</span>` : '';
+            const titleText = getScName(sc) || `SC ${sc}`;
+
+            const dk = dkey || `tmp:unified:${sc}:${no}`;
+            const decBtns = `<div class="decision-btns" onclick="event.stopPropagation()">
+                <button class="decision-btn${dec==='ok'?' active-ok':''}" onclick="setDecision('${escapeHtml(dk)}','ok',this)">OK</button>
+                <button class="decision-btn${dec==='ng'?' active-ng':''}" onclick="setDecision('${escapeHtml(dk)}','ng',this)">NG</button>
+                <button class="decision-btn${dec==='hold'?' active-hold':''}" onclick="setDecision('${escapeHtml(dk)}','hold',this)">保留</button>
+            </div>`;
+
+            // ソース別エビデンスセクション（課題2: 検出ツール・内容・箇所を明記）
+            const evidenceSections = sources.map(({ src, type, data }) => {
+                let summary = '';
+                let countText = '';
+                let locs = [];
+                let toolLabel = src === 'DEEP' ? 'Puppeteer検査' : src === 'PLAY' ? 'Playwright検査' : 'EXT検査';
+                if (type === 'deep') {
+                    summary = data.message || '';
+                    locs = (data.violations || []).slice(0, 8).map(v => String(v));
+                    countText = data.violations?.length ? `検出件数：${data.violations.length}件` : '';
+                } else if (type === 'play') {
+                    summary = data.message || '';
+                    locs = (data.violations || []).slice(0, 8);
+                    countText = data.violations?.length ? `検出件数：${data.violations.length}件` : '';
+                } else if (type === 'ext') {
+                    summary = data.message || '';
+                    locs = (data.violations || []).slice(0, 8);
+                    countText = data.violations?.length ? `検出件数：${data.violations.length}件` : '';
+                    toolLabel = data.source === 'IBM_ACE' ? 'IBM Equal Access'
+                        : data.source === 'EXT_NATIVE' ? 'ネイティブDOM検査'
+                        : data.source === 'EXT_CDP' ? 'CDP検査' : 'EXT検査';
+                }
+                const srcBadge = `<span class="badge ${srcBadgeClasses[src] || ''}">${src}</span>`;
+                const locHtml = locs.length
+                    ? `<div class="item-locations"><div class="item-locations-title">検出箇所</div>${locs.map(l => `<div class="location-row">${escapeHtml(String(l))}</div>`).join('')}</div>`
+                    : '';
+                return `<div class="item-source-section">
+                    <div class="item-source-header">${srcBadge}<span class="item-source-tool">${escapeHtml(toolLabel)}</span></div>
+                    ${summary ? `<div class="item-summary">${escapeHtml(summary)}</div>` : ''}
+                    ${countText ? `<div class="item-count">${escapeHtml(countText)}</div>` : ''}
+                    ${locHtml}
+                </div>`;
+            }).join('');
+
+            return `<div class="item-card ${decisionClass}" data-impact="${impact||''}" data-default-impact="${impact||'serious'}" onclick="this.classList.toggle('expanded')">
+                <div class="item-header">
+                    ${srcBadges}
+                    ${scBadge}${lvBadge}
+                    <span class="item-title">${escapeHtml(titleText)}</span>
+                    ${decBtns}
+                    <svg class="expand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                </div>
+                ${evidenceSections}
+            </div>`;
+        }
+
+        // ============================================================
         // 全タブ再描画（BASIC + DEEP + MULTI の結果をマージ）
         // ============================================================
         function renderAllTabs(suffix = 'pc', basic = lastResults, deep = lastEnhancedResults, multi = aiResults, play = lastPlayResults, ext = lastExtResults) {
@@ -2966,19 +3130,6 @@
                 });
             }
 
-            // DEEP results
-            if (deep) {
-                deep.forEach(r => {
-                    if (!splitCompositeSc(r.sc).some(sc => scSet.has(sc))) return;
-                    const dkey = `DEEP:${r.sc}`;
-                    const defaultBucket = r.status === 'fail' ? 'serious'
-                        : r.status === 'pass' ? 'pass'
-                        : r.status === 'not_applicable' ? 'na' : 'unverified';
-                    const dest = applyDecision(dkey, defaultBucket, 'serious');
-                    (buckets[dest] || buckets.unverified).push({ src: 'DEEP', type: 'deep', data: r, dkey });
-                });
-            }
-
             // MULTI results
             manualCheckItems.forEach((item, i) => {
                 if ((lo[item.level] || 2) > lim) return;
@@ -2992,32 +3143,17 @@
                 (buckets[dest] || buckets.unverified).push({ src: 'MULTI', type: 'multi', data: { ...item, idx: i, aiResult: r }, dkey });
             });
 
-            // PLAY results
-            if (play) {
-                play.forEach(r => {
-                    if (!splitCompositeSc(r.sc).some(sc => scSet.has(sc))) return;
-                    const dkey = `PLAY:${r.sc}`;
-                    const defaultBucket = r.status === 'fail' ? 'serious'
-                        : r.status === 'pass' ? 'pass'
-                        : r.status === 'not_applicable' ? 'na' : 'unverified';
-                    const dest = applyDecision(dkey, defaultBucket, 'serious');
-                    (buckets[dest] || buckets.unverified).push({ src: 'PLAY', type: 'play', data: r, dkey });
-                });
-            }
-
-            // EXT results
-            if (ext) {
-                ext.forEach(r => {
-                    if (!r.sc) return;
-                    if (!splitCompositeSc(r.sc).some(sc => scSet.has(sc))) return;
-                    const dkey = `EXT:${r.sc}`;
-                    const defaultBucket = r.status === 'fail' ? 'serious'
-                        : r.status === 'pass' ? 'pass'
-                        : r.status === 'not_applicable' ? 'na' : 'unverified';
-                    const dest = applyDecision(dkey, defaultBucket, 'serious');
-                    (buckets[dest] || buckets.unverified).push({ src: 'EXT', type: 'ext', data: r, dkey });
-                });
-            }
+            // DEEP/PLAY/EXT → SC単位統合（課題1）
+            const scUnifiedMap = buildScUnifiedMap(deep, play, ext, scSet);
+            scUnifiedMap.forEach((entry, sc) => {
+                const dkey = entry.primaryDkey;
+                const defaultBucket = entry.consolidatedStatus === 'fail' ? 'serious'
+                    : entry.consolidatedStatus === 'pass' ? 'pass'
+                    : entry.consolidatedStatus === 'na' ? 'na' : 'unverified';
+                const dest = applyDecision(dkey, defaultBucket, entry.impact || 'serious');
+                const wcagLevel = null;
+                (buckets[dest] || buckets.unverified).push({ src: 'UNIFIED', type: 'unified', sc, level: wcagLevel, entry, dkey });
+            });
 
             // SC 3.2.3/3.2.4 ナビゲーション一貫性はカード表示せず情報バーで表示
 
@@ -3063,35 +3199,110 @@
                             const countText = `合格：${(data.nodes||[]).length}件`;
                             return renderCardItem(no, src, 'pass', sc, level, title, summary, countText, locs, dkey);
                         }
-                        if (type === 'deep') {
-                            const r        = data;
-                            const locs     = (r.violations || []).slice(0, 8).map(v => String(v));
-                            const countText = r.violations && r.violations.length ? `検出件数：${r.violations.length}件` : '';
-                            return renderCardItem(no, src, r.status === 'fail' ? 'serious' : null, r.sc, null, r.name || '', r.message || '', countText, locs, dkey);
-                        }
                         if (type === 'multi') {
                             const r        = data.aiResult;
                             const locs     = r && r.reason ? [r.reason] : [];
                             return renderCardItem(no, src, null, data.ref, data.level, data.text || '', data.category || '', '', locs, dkey);
                         }
-                        if (type === 'play') {
-                            const r    = data;
-                            const locs = (r.violations || []).slice(0, 8);
-                            const countText = r.violations && r.violations.length ? `検出件数：${r.violations.length}件` : '';
-                            return renderCardItem(no, src, r.status === 'fail' ? 'serious' : null, r.sc, null, r.sc ? `SC ${r.sc}` : 'PLAY検査', r.message || '', countText, locs, dkey);
-                        }
-                        if (type === 'ext') {
-                            const r    = data;
-                            const locs = (r.violations || []).slice(0, 8);
-                            const countText = r.violations && r.violations.length ? `検出件数：${r.violations.length}件` : '';
-                            const title = r.name || (r.sc ? `SC ${r.sc}` : 'EXT検査');
-                            return renderCardItem(no, src, r.status === 'fail' ? 'serious' : null, r.sc, null, title, r.message || '', countText, locs, dkey);
+                        if (type === 'unified') {
+                            return renderUnifiedCard(no, sc, level, entry, applyDecision);
                         }
                         return '';
                     }).join('')
                     : EMPTY;
                 const badge = $(`badge-${key}-${suffix}`);
-                if (badge) badge.textContent = items.length > 0 ? items.length : (badgeMap[key] ?? 0);
+                if (badge) badge.textContent = badgeMap[key] ?? 0;
+            });
+        }
+
+        // ============================================================
+        // スキャン予測時間（課題3）
+        // ============================================================
+        const SCAN_TIME = {
+            BASIC: { min: 10/60, max: 30/60 }, // 分換算
+            DEEP:  { min: 2, max: 4 },
+            MULTI: { min: 1, max: 2 },
+            PLAY:  { min: 3, max: 5 },
+            EXT:   { min: 2, max: 4 }
+        };
+
+        function estimateScanDuration({ urlCount = 1, viewportMode = 'pc', scanTypes = [] }) {
+            const vpCount = viewportMode === 'both' ? 2 : 1;
+            let minTotal = 0, maxTotal = 0;
+            scanTypes.forEach(t => {
+                const st = SCAN_TIME[t];
+                if (!st) return;
+                minTotal += st.min * urlCount * vpCount;
+                maxTotal += st.max * urlCount * vpCount;
+            });
+            return { minTotal, maxTotal };
+        }
+
+        function renderScanEstimate() {
+            const singleEl = document.getElementById('singleScanEstimate');
+            const batchEl  = document.getElementById('batchScanEstimate');
+
+            function getViewportMode() {
+                const btR = document.getElementById('viewportModeBoth');
+                const spR = document.getElementById('viewportModeMobile');
+                if (btR?.checked) return 'both';
+                if (spR?.checked) return 'sp';
+                return 'pc';
+            }
+
+            function getCheckedScanTypes() {
+                const types = ['BASIC'];
+                if (document.getElementById('deepScanOpt')?.checked) types.push('DEEP');
+                if (document.getElementById('multiScanOpt')?.checked && !document.getElementById('multiScanOpt')?.disabled) types.push('MULTI');
+                if (document.getElementById('playScanOpt')?.checked) types.push('PLAY');
+                if (document.getElementById('extScanOpt')?.checked) types.push('EXT');
+                return types;
+            }
+
+            function getBatchCheckedScanTypes() {
+                const types = ['BASIC'];
+                if (document.getElementById('batchEnhancedOpt')?.checked) types.push('DEEP');
+                if (document.getElementById('batchAIOpt')?.checked && !document.getElementById('batchAIOpt')?.disabled) types.push('MULTI');
+                if (document.getElementById('batchPlayOpt')?.checked) types.push('PLAY');
+                if (document.getElementById('batchExtOpt')?.checked) types.push('EXT');
+                return types;
+            }
+
+            function buildEstimateText(urlCount, viewportMode, scanTypes, noUrl) {
+                if (noUrl) return '<span style="color:#94a3b8">URLを入力すると予測時間を表示します</span>';
+                const { minTotal, maxTotal } = estimateScanDuration({ urlCount, viewportMode, scanTypes });
+                const fmt = v => v < 1 ? `${Math.round(v * 60)}秒` : `${Math.round(v)}分`;
+                const vpLabel = viewportMode === 'both' ? 'PC+SP' : viewportMode === 'sp' ? 'SP' : 'PC';
+                const typeLabel = scanTypes.join('+');
+                return `予測時間: 約${fmt(minTotal)}〜${fmt(maxTotal)} / ${urlCount}ページ / ${vpLabel} / ${typeLabel}`;
+            }
+
+            if (singleEl) {
+                const urlVal = (document.getElementById('urlInput')?.value || '').trim();
+                singleEl.innerHTML = buildEstimateText(1, getViewportMode(), getCheckedScanTypes(), !urlVal);
+            }
+
+            if (batchEl) {
+                const lines = (document.getElementById('batchUrls')?.value || '')
+                    .split('\n').map(l => l.trim()).filter(l => l.startsWith('http'));
+                const noUrl = lines.length === 0;
+                batchEl.innerHTML = buildEstimateText(lines.length || 1, getViewportMode(), getBatchCheckedScanTypes(), noUrl);
+            }
+        }
+
+        function bindScanEstimateListeners() {
+            ['urlInput', 'batchUrls'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('input', renderScanEstimate);
+            });
+            ['viewportModeDesktop', 'viewportModeMobile', 'viewportModeBoth'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', renderScanEstimate);
+            });
+            ['deepScanOpt', 'multiScanOpt', 'playScanOpt', 'extScanOpt',
+             'batchEnhancedOpt', 'batchAIOpt', 'batchPlayOpt', 'batchExtOpt'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', renderScanEstimate);
             });
         }
 
@@ -3104,6 +3315,7 @@
             const playScore   = options.playScore || null;
             const extEnabled  = !!options.extEnabled;
             const extScore    = options.extScore || null;
+            const multiTokenLimited = !!options.multiTokenLimited;
             const state = options.state || {};
             const basicResults = state.basicResults !== undefined ? state.basicResults : lastResults;
             const deepResults = state.deepResults !== undefined ? state.deepResults : (deepEnabled ? lastEnhancedResults : null);
@@ -3188,7 +3400,8 @@
             const deepSub = sessionAAABeta ? 'A/AA/AAA β' : 'A/AA';
             const basicLabel = `BASIC<br><span class="score-row-sub">axe-core 自動検査</span>`;
             const deepLabel  = `DEEP<br><span class="score-row-sub">ヒューリスティック検査</span>`;
-            const multiLabel = `MULTI<br><span class="score-row-sub">AI 検査</span>`;
+            const tokenWarnBadge = multiTokenLimited ? ' <span class="score-token-warn">⚠ トークン上限</span>' : '';
+            const multiLabel = `MULTI<br><span class="score-row-sub">AI 検査${tokenWarnBadge}</span>`;
             const playLabel  = `PLAY<br><span class="score-row-sub">Playwright 検査</span>`;
             const extLabel   = `EXT<br><span class="score-row-sub">IBM ACE + 拡張検査</span>`;
             body.innerHTML =
@@ -3811,6 +4024,10 @@
         function escapeHtml(str) {
             return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
         }
+
+        // 予測時間リスナー登録・初期表示
+        bindScanEstimateListeners();
+        renderScanEstimate();
     </script>
 </body>
 </html>

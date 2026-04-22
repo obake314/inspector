@@ -1,6 +1,6 @@
 # SPEC_WEB
 
-最終更新: 2026-04-21（AAA β一時停止、全スキャンのタイムアウトURL再スキャンキューを追加）
+最終更新: 2026-04-22（MULTI SCAN トークン上限検出・SC単位ユニーク集計・PLAY/EXT統合カード・予測時間表示を追加）
 
 ## 対象
 
@@ -44,9 +44,11 @@
 
 - API: `POST /api/ai-evaluate`
 - 入力: `{ url, checkItems[], viewportPreset? }`
-- 出力: `{ success, model, results: [{ index, status, reason, suggestion, confidence? }] }`
+- 出力: `{ success, model, tokenLimited?, rateLimited?, results: [{ index, status, reason, suggestion, confidence? }] }`
 - status: `pass` / `fail` / `not_applicable` / `manual_required`
 - AI未設定/接続失敗時: `success: true` のまま `model: manual-fallback` で全項目 `manual_required` を返す
+- トークン上限到達時: `tokenLimited: true` を返す。結果は途中までパースされた内容を返し、未返答分は `manual_required` にフォールバック
+- HTTP 429 レート制限時: `success: true`、`model: manual-fallback`、`rateLimited: true`、全項目 `manual_required`
 - クライアント側タイムアウト: 10分
 
 ### PLAY SCAN
@@ -171,10 +173,12 @@
   - `batchResultsData`: PCデータ（SPのみ時はSPデータ）
   - `batchEnhancedResults`: `url → DEEP results`
   - `batchAIResults`: `url → MULTI results`
+  - `batchAITokenLimitedMap`: `url → bool`（MULTI トークン上限フラグ）
   - `batchNavConsistency`: SC 3.2.3/3.2.4
   - `batchMobileResultsData`: SPデータ（`PC+SP` 時のみ使用）
   - `batchMobileEnhancedResults`: `url → SP DEEP results`
   - `batchMobileAIResults`: `url → SP MULTI results`
+  - `batchMobileAITokenLimitedMap`: `url → bool`（SP MULTI トークン上限フラグ）
   - `batchPlayResults`: `url → PLAY results`
   - `batchExtResults`: `url → EXT results`
   - `batchMobilePlayResults`: `url → SP PLAY results`
@@ -189,7 +193,7 @@
 |---|---|---|---|
 | BASIC | `BASIC` | `axe-core 自動検査` | `#3581B8` |
 | DEEP  | `DEEP`  | `ヒューリスティック検査` | `#304C89` |
-| MULTI | `MULTI` | `AI 検査` | `#0D7A5F` |
+| MULTI | `MULTI` | `AI 検査`（トークン上限時は末尾に `⚠ トークン上限` バッジを追加） | `#0D7A5F` |
 | PLAY  | `PLAY`  | `Playwright 検査` | `#7B4DC8` |
 | EXT   | `EXT`   | `IBM ACE + 拡張検査` | `#D97706` |
 | TOTAL | `TOTAL` | なし | — |
@@ -217,8 +221,12 @@
 
 `全項目数 = 緊急 + 重大 + 中程度 + 軽微 + 合格 + 該当なし + 未検証`
 
-この整合式はスコアテーブルの各行だけでなく、詳細タブ横のバッジ数でも同様に成立する。
-バッジ数は SC 単位の TOTAL スコア（`computeTotalScore` 出力）を使用する。
+この整合式はスコアテーブルの各行で成立する。詳細タブ横のバッジ数は以下のルールで決定する。
+
+- カードが 1 件以上あるタブ: そのタブのカード枚数（`items.length`）をそのまま表示
+- カードが 0 件のタブ: SC 単位の TOTAL スコア（`computeTotalScore` 出力）にフォールバック
+
+**「該当なし」タブに注意**: BASIC が同一 SC を `pass` で持つ場合、TOTAL スコアでは `na` がゼロになるが、DEEP/PLAY が `not_applicable` を返した場合はカードがバケットに残る。Fix 17 によりバッジはカード実数を優先するため、こうしたケースでもバッジが 0 にならない。
 
 ### 対象レベルによるフィルタリング
 
@@ -272,10 +280,42 @@
 
 ## 詳細カード仕様
 
+### BASIC / MULTI カード
 - カード構成: `[バッジ] [SC番号] [レベル] タイトル ▼ / サマリー / 件数 / 検出箇所`
 - SC番号は数字のみ表示（"SC" プレフィックスなし）
 - カード内 `[No.n]` 要素は表示しない
 - バッジ色: BASIC `#3581B8` / DEEP `#304C89` / MULTI `#0D7A5F` / PLAY `#7B4DC8` / EXT `#D97706` / BATCH `#334155`
+
+### DEEP / PLAY / EXT 統合カード（UNIFIED）
+- DEEP / PLAY / EXT の結果は SC をキーに `buildScUnifiedMap()` で統合され、1 SC につき 1 カードを生成する
+- タイトル: `getScName(sc)`（`manualCheckItems` → `wcagScNamesExtra` の順で日本語名を解決）
+- ステータス優先順: fail > unverified > pass > na
+- 代表 `dkey` は最優先ソースの dkey を使用（OK/NG/保留判定の継承元）
+- カード展開時に、ソース別エビデンスセクション（`.item-source-section`）を表示:
+  - DEEP → 検出ツール: "Puppeteer検査"
+  - PLAY → 検出ツール: "Playwright検査"
+  - EXT → `data.source` に応じて "IBM Equal Access" / "ネイティブDOM検査" / "CDP検査"
+- タブバッジは `badgeMap[key]`（`computeTotalScore()` と同一の SC 単位集計値）を使用
+
+## スキャン予測時間表示
+
+- 場所: `#singleScanEstimate`（単一スキャンコントロール内）/ `#batchScanEstimate`（一括スキャンコントロール内）
+- URL 未入力時: "URLを入力すると予測時間を表示します" を表示
+- URL 入力後: `予測時間: 約X〜Y分 / Nページ / PC|SP|PC+SP / BASIC+DEEP+...` の形式で表示
+- 更新タイミング: URL 入力・一括 URL 入力・viewport radio 変更・scan checkbox 変更・モード切替
+
+### 1ページ・1ビューあたりの目安時間
+
+| スキャン | 最小 | 最大 |
+|---|---|---|
+| BASIC | 10秒 | 30秒 |
+| DEEP | 2分 | 4分 |
+| MULTI | 1分 | 2分 |
+| PLAY | 3分 | 5分 |
+| EXT | 2分 | 4分 |
+
+- PC+SP は viewport 数 ×2 として計算
+- MULTI が disabled（AIキー未設定）の場合は除外して計算
 
 ## 一括検査サマリーテーブル
 
@@ -352,6 +392,22 @@
 - レスポンスパース順序: ① 直接 `JSON.parse`（配列またはオブジェクトラップ対応）→ ② 正規表現で `[...]` を抽出 → ③ `{"index":n,...}` を個別抽出
 - オブジェクトラップ形式（例: `{"results":[...]}`）は `Object.values().find(Array.isArray)` で内部配列を取り出す
 
+### トークン上限検出
+
+各 API 呼び出し関数はトークン上限到達を `tokenLimited: true` として返す。
+
+| プロバイダー | 検出条件 |
+|---|---|
+| Gemini | `response.candidates?.[0]?.finishReason === 'MAX_TOKENS'` |
+| Claude | `message.stop_reason === 'max_tokens'` |
+| OpenAI / o3 | `completion.choices[0].finish_reason === 'length'` |
+
+- `callAI()` がフラグを伝播し、`/api/ai-evaluate` レスポンスに `tokenLimited: true` を含める
+- トークン上限時でも途中までパースした結果を正常系として返す。未返答分は `manual_required` にフォールバック
+- UI: スコアテーブル MULTI 行ラベルのサブテキスト末尾に `<span class="score-token-warn">⚠ トークン上限</span>`（amber）を表示
+- UI: MULTI SCAN ステータスメッセージにも `<span class="ai-token-warn">⚠ トークン上限</span>` を表示
+- HTTP 429 はフォールバックレスポンスに `rateLimited: true` を追加
+
 ### ステータスインジケーター
 
 - ヘッダーステータスバーの AI インジケーター（`#statusGemini`）は3行構造で表示
@@ -422,4 +478,4 @@
 ## 既知の実装差異
 
 1. 除外ルールUI（`data-rule`）は表示のみで未連携
-2. Basic認証はBASIC/DEEPには適用、MULTIには未適用
+2. Basic認証は BASIC / DEEP / PLAY / EXT に適用済み。MULTI（AI評価）のみ未適用（外部AI APIへHTMLを送る前にページ取得を行わないため）

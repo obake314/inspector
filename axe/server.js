@@ -306,7 +306,9 @@ async function callGeminiAPI(prompt, imageBase64 = null, modelKey = 'gemini') {
 
   const result = await model.generateContent({ contents: [{ role: "user", parts }] });
   const response = await result.response;
-  return response.text();
+  const finishReason = response.candidates?.[0]?.finishReason;
+  const tokenLimited = finishReason === 'MAX_TOKENS';
+  return { text: response.text(), tokenLimited };
 }
 
 /**
@@ -331,7 +333,8 @@ async function callClaudeAPI(prompt, imageBase64 = null, modelKey = 'claude-sonn
     messages: [{ role: 'user', content: contentParts }]
   });
 
-  return message.content[0].text;
+  const tokenLimited = message.stop_reason === 'max_tokens';
+  return { text: message.content[0].text, tokenLimited };
 }
 
 /**
@@ -362,7 +365,8 @@ async function callOpenAIAPI(prompt, imageBase64 = null, modelKey = 'gpt-4o') {
     // json_object モードと不整合になるため省略し、パース側で対応する
   });
 
-  return completion.choices[0].message.content;
+  const tokenLimited = completion.choices[0].finish_reason === 'length';
+  return { text: completion.choices[0].message.content, tokenLimited };
 }
 
 /**
@@ -374,16 +378,16 @@ async function callAI(prompt, imageBase64 = null) {
   const modelName = AI_MODEL_MAP[provider] || AI_MODEL_MAP['gemini'];
 
   if (provider === 'claude-sonnet' || provider === 'claude-opus') {
-    const text = await callClaudeAPI(prompt, imageBase64, provider);
-    return { text, modelName };
+    const { text, tokenLimited } = await callClaudeAPI(prompt, imageBase64, provider);
+    return { text, modelName, tokenLimited };
   }
   if (provider === 'gpt-4o' || provider === 'o3' || provider === 'gpt-5') {
-    const text = await callOpenAIAPI(prompt, imageBase64, provider);
-    return { text, modelName };
+    const { text, tokenLimited } = await callOpenAIAPI(prompt, imageBase64, provider);
+    return { text, modelName, tokenLimited };
   }
   // Gemini Flash / Pro
-  const text = await callGeminiAPI(prompt, imageBase64, provider);
-  return { text, modelName };
+  const { text, tokenLimited } = await callGeminiAPI(prompt, imageBase64, provider);
+  return { text, modelName, tokenLimited };
 }
 
 app.use(express.json({ limit: '50mb' }));
@@ -2770,14 +2774,20 @@ ${itemsList}
     console.log(`[${provider}] AI API 呼び出し中...`);
     let aiResponse = '';
     let usedModel = provider;
+    let aiTokenLimited = false;
     try {
       const aiResult = await callAI(prompt, screenshot);
       aiResponse = aiResult.text;
       usedModel = aiResult.modelName;
+      aiTokenLimited = !!aiResult.tokenLimited;
+      if (aiTokenLimited) console.warn('[AI] トークン上限に達しました。応答が途中で切れている可能性があります。');
     } catch (apiError) {
-      const reason = `AIサービスに接続できないため手動確認へフォールバックしました: ${apiError.message}`;
+      const isRateLimit = apiError.status === 429 || apiError.code === 'rate_limit_exceeded';
+      const reason = isRateLimit
+        ? `APIレート制限に達したため手動確認へフォールバックしました: ${apiError.message}`
+        : `AIサービスに接続できないため手動確認へフォールバックしました: ${apiError.message}`;
       console.warn('[AI] ' + reason);
-      return res.json({ success: true, model: 'manual-fallback', fallback: true, reason, results: makeFallbackResults(reason) });
+      return res.json({ success: true, model: 'manual-fallback', fallback: true, rateLimited: isRateLimit, reason, results: makeFallbackResults(reason) });
     }
     console.log('AI応答受信, 長さ:', aiResponse.length);
     
@@ -2851,7 +2861,7 @@ ${itemsList}
       };
     });
 
-    res.json({ success: true, model: usedModel, results: normalizedResults });
+    res.json({ success: true, model: usedModel, tokenLimited: aiTokenLimited, results: normalizedResults });
 
   } catch (error) {
     console.error('AI評価エラー発生:', error.message);

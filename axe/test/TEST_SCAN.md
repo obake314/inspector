@@ -41,6 +41,8 @@
 - 期待結果
   - `success: true` で `results[]` を返す
   - Gemini未設定時は `model=manual-fallback` かつ `status=manual_required` で返る
+  - 正常完了時はレスポンスに `tokenLimited` フィールドが含まれ、通常は `false`（または未定義）
+  - HTTP 429 発生時はレスポンスに `rateLimited: true` が含まれ `model=manual-fallback` で返る
 
 ## T-SCAN-04: BATCH上限
 
@@ -232,14 +234,15 @@
   - PCのタブ詳細には `list-critical-pc` 等の PC 専用リストが描画される
   - SPのタブ詳細には `list-critical-sp` 等の SP 専用リストが描画される
 
-## T-SCAN-25: 詳細タブのバッジ数整合式
+## T-SCAN-25: 詳細タブのバッジ数
 
 - 手順
   1. 任意のビューで SCAN 実行（DEEP/MULTI 有効）
   2. PC VIEW のタブ横の数値を確認
 - 期待結果
-  - `緊急 + 重大 + 中程度 + 軽微 + 合格 + 該当なし + 未検証 = 全項目数（31/55）`
-  - バッジ数はスコアテーブルの TOTAL 行と一致する
+  - カードが 1 件以上あるタブのバッジ数 = そのタブに表示されているカード枚数と一致する
+  - カードが 0 件のタブのバッジ数 = SC 単位の TOTAL スコアにフォールバックする（0 のまま）
+  - スコアテーブルの `全項目数 = 緊急 + 重大 + 中程度 + 軽微 + 合格 + 該当なし + 未検証` の整合式はスコアテーブルの各行で成立する（タブバッジとは独立）
 
 ## T-SCAN-26: Excel エクスポート（PC+SP）
 
@@ -620,3 +623,46 @@
   - `body` は `--font-basic` を既定にする
   - 日本語が入りうる本文・メッセージ・操作ボタンは `--font-basic` のまま表示される
   - 英語・数字のみの固定ラベル、件数、スコア、SC番号、URLスキャン種別は `--font-latin` で表示される
+
+## T-SCAN-63: MULTI SCAN トークン上限警告表示
+
+- 手順
+  1. AI API のトークン上限に達する状況（レスポンス途中で切れる）を再現する、または API レスポンスを `tokenLimited: true` でモックして確認する
+  2. 単一スキャンで MULTI SCAN を実行し、スコアテーブルと MULTI SCAN ステータスメッセージを確認する
+  3. 一括スキャンで MULTI SCAN を実行し、各 URL の詳細表示を切り替えてスコアテーブルを確認する
+  4. `clearScan()` を実行してから再スキャンし、バッジが消えることを確認する
+- 期待結果
+  - `/api/ai-evaluate` レスポンスに `tokenLimited: true` が含まれる場合:
+    - スコアテーブルの MULTI 行ラベルに `⚠ トークン上限` バッジ（amber: `#d97706`）が表示される
+    - MULTI SCAN ステータスメッセージに `⚠ トークン上限` バッジが表示される
+  - `tokenLimited: false` または未設定の場合: バッジは表示されない
+  - `clearScan()` 後は `lastMultiTokenLimited` がリセットされ、次回スキャン後のスコアテーブルにバッジが残らない
+  - 一括スキャンで URL を切り替えると、そのURLの `tokenLimited` フラグに応じてバッジが更新される
+  - PC/SP 両ビューでそれぞれ正しく表示・非表示が切り替わる
+
+## T-SCAN-64: DEEP/PLAY/EXT SC単位統合カード表示
+
+- 手順
+  1. DEEP・PLAY・EXT を全て有効化してスキャンを実行する
+  2. 同一 SC（例: 2.1.1）が DEEP と PLAY の両方から検出された状態で詳細タブを確認する
+  3. 各タブのバッジ数と詳細カード数を確認する
+- 期待結果
+  - 同一 SC に複数ソースが存在する場合、詳細カードは 1 件にまとまる
+  - カード展開時に「Puppeteer検査」「Playwright検査」「IBM Equal Access」などのツール名がソースごとに表示される
+  - タブバッジ数は `computeTotalScore()` の SC 単位集計と一致する（カード数 ≠ SC 数とならない）
+  - ステータス優先順（fail > unverified > pass > na）で代表ステータスが決まる
+
+## T-SCAN-65: SCAN 実行前予測時間表示
+
+- 手順
+  1. ページロード時に `#singleScanEstimate` / `#batchScanEstimate` の内容を確認する
+  2. URLを入力し、各スキャンチェックボックスのオン/オフ、viewport 切り替えで表示が変わることを確認する
+  3. 一括モードで URL を複数行入力して件数が反映されることを確認する
+  4. MULTI のチェックボックスが disabled の場合（AIキー未設定）の動作を確認する
+- 期待結果
+  - URL 未入力時: "URLを入力すると予測時間を表示します" が表示される
+  - URL 入力後: `予測時間: 約X〜Y分 / Nページ / PC|SP|PC+SP / BASIC+...` の形式で表示される
+  - チェックボックス・viewport・URL 変更のたびに即座に更新される
+  - PC+SP 選択時は viewport 数 ×2 として計算される
+  - MULTI が disabled の場合は MULTI を除外した予測時間が表示される
+  - 一括モードでは有効な URL 行数がページ数として計算される
