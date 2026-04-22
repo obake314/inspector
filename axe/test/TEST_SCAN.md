@@ -760,3 +760,16 @@
   - スクリーンリーダー専用 class/id/data 属性を持つ要素は `ターゲットサイズ（24×24px）` の違反に含まれない
   - 通常表示の 24×24px 未満インタラクティブ要素は引き続き違反として検出される
   - 違反表示には class/id を含むセレクタが表示され、どの要素か追跡できる
+
+## T-SCAN-74: GPT APIエラー診断情報
+
+- 手順
+  1. 設定モーダルで `GPT-5` を選択して MULTI SCAN を実行する
+  2. OpenAI API が 401 / 403 / 404 / 429 / 非対応パラメータを返す状態をモックまたは実環境で再現する
+  3. `/api/ai-evaluate` のレスポンスと MULTI 行のエラー詳細を確認する
+- 期待結果
+  - GPT-5 / o3 / o1系の呼び出しでは `max_completion_tokens` が送信され、`max_tokens` 非対応エラーにならない
+  - OpenAI APIエラー時は `causeHint`、`status`、`code`、`errorType`、`param`、`requestId`、`clientRequestId`、`model` が返る
+  - 404 / モデル権限エラーは `モデル利用不可` として表示される
+  - 401 / 403 / 429 / quota / billing / unsupported parameter は `APIエラー` として表示され、原因候補に確認先が出る
+  - UI の詳細文から OpenAI Dashboard / Rate limits / Billing / Project権限のどこを確認すべきか判断できる

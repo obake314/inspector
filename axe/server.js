@@ -55,18 +55,69 @@ const AI_MAX_OUTPUT_TOKENS = 8192;
 
 function compactErrorMessage(error, maxLength = 700) {
   const raw = error?.message || String(error || '');
-  const compact = raw.replace(/\s+/g, ' ').trim();
+  const compact = raw
+    .replace(/sk-[A-Za-z0-9_-]+/g, 'sk-***')
+    .replace(/\s+/g, ' ')
+    .trim();
   return compact.length > maxLength ? `${compact.slice(0, maxLength)}...` : compact;
 }
 
-function classifyAIError(error) {
+function getAIErrorMeta(error) {
+  const nested = error?.error && typeof error.error === 'object' ? error.error : {};
+  const headers = error?.headers || error?.response?.headers || {};
+  const headerRequestId = typeof headers.get === 'function'
+    ? headers.get('x-request-id')
+    : (headers['x-request-id'] || headers['X-Request-Id']);
+  return {
+    status: Number(error?.status || error?.statusCode || error?.response?.status || 0),
+    code: String(error?.code || nested.code || ''),
+    apiErrorType: String(error?.type || nested.type || ''),
+    param: String(error?.param || nested.param || ''),
+    requestId: String(error?.request_id || error?.requestID || error?.requestId || headerRequestId || ''),
+    clientRequestId: String(error?.clientRequestId || ''),
+    requestedModel: String(error?.requestedModel || ''),
+    tokenParam: String(error?.tokenParam || '')
+  };
+}
+
+function buildAICauseHint(provider, info) {
+  const message = info.message || '';
+  const isOpenAIProvider = provider === 'o3' || (provider && provider.startsWith('gpt'));
+  if (info.modelUnavailable) {
+    return isOpenAIProvider
+      ? '選択したOpenAIモデルに現在のAPIキー/プロジェクト/利用Tierでアクセスできません。GPT-5はOpenAI APIのFree Tierでは利用できないため、請求設定とプロジェクト権限を確認してください。'
+      : '選択したモデルにアクセスできません。モデル名、APIキーの権限、利用Tierを確認してください。';
+  }
+  if (info.authFailed) {
+    return 'APIキーが無効、期限切れ、または対象プロジェクトで許可されていません。設定パネルのキーとプロジェクト/組織を確認してください。';
+  }
+  if (info.rateLimited || info.quotaExceeded || /insufficient_quota|billing|balance/i.test(message)) {
+    return 'APIのレート制限、クォータ不足、または課金/残高不足です。時間を置くか、OpenAIのUsage/Billing/Rate limitsを確認してください。';
+  }
+  if (/unsupported parameter|unknown parameter|not supported/i.test(message) || info.param) {
+    const paramText = info.param || info.tokenParam || '送信パラメータ';
+    return `${paramText} が選択モデルで非対応の可能性があります。GPT-5/o系は max_completion_tokens を使う必要があります。`;
+  }
+  if (/context_length|maximum context|too many tokens|token/i.test(message)) {
+    return '入力HTML、画像、または出力上限がモデルのトークン制限に近い可能性があります。対象項目やHTML量を減らして再実行してください。';
+  }
+  if (/timeout|timed out|network|fetch failed|ECONN|ENOTFOUND|ETIMEDOUT/i.test(message)) {
+    return 'OpenAI APIへのネットワーク接続またはタイムアウトです。通信状態を確認して再実行してください。';
+  }
+  return isOpenAIProvider
+    ? 'OpenAI APIからエラーが返っています。status/code/param/requestIdを確認し、必要ならOpenAIのログやサポートで照合してください。'
+    : 'AIサービスからエラーが返っています。status/code/param/requestIdを確認してください。';
+}
+
+function classifyAIError(error, provider = '') {
   const message = compactErrorMessage(error);
-  const status = Number(error?.status || error?.statusCode || 0);
-  const code = String(error?.code || '');
+  const meta = getAIErrorMeta(error);
+  const status = meta.status;
+  const code = meta.code;
   const rateLimited = status === 429
     || code === 'rate_limit_exceeded'
     || /429|too many requests|rate.?limit|quota/i.test(message);
-  const quotaExceeded = /quota|GenerateRequests|GenerateContentInputTokens|free_tier/i.test(message);
+  const quotaExceeded = /quota|insufficient_quota|billing|balance|GenerateRequests|GenerateContentInputTokens|free_tier/i.test(message);
   const modelUnavailable = status === 404
     || /model.*(not found|does not exist|not available|unsupported|access|permission)/i.test(message)
     || /(unsupported|invalid).{0,24}model/i.test(message)
@@ -74,7 +125,7 @@ function classifyAIError(error) {
   const authFailed = status === 401 || status === 403 || /api key|permission|unauthorized|authentication/i.test(message);
   const retryMatch = message.match(/retry(?:Delay| in)?["\s:]*([\d.]+)s/i);
   const retryAfterSeconds = retryMatch ? Number(retryMatch[1]) : null;
-  const type = modelUnavailable ? 'model_unavailable'
+  const aiErrorType = modelUnavailable ? 'model_unavailable'
     : rateLimited ? 'api_error'
     : authFailed ? 'api_error'
     : 'api_error';
@@ -83,22 +134,44 @@ function classifyAIError(error) {
     : rateLimited ? 'APIレート制限'
     : authFailed ? 'API認証エラー'
     : 'APIエラー';
-  return { type, detailLabel, status, rateLimited, quotaExceeded, authFailed, modelUnavailable, retryAfterSeconds, message };
+  const info = { aiErrorType, detailLabel, status, rateLimited, quotaExceeded, authFailed, modelUnavailable, retryAfterSeconds, message, ...meta };
+  info.causeHint = buildAICauseHint(provider, info);
+  return info;
 }
 
-function buildAIErrorResponse(error, provider) {
-  const info = classifyAIError(error);
+function buildAIErrorResponse(error, provider, requestedModel = provider) {
+  if (requestedModel && !error.requestedModel) error.requestedModel = requestedModel;
+  const info = classifyAIError(error, provider);
   const retryText = info.retryAfterSeconds ? ` ${Math.ceil(info.retryAfterSeconds)}秒後に再試行できます。` : '';
-  const errorMessage = `${info.detailLabel}のためMULTI SCANを実行できませんでした。${retryText}${info.message}`;
+  const diagnosticParts = [
+    info.status ? `status=${info.status}` : '',
+    info.code ? `code=${info.code}` : '',
+    info.apiErrorType ? `type=${info.apiErrorType}` : '',
+    info.param ? `param=${info.param}` : '',
+    info.requestedModel ? `model=${info.requestedModel}` : '',
+    info.requestId ? `requestId=${info.requestId}` : '',
+    info.clientRequestId ? `clientRequestId=${info.clientRequestId}` : ''
+  ].filter(Boolean);
+  const diagnosticText = diagnosticParts.length ? ` 診断情報: ${diagnosticParts.join(' / ')}` : '';
+  const hintText = info.causeHint ? ` 原因候補: ${info.causeHint}` : '';
+  const errorMessage = `${info.detailLabel}のためMULTI SCANを実行できませんでした。${retryText}${hintText} ${info.message}${diagnosticText}`;
   const httpStatus = info.modelUnavailable ? 404 : info.rateLimited ? 429 : info.authFailed ? 401 : 502;
   return {
     httpStatus,
     payload: {
       success: false,
-      model: provider,
+      model: info.requestedModel || requestedModel || provider,
+      provider,
       error: errorMessage,
-      aiErrorType: info.type,
+      aiErrorType: info.aiErrorType,
       detailLabel: info.detailLabel,
+      causeHint: info.causeHint,
+      status: info.status || undefined,
+      code: info.code || undefined,
+      errorType: info.apiErrorType || undefined,
+      param: info.param || undefined,
+      requestId: info.requestId || undefined,
+      clientRequestId: info.clientRequestId || undefined,
       rateLimited: info.rateLimited,
       quotaExceeded: info.quotaExceeded,
       modelUnavailable: info.modelUnavailable,
@@ -407,7 +480,7 @@ async function callClaudeAPI(prompt, imageBase64 = null, modelKey = 'claude-sonn
 }
 
 /**
- * GPT-4o / o3 APIを呼び出す関数
+ * OpenAI APIを呼び出す関数
  */
 async function callOpenAIAPI(prompt, imageBase64 = null, modelKey = 'gpt-4o') {
   if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY が設定されていません');
@@ -422,17 +495,33 @@ async function callOpenAIAPI(prompt, imageBase64 = null, modelKey = 'gpt-4o') {
   }
   userContent.push({ type: 'text', text: prompt });
 
-  // o3はmax_completion_tokens、それ以外はmax_tokens
-  const isReasoningModel = modelId === 'o3' || modelId.startsWith('o1');
-  const tokenParam = isReasoningModel ? { max_completion_tokens: AI_MAX_OUTPUT_TOKENS } : { max_tokens: AI_MAX_OUTPUT_TOKENS };
+  // o系/GPT-5系は reasoning token を含む max_completion_tokens を使う。
+  const usesMaxCompletionTokens = modelId === 'o3'
+    || modelId.startsWith('o1')
+    || /^gpt-5(?:[.\-]|$)/i.test(modelId);
+  const tokenParam = usesMaxCompletionTokens
+    ? { max_completion_tokens: AI_MAX_OUTPUT_TOKENS }
+    : { max_tokens: AI_MAX_OUTPUT_TOKENS };
+  const tokenParamName = Object.keys(tokenParam)[0];
+  const clientRequestId = crypto.randomUUID();
 
-  const completion = await openaiClient.chat.completions.create({
-    model: modelId,
-    ...tokenParam,
-    messages: [{ role: 'user', content: userContent }]
-    // response_format は使わない: プロンプトがJSON配列を要求しており
-    // json_object モードと不整合になるため省略し、パース側で対応する
-  });
+  let completion;
+  try {
+    completion = await openaiClient.chat.completions.create({
+      model: modelId,
+      ...tokenParam,
+      messages: [{ role: 'user', content: userContent }]
+      // response_format は使わない: プロンプトがJSON配列を要求しており
+      // json_object モードと不整合になるため省略し、パース側で対応する
+    }, {
+      headers: { 'X-Client-Request-Id': clientRequestId }
+    });
+  } catch (error) {
+    error.requestedModel = modelId;
+    error.tokenParam = tokenParamName;
+    error.clientRequestId = clientRequestId;
+    throw error;
+  }
 
   const tokenLimited = completion.choices[0].finish_reason === 'length';
   return { text: completion.choices[0].message.content, tokenLimited };
@@ -2902,7 +2991,7 @@ ${itemsList}
       aiTokenLimited = !!aiResult.tokenLimited;
       if (aiTokenLimited) console.warn('[AI] トークン上限に達しました。応答が途中で切れている可能性があります。');
     } catch (apiError) {
-      const { httpStatus, payload } = buildAIErrorResponse(apiError, provider);
+      const { httpStatus, payload } = buildAIErrorResponse(apiError, provider, activeModel);
       console.warn('[AI] ' + payload.error);
       return res.status(httpStatus).json(payload);
     }

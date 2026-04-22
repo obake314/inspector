@@ -51,6 +51,7 @@
 - AI接続失敗/認証失敗/HTTP 429 レート制限時: HTTP `502` / `401` / `429` を返し、`success: false`、`aiErrorType: api_error`、`detailLabel`、`rateLimited`、`quotaExceeded`、`retryAfterSeconds` を可能な範囲で返す
 - モデルが存在しない、権限がない、または利用できない場合: HTTP `404`、`aiErrorType: model_unavailable`、`detailLabel: モデル利用不可` を返す
 - AI応答がJSON配列として解析できない場合: HTTP `502`、`aiErrorType: json_parse_failed`、`detailLabel: JSON解析失敗`、`responsePreview` を返す
+- OpenAI API エラー時は `causeHint`、`status`、`code`、`errorType`、`param`、`requestId`、`clientRequestId`、`model` を返し、設定ミス・モデル権限・クォータ・非対応パラメータを追跡できるようにする
 - クライアントは AI API エラー時、対象項目を `manual_required` のフォールバック結果として保持し、MULTI 行には原因として `APIエラー` / `モデル利用不可` / `JSON解析失敗` のいずれかを表示する。実行失敗原因のラベルとして `手動確認` は使用しない
 - トークン上限到達時: `tokenLimited: true` を返す。結果は途中までパースされた内容を返し、未返答分は `manual_required` にフォールバック
 - AI応答に未取得項目がある場合: `partialResults: true`、`missingCount`、`warning` を返し、UI に `部分応答` バッジを表示する
@@ -413,10 +414,11 @@
 |---|---|---|---|
 | Gemini Flash / Pro | `callGeminiAPI()` | `maxOutputTokens: 8192` | `responseMimeType: "application/json"` |
 | Claude Sonnet / Opus | `callClaudeAPI()` | `max_tokens: 8192` | なし（プロンプト指示） |
-| GPT-4o / GPT-5 | `callOpenAIAPI()` | `max_tokens: 8192` | なし（プロンプト指示） |
-| o3 / o1系 | `callOpenAIAPI()` | `max_completion_tokens: 8192` | なし（プロンプト指示） |
+| GPT-4o | `callOpenAIAPI()` | `max_tokens: 8192` | なし（プロンプト指示） |
+| GPT-5 / o3 / o1系 | `callOpenAIAPI()` | `max_completion_tokens: 8192` | なし（プロンプト指示） |
 
 - `response_format: json_object` は**使用しない**。プロンプトがJSON配列を要求しており `json_object` モードと不整合になるため省略。
+- OpenAI 呼び出し時は `X-Client-Request-Id` を付与し、APIエラー時に OpenAI の `x-request-id` と合わせて返す
 - レスポンスパース順序: ① 直接 `JSON.parse`（配列またはオブジェクトラップ対応）→ ② 正規表現で `[...]` を抽出 → ③ `{"index":n,...}` を個別抽出
 - オブジェクトラップ形式（例: `{"results":[...]}`）は `Object.values().find(Array.isArray)` で内部配列を取り出す
 
