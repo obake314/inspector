@@ -809,8 +809,9 @@ async function check_1_4_10_reflow(page) {
             const tag = el.tagName.toLowerCase();
             const id = el.id ? `#${el.id}` : '';
             const cls = el.className && typeof el.className === 'string'
-              ? '.' + el.className.trim().split(/\s+/).join('.') : '';
-            overflows.push(`${tag}${id}${cls}`.slice(0, 80));
+              ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+            const text = (el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 20);
+            overflows.push(`${tag}${id}${cls}${text ? ' "'+text+'"' : ''} (右端:${Math.round(rect.right)}px, はみ出し:${Math.round(rect.right-320)}px)`.slice(0, 100));
             if (overflows.length >= 10) break;
           }
         }
@@ -907,11 +908,14 @@ async function check_2_1_2_keyboard_trap(page) {
         const id = a.id ? `#${a.id}` : '';
         const cls = a.className && typeof a.className === 'string'
           ? '.' + a.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+        const text = (a.getAttribute('aria-label') || a.textContent || a.value || '').trim().slice(0, 25);
         // aria-modal ダイアログ内かチェック
         let inModal = false;
         let p = a;
         while (p) { if (p.getAttribute && p.getAttribute('aria-modal') === 'true') { inModal = true; break; } p = p.parentElement; }
-        return { key: `${tag}${id}${cls}`.slice(0, 60), inModal };
+        const key = `${tag}${id}${cls}`.slice(0, 60);
+        const display = `${key}${text ? ' "'+text+'"' : ''}`.slice(0, 80);
+        return { key, display, inModal };
       });
       if (el) history.push(el);
       await page.keyboard.press('Tab');
@@ -921,7 +925,7 @@ async function check_2_1_2_keyboard_trap(page) {
     const traps = [];
     for (let i = 2; i < history.length; i++) {
       if (history[i].key === history[i - 1].key && history[i].key === history[i - 2].key && !history[i].inModal) {
-        if (!traps.includes(history[i].key)) traps.push(history[i].key);
+        if (!traps.some(t => t.startsWith(history[i].key))) traps.push(history[i].display);
       }
     }
 
@@ -1117,7 +1121,11 @@ async function check_2_4_11_12_focus_obscured(page) {
         });
         const tag = el.tagName.toLowerCase();
         const id = el.id ? `#${el.id}` : '';
-        const label = `${tag}${id}`.slice(0, 60);
+        const cls = el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+        const text = (el.getAttribute('aria-label') || el.textContent || el.value || '').trim().slice(0, 25);
+        const parentEl = el.parentElement;
+        const ctx = !el.id && parentEl && parentEl !== document.body ? ` in ${parentEl.tagName.toLowerCase()}${parentEl.id ? '#'+parentEl.id : ''}` : '';
+        const label = `${tag}${id}${cls}${text ? ' "'+text+'"' : ''}${ctx}`.slice(0, 80);
         if (fixedEls.length === 0) return null;
         // 重複面積計算
         const fixedRects = fixedEls.map(e => e.getBoundingClientRect());
@@ -1371,7 +1379,11 @@ async function check_2_4_7_focus_visible(page) {
 
         const tag   = el.tagName.toLowerCase();
         const id    = el.id ? `#${el.id}` : '';
-        const label = `${tag}${id}`.slice(0, 50);
+        const cls   = el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+        const text  = (el.getAttribute('aria-label') || el.textContent || el.value || '').trim().slice(0, 25);
+        const parentEl = el.parentElement;
+        const parentCtx = !el.id && parentEl && parentEl !== document.body ? ` in ${parentEl.tagName.toLowerCase()}${parentEl.id ? '#'+parentEl.id : ''}` : '';
+        const label = `${tag}${id}${cls}${text ? ' "'+text+'"' : ''}${parentCtx}`.slice(0, 80);
 
         // フォーカス時にいずれかのプロパティが変化したか
         const hasOutline    = aOutlineS !== 'none' && aOutlineW > 0;
@@ -1435,7 +1447,9 @@ async function check_2_4_3_focus_order(page) {
         const tabindex = parseInt(el.getAttribute('tabindex') || '0', 10);
         const tag = el.tagName.toLowerCase();
         const id = el.id ? `#${el.id}` : '';
-        return { x: rect.left, y: rect.top, tabindex, label: `${tag}${id}`.slice(0, 50) };
+        const cls = el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+        const text = (el.getAttribute('aria-label') || el.textContent || el.value || '').trim().slice(0, 25);
+        return { x: rect.left, y: rect.top, tabindex, label: `${tag}${id}${cls}${text ? ' "'+text+'"' : ''}`.slice(0, 80) };
       });
       if (!info) continue;
       if (info.tabindex > 0) tabindexIssues.push(`${info.label} (tabindex=${info.tabindex})`);
@@ -3568,8 +3582,11 @@ async function pw_check_4_1_2_accessible_names(page) {
         if (!label || !label.trim()) {
           const tag = el.tagName.toLowerCase();
           const id = el.id ? `#${el.id}` : '';
+          const cls = el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).slice(0,2).join('.') : '';
           const role = el.getAttribute('role') || tag;
-          nameless.push(`<${tag}${id}> [role=${role}] アクセシブルネームなし`);
+          const parentEl = el.parentElement;
+          const ctx = !el.id && parentEl && parentEl !== document.body ? ` in ${parentEl.tagName.toLowerCase()}${parentEl.id ? '#'+parentEl.id : ''}` : '';
+          nameless.push(`<${tag}${id}${cls}>${ctx} [role=${role}] アクセシブルネームなし`);
           if (nameless.length >= 10) break;
         }
       }
@@ -3693,7 +3710,13 @@ async function pw_check_2_4_7_focus_visible_all(page) {
       const shadowOk = s.boxShadow && s.boxShadow !== 'none';
       const borderOk = s.borderStyle !== 'none' && parseFloat(s.borderWidth) > 0 && s.borderColor !== 'transparent';
       if (!outlineOk && !shadowOk && !borderOk) {
-        noFocus.push(`${el.tagName.toLowerCase()}${el.id ? '#'+el.id : ''}${el.className ? '.'+String(el.className).split(' ')[0] : ''}`);
+        const tag2 = el.tagName.toLowerCase();
+        const id2 = el.id ? '#'+el.id : '';
+        const cls2 = el.className ? '.'+String(el.className).split(' ').slice(0,2).join('.') : '';
+        const text2 = (el.getAttribute('aria-label') || el.textContent || el.value || '').trim().slice(0, 25);
+        const parentEl2 = el.parentElement;
+        const ctx2 = !el.id && parentEl2 && parentEl2 !== document.body ? ` in ${parentEl2.tagName.toLowerCase()}${parentEl2.id ? '#'+parentEl2.id : ''}` : '';
+        noFocus.push(`${tag2}${id2}${cls2}${text2 ? ' "'+text2+'"' : ''}${ctx2}`);
       }
     });
     return noFocus;
@@ -3735,7 +3758,10 @@ async function pw_check_2_1_1_full_tab_sequence(page) {
     prevKey = key;
   }
   const hidden = visited.filter(v => v.hidden);
-  const issues = hidden.map(v => `非表示要素がTab順序に含まれる: ${v.tag}${v.id ? '#'+v.id : ''}`);
+  const issues = hidden.map(v => {
+    const sel = `${v.tag}${v.id ? '#'+v.id : ''}`;
+    return `非表示要素がTab順序に含まれる: ${sel}${v.label ? ' "'+v.label+'"' : ''}`;
+  });
   return {
     sc: '2.1.1',
     status: visited.length === 0 ? 'fail' : (issues.length > 0 ? 'fail' : 'pass'),
@@ -3931,10 +3957,13 @@ async function pw_check_2_1_2_keyboard_trap(page) {
         const id = a.id ? `#${a.id}` : '';
         const cls = a.className && typeof a.className === 'string'
           ? '.' + a.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+        const text = (a.getAttribute('aria-label') || a.textContent || a.value || '').trim().slice(0, 25);
         let inModal = false;
         let p = a;
         while (p) { if (p.getAttribute && p.getAttribute('aria-modal') === 'true') { inModal = true; break; } p = p.parentElement; }
-        return { key: `${tag}${id}${cls}`.slice(0, 60), inModal };
+        const key = `${tag}${id}${cls}`.slice(0, 60);
+        const display = `${key}${text ? ' "'+text+'"' : ''}`.slice(0, 80);
+        return { key, display, inModal };
       });
       if (el) history.push(el);
       await page.keyboard.press('Tab');
@@ -3942,7 +3971,7 @@ async function pw_check_2_1_2_keyboard_trap(page) {
     const traps = [];
     for (let i = 2; i < history.length; i++) {
       if (history[i].key === history[i-1].key && history[i].key === history[i-2].key && !history[i].inModal) {
-        if (!traps.includes(history[i].key)) traps.push(history[i].key);
+        if (!traps.some(t => t.startsWith(history[i].key))) traps.push(history[i].display);
       }
     }
     return {
@@ -3997,7 +4026,9 @@ async function pw_check_2_4_3_focus_order(page) {
         const tabindex = parseInt(el.getAttribute('tabindex') || '0', 10);
         const tag = el.tagName.toLowerCase();
         const id = el.id ? `#${el.id}` : '';
-        return { x: rect.left, y: rect.top, tabindex, label: `${tag}${id}`.slice(0, 50) };
+        const cls = el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+        const text = (el.getAttribute('aria-label') || el.textContent || el.value || '').trim().slice(0, 25);
+        return { x: rect.left, y: rect.top, tabindex, label: `${tag}${id}${cls}${text ? ' "'+text+'"' : ''}`.slice(0, 80) };
       });
       if (!info) continue;
       if (info.tabindex > 0) tabindexIssues.push(`${info.label} (tabindex=${info.tabindex})`);
@@ -4046,7 +4077,11 @@ async function pw_check_2_4_11_focus_obscured(page) {
         if (fixedEls.length === 0) return null;
         const tag = el.tagName.toLowerCase();
         const id = el.id ? `#${el.id}` : '';
-        const label = `${tag}${id}`.slice(0, 60);
+        const cls = el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+        const text = (el.getAttribute('aria-label') || el.textContent || el.value || '').trim().slice(0, 25);
+        const parentEl = el.parentElement;
+        const ctx = !el.id && parentEl && parentEl !== document.body ? ` in ${parentEl.tagName.toLowerCase()}${parentEl.id ? '#'+parentEl.id : ''}` : '';
+        const label = `${tag}${id}${cls}${text ? ' "'+text+'"' : ''}${ctx}`.slice(0, 80);
         for (const fe of fixedEls) {
           const fr = fe.getBoundingClientRect();
           const ox = Math.max(0, Math.min(rect.right, fr.right) - Math.max(rect.left, fr.left));

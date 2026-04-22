@@ -3206,25 +3206,38 @@
             const buckets = { critical: [], serious: [], moderate: [], minor: [], pass: [], na: [], unverified: [] };
             const scSet = new Set(getTargetScList());
 
-            // BASIC violations
+            // BASIC results: axeが同じルールIDを violations/incomplete/passes に分ける場合があるため、
+            // 詳細カードはルール単位で1件に正規化する（fail > unverified > pass）。
             if (basic) {
+                const basicByRule = new Map();
+                function setBasicRule(result, type, rawBucket, rawImpact, priority, dkeyPrefix) {
+                    if ((lo[getWcagLevel(result.tags)] || 1) > lim) return;
+                    const ruleId = result.id || extractSCFromTags(result.tags) || `${type}:${basicByRule.size}`;
+                    const current = basicByRule.get(ruleId);
+                    if (!current || priority < current.priority) {
+                        basicByRule.set(ruleId, {
+                            src: 'BASIC',
+                            type,
+                            data: result,
+                            dkey: `${dkeyPrefix}${ruleId}`,
+                            rawBucket,
+                            rawImpact,
+                            priority
+                        });
+                    }
+                }
                 (basic.violations || []).forEach(v => {
-                    if ((lo[getWcagLevel(v.tags)] || 1) > lim) return;
-                    const dkey = `BASIC:${v.id}`;
-                    const dest = applyDecision(dkey, v.impact || 'serious', v.impact || 'serious');
-                    (buckets[dest] || buckets.serious).push({ src: 'BASIC', type: 'violation', data: v, dkey });
-                });
-                (basic.passes || []).forEach(p => {
-                    if ((lo[getWcagLevel(p.tags)] || 1) > lim) return;
-                    const dkey = `BASIC:pass:${p.id}`;
-                    const dest = applyDecision(dkey, 'pass', 'serious');
-                    (buckets[dest] || buckets.serious).push({ src: 'BASIC', type: 'pass', data: p, dkey });
+                    setBasicRule(v, 'violation', v.impact || 'serious', v.impact || 'serious', 0, 'BASIC:');
                 });
                 (basic.incomplete || []).forEach(i => {
-                    if ((lo[getWcagLevel(i.tags)] || 1) > lim) return;
-                    const dkey = `BASIC:${i.id}`;
-                    const dest = applyDecision(dkey, 'unverified', 'serious');
-                    (buckets[dest] || buckets.unverified).push({ src: 'BASIC', type: 'incomplete', data: i, dkey });
+                    setBasicRule(i, 'incomplete', 'unverified', 'serious', 1, 'BASIC:');
+                });
+                (basic.passes || []).forEach(p => {
+                    setBasicRule(p, 'pass', 'pass', 'serious', 2, 'BASIC:pass:');
+                });
+                basicByRule.forEach(({ src, type, data, dkey, rawBucket, rawImpact }) => {
+                    const dest = applyDecision(dkey, rawBucket, rawImpact);
+                    (buckets[dest] || buckets.unverified).push({ src, type, data, dkey });
                 });
             }
 

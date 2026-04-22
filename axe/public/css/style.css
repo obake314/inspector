@@ -556,6 +556,7 @@ h1 {
   opacity: 0.72;
   letter-spacing: 0.02em;
   margin-top: 2px;
+  white-space: nowrap;
 }
 
 .score-token-warn {
