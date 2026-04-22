@@ -263,6 +263,7 @@ h1 {
   gap: var(--space-s);
   width:150px;
   justify-content: center;
+  line-height: 1;
 }
 .check-btn:hover {
   background: var(--navy-700);
@@ -289,10 +290,11 @@ h1 {
 
 .batch-controls,
 .scan-controls{
-  display: flex;
-  gap: var(--space-m);
-  margin-bottom: 16px;
-  align-items: center;
+    gap: var(--space-m);
+    margin-bottom: 16px;
+    align-items: center;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
 }
 
 .scan-estimate {
@@ -311,6 +313,8 @@ h1 {
   border: 1px solid var(--navy-200);
   background: var(--color-white);
   transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+  font-size: var(--font-size-m);
+  line-height: 1;
 }
 .scan-option:hover {
   border-color: var(--navy-400);
@@ -599,7 +603,7 @@ h1 {
 }
 .score-chip{
   font-family: var(--font-latin);
-  font-size: 20px;
+  font-size: 25px;
 }
 .score-num,
 .score-dash {

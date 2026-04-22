@@ -595,6 +595,11 @@
             return '';
         }
 
+        function calculateAchievementRate(pass, total, na) {
+            const applicable = Math.max(0, (total || 0) - (na || 0));
+            return applicable > 0 ? Math.round((pass || 0) / applicable * 100) : null;
+        }
+
         // 行データからスコア集計（F列=index5が結果）
         function computeStats(rows) {
             const s = { pass: 0, fail: 0, incomplete: 0, na: 0, unverified: 0 };
@@ -607,8 +612,7 @@
                 else s.unverified++;
             });
             s.total = rows.length;
-            const checkable = s.pass + s.fail;
-            s.passRate = checkable > 0 ? Math.round(s.pass / checkable * 100) : null;
+            s.passRate = calculateAchievementRate(s.pass, s.total, s.na);
             return s;
         }
 
@@ -1367,7 +1371,8 @@
                         body: JSON.stringify({
                             url: lastResults.url,
                             checkItems: filteredItems,
-                            viewportPreset: options.viewportPreset || 'desktop'
+                            viewportPreset: options.viewportPreset || 'desktop',
+                            playResults: lastPlayResults || null
                         }),
                         signal: controller.signal
                     }, '/api/ai-evaluate');
@@ -1409,6 +1414,8 @@
                     const issueText = lastMultiIssue?.message ? `<div class="ai-status-note">${escapeHtml(lastMultiIssue.message)}</div>` : '';
                     status.innerHTML = `評価完了${issueWarn} <span class="ai-status-badge">合格: ${passCount} / 不合格: ${failCount} / 要手動: ${manualCount} / 該当なし: ${naCount}</span>${issueText}`;
                 }
+                // スコアとタブをMULTI結果で再描画
+                renderAllTabs('pc');
             } catch (error) {
                 const msg = error.name === 'AbortError' ? 'MULTI SCANがタイムアウトしました（10分超過）' : error.message;
                 if (isTimeoutLike(error, msg)) {
@@ -1447,8 +1454,8 @@
             // SCANアクションエリアの切り替え
             const sc = $('singleScanControls');
             const bc = $('batchScanControls');
-            if (sc) sc.style.display = currentMode === 'single' ? 'flex' : 'none';
-            if (bc) bc.style.display = currentMode === 'batch'  ? 'flex' : 'none';
+            if (sc) sc.style.display = currentMode === 'single' ? 'grid' : 'none';
+            if (bc) bc.style.display = currentMode === 'batch'  ? 'grid' : 'none';
             const singleEstimate = $('singleScanEstimate');
             const batchEstimate = $('batchScanEstimate');
             if (singleEstimate) singleEstimate.style.display = currentMode === 'single' ? '' : 'none';
@@ -2778,7 +2785,8 @@
                 minor,
                 pass,
                 na,
-                unverified: Math.max(0, fixedTotal - covered)
+                unverified: Math.max(0, fixedTotal - covered),
+                score: calculateAchievementRate(pass, fixedTotal, na)
             };
         }
 
@@ -2831,7 +2839,7 @@
 
             return { total: critical+serious+moderate+minor+pass+unverified,
                      critical, serious, moderate, minor, pass, na: 0, unverified,
-                     score: Math.round(pass / getTargetScList().length * 100) };
+                     score: calculateAchievementRate(pass, getTargetScList().length, 0) };
         }
 
         function computeDeepScore(results) {
@@ -2866,7 +2874,7 @@
             return { total: fail+pass+na+unverified,
                      critical: imp.critical, serious: imp.serious, moderate: imp.moderate, minor: imp.minor,
                      pass, na, unverified,
-                     score: Math.round(pass / getTargetScList().length * 100) };
+                     score: calculateAchievementRate(pass, getTargetScList().length, na) };
         }
 
         function computePlayScore(playData) {
@@ -2896,7 +2904,7 @@
             return { total: fail + pass + na + unverified,
                      critical: 0, serious: fail, moderate: 0, minor: 0,
                      pass, na, unverified,
-                     score: Math.round(pass / getTargetScList().length * 100) };
+                     score: calculateAchievementRate(pass, getTargetScList().length, na) };
         }
 
         function computeExtScore(extData) {
@@ -2926,7 +2934,7 @@
             return { total: fail + pass + na + unverified,
                      critical: 0, serious: fail, moderate: 0, minor: 0,
                      pass, na, unverified,
-                     score: Math.round(pass / getTargetScList().length * 100) };
+                     score: calculateAchievementRate(pass, getTargetScList().length, na) };
         }
 
         function computeMultiScore(aiData) {
@@ -2949,7 +2957,7 @@
             return { total: fail+pass+na+unverified,
                      critical: 0, serious: fail, moderate: 0, minor: 0,
                      pass, na, unverified,
-                     score: Math.round(pass / getTargetScList().length * 100) };
+                     score: calculateAchievementRate(pass, getTargetScList().length, na) };
         }
 
         function computeTotalScore(basicResults, deepResults, multiAiData, playResults, extResults) {
@@ -3028,7 +3036,7 @@
             });
             return { total: fail+pass+na+unverified,
                      critical: imp.critical, serious: imp.serious, moderate: imp.moderate, minor: imp.minor,
-                     pass, na, unverified, score: Math.round(pass / getTargetScList().length * 100) };
+                     pass, na, unverified, score: calculateAchievementRate(pass, getTargetScList().length, na) };
         }
 
         // ============================================================
@@ -3774,8 +3782,7 @@
                 else s.unverified++;
             });
             s.fail = s.critical + s.serious + s.moderate + s.minor;
-            const checkable = s.fail + s.pass;
-            s.passRate = checkable > 0 ? Math.round(s.pass / checkable * 100) : null;
+            s.passRate = calculateAchievementRate(s.pass, s.total, s.na);
             return s;
         }
 

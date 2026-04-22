@@ -52,6 +52,10 @@ const AI_MODEL_MAP = {
 };
 
 const AI_MAX_OUTPUT_TOKENS = 8192;
+// Gemini 2.5 Pro は思考トークンが出力トークン枠に含まれるため多めに確保する
+const AI_MAX_OUTPUT_TOKENS_BY_MODEL = {
+  'gemini-2.5-pro': 32768,
+};
 
 function compactErrorMessage(error, maxLength = 700) {
   const raw = error?.message || String(error || '');
@@ -82,17 +86,29 @@ function getAIErrorMeta(error) {
 
 function buildAICauseHint(provider, info) {
   const message = info.message || '';
-  const isOpenAIProvider = provider === 'o3' || (provider && provider.startsWith('gpt'));
+  const isOpenAI  = provider === 'o3' || (provider && provider.startsWith('gpt'));
+  const isGemini  = provider === 'gemini' || provider === 'gemini-pro';
+  const isClaude  = provider === 'claude-sonnet' || provider === 'claude-opus';
+  const providerName = isOpenAI ? 'OpenAI' : isGemini ? 'Google AI (Gemini)' : isClaude ? 'Anthropic (Claude)' : 'AI';
+  const billingUrl  = isOpenAI ? 'https://platform.openai.com/usage'
+    : isGemini ? 'https://ai.dev/rate-limit'
+    : isClaude ? 'https://console.anthropic.com/settings/billing'
+    : '';
   if (info.modelUnavailable) {
-    return isOpenAIProvider
+    return isOpenAI
       ? '選択したOpenAIモデルに現在のAPIキー/プロジェクト/利用Tierでアクセスできません。GPT-5はOpenAI APIのFree Tierでは利用できないため、請求設定とプロジェクト権限を確認してください。'
-      : '選択したモデルにアクセスできません。モデル名、APIキーの権限、利用Tierを確認してください。';
+      : isGemini
+        ? '選択したGeminiモデルにアクセスできません。Gemini 2.5 ProはFree Tierでは利用できません。Google AI StudioでPay-as-you-goへのアップグレードを確認してください。'
+        : '選択したモデルにアクセスできません。モデル名、APIキーの権限、利用Tierを確認してください。';
   }
   if (info.authFailed) {
-    return 'APIキーが無効、期限切れ、または対象プロジェクトで許可されていません。設定パネルのキーとプロジェクト/組織を確認してください。';
+    return `APIキーが無効、期限切れ、または対象プロジェクトで許可されていません。設定パネルの${providerName}キーを確認してください。`;
   }
   if (info.rateLimited || info.quotaExceeded || /insufficient_quota|billing|balance/i.test(message)) {
-    return 'APIのレート制限、クォータ不足、または課金/残高不足です。時間を置くか、OpenAIのUsage/Billing/Rate limitsを確認してください。';
+    const urlText = billingUrl ? ` ${billingUrl} で使用状況を確認してください。` : '';
+    return isGemini
+      ? `Gemini APIの無料枠上限に達しました（limit: 0 はFree Tier非対応モデル）。gemini-flash（無料枠あり）に切り替えるか、Google AI StudioでPay-as-you-goを有効化してください。${urlText}`
+      : `${providerName} APIのレート制限、クォータ不足、または課金/残高不足です。時間を置くか、${urlText}`;
   }
   if (/unsupported parameter|unknown parameter|not supported/i.test(message) || info.param) {
     const paramText = info.param || info.tokenParam || '送信パラメータ';
@@ -102,11 +118,9 @@ function buildAICauseHint(provider, info) {
     return '入力HTML、画像、または出力上限がモデルのトークン制限に近い可能性があります。対象項目やHTML量を減らして再実行してください。';
   }
   if (/timeout|timed out|network|fetch failed|ECONN|ENOTFOUND|ETIMEDOUT/i.test(message)) {
-    return 'OpenAI APIへのネットワーク接続またはタイムアウトです。通信状態を確認して再実行してください。';
+    return `${providerName} APIへのネットワーク接続またはタイムアウトです。通信状態を確認して再実行してください。`;
   }
-  return isOpenAIProvider
-    ? 'OpenAI APIからエラーが返っています。status/code/param/requestIdを確認し、必要ならOpenAIのログやサポートで照合してください。'
-    : 'AIサービスからエラーが返っています。status/code/param/requestIdを確認してください。';
+  return `${providerName} APIからエラーが返っています。status/code/param/requestIdを確認してください。`;
 }
 
 function classifyAIError(error, provider = '') {
@@ -434,9 +448,10 @@ async function callGeminiAPI(prompt, imageBase64 = null, modelKey = 'gemini') {
   if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY が設定されていません');
   const modelId = AI_MODEL_MAP[modelKey] || AI_MODEL_MAP['gemini'];
 
+  const maxTokens = AI_MAX_OUTPUT_TOKENS_BY_MODEL[modelId] || AI_MAX_OUTPUT_TOKENS;
   const model = genAI.getGenerativeModel({
     model: modelId,
-    generationConfig: { responseMimeType: "application/json", maxOutputTokens: AI_MAX_OUTPUT_TOKENS }
+    generationConfig: { responseMimeType: "application/json", maxOutputTokens: maxTokens }
   });
 
   const parts = [{ text: prompt }];
@@ -2894,7 +2909,7 @@ app.post('/api/enhanced-check', async (req, res) => {
  * AI評価 API
  */
 app.post('/api/ai-evaluate', async (req, res) => {
-  const { url, checkItems, viewportPreset } = req.body;
+  const { url, checkItems, viewportPreset, playResults } = req.body;
   const safeCheckItems = Array.isArray(checkItems) ? checkItems : [];
   const provider = AI_PROVIDER || 'gemini';
   _lastAiDebug = { provider, stage: 'received', url, itemCount: safeCheckItems.length, timestamp: new Date().toISOString() };
@@ -2999,7 +3014,49 @@ app.post('/api/ai-evaluate', async (req, res) => {
     await page.close();
     _lastAiDebug = { ..._lastAiDebug, stage: 'page_done_calling_ai' };
 
-    const itemsList = safeCheckItems.map((item, i) =>
+    // PLAYスキャン結果でカバー済みのアイテムをAI送信前に解決する
+    // playResults は [{ sc, status, message, violations }] 形式
+    const playScMap = new Map(); // sc → { status, message, violations }
+    if (Array.isArray(playResults)) {
+      playResults.forEach(r => {
+        if (!r || !r.sc) return;
+        // 複合SC（"2.1.1/2.1.3" 等）を分割してそれぞれ登録
+        String(r.sc).split(/[/,]/).map(s => s.trim()).filter(Boolean).forEach(sc => {
+          if (!playScMap.has(sc)) playScMap.set(sc, r);
+        });
+      });
+    }
+
+    // AI に送る項目と PLAY 結果で解決済みの項目に分離
+    const playResolvedByOriginalIdx = new Map(); // originalIndex → result
+    const itemsForAI = [];
+    safeCheckItems.forEach((item, i) => {
+      const sc = (item.ref || '').trim();
+      const playR = playScMap.get(sc);
+      // PLAY が unverified 以外の結果を持っている場合は解決済みとして扱う
+      if (playR && playR.status && playR.status !== 'unverified') {
+        const aiStatus = playR.status === 'fail' ? 'fail'
+          : playR.status === 'pass' ? 'pass'
+          : playR.status === 'not_applicable' ? 'not_applicable'
+          : 'manual_required';
+        const violations = Array.isArray(playR.violations) ? playR.violations : [];
+        playResolvedByOriginalIdx.set(i, {
+          index: i,
+          status: aiStatus,
+          confidence: 0.95,
+          reason: `Playwright自動テスト結果: ${playR.message || aiStatus}`,
+          evidence: violations.slice(0, 3).join(' / '),
+          selector: '',
+          suggestion: aiStatus === 'fail' ? (violations[0] || '') : ''
+        });
+      } else {
+        itemsForAI.push({ ...item, _origIdx: i });
+      }
+    });
+
+    console.log(`[MULTI] PLAY解決済: ${playResolvedByOriginalIdx.size}件, AI送信: ${itemsForAI.length}件`);
+
+    const itemsList = itemsForAI.map((item, i) =>
       `${i}. ${item.text} (WCAG ${item.ref}, Level ${item.level}, カテゴリ: ${item.category})`
     ).join('\n');
 
@@ -3058,7 +3115,7 @@ ${itemsList}
   }
 ]
 
-全${safeCheckItems.length}項目を評価してください。`;
+全${itemsForAI.length}項目を評価してください。`;
 
     console.log(`[${provider}] AI API 呼び出し中...`);
     let aiResponse = '';
@@ -3124,24 +3181,65 @@ ${itemsList}
       return null;
     }
 
+    // トークン切れで JSON が不完全な場合、完結しているオブジェクトを部分救出する
+    function extractPartialItems(text) {
+      const items = [];
+      const src = text.replace(/```(?:json)?\s*/gi, '').replace(/```\s*/g, '').trim();
+      let i = src.indexOf('{');
+      while (i !== -1 && i < src.length) {
+        let depth = 0, inStr = false, esc = false, start = i;
+        for (; i < src.length; i++) {
+          const c = src[i];
+          if (esc) { esc = false; continue; }
+          if (c === '\\' && inStr) { esc = true; continue; }
+          if (c === '"') { inStr = !inStr; continue; }
+          if (!inStr) {
+            if (c === '{') depth++;
+            else if (c === '}') { depth--; if (depth === 0) { i++; break; } }
+          }
+        }
+        if (depth === 0) {
+          try {
+            const obj = JSON.parse(src.slice(start, i)
+              .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ')
+              .replace(/,(\s*[}\]])/g, '$1'));
+            if (obj && typeof obj.index === 'number') items.push(obj);
+          } catch (e) {}
+        }
+        i = src.indexOf('{', i);
+      }
+      return items;
+    }
+
     let results = [];
     const extracted = extractJsonArray(aiResponse);
-    if (extracted) results = extracted;
+    if (extracted) {
+      results = extracted;
+    } else if (aiTokenLimited) {
+      // トークン上限による不完全なJSONから部分救出
+      const partial = extractPartialItems(aiResponse);
+      if (partial.length > 0) {
+        results = partial;
+        console.log(`部分救出: ${partial.length}件のアイテムを取得`);
+      }
+    }
     
     console.log('パース完了, 結果数:', results.length);
     
-    // 結果が空の場合はエラー
-    if (results.length === 0) {
+    // AI結果が空でPLAY解決済みも0件ならエラー
+    if (results.length === 0 && playResolvedByOriginalIdx.size === 0) {
       console.log('AI応答（先頭500文字）:', aiResponse.substring(0, 500));
       return res.status(502).json(buildAIJsonParseErrorResponse(usedModel, aiResponse));
     }
 
-    const byIndex = new Map();
+    // AIの結果インデックスは itemsForAI の連番 → _origIdx で元インデックスに変換
+    const byOriginalIdx = new Map(playResolvedByOriginalIdx); // PLAY解決済みをベースにマージ
     results.forEach((result) => {
-      const idx = Number(result.index);
-      if (!Number.isInteger(idx) || idx < 0 || idx >= safeCheckItems.length) return;
-      byIndex.set(idx, {
-        index: idx,
+      const aiIdx = Number(result.index);
+      if (!Number.isInteger(aiIdx) || aiIdx < 0 || aiIdx >= itemsForAI.length) return;
+      const origIdx = itemsForAI[aiIdx]._origIdx;
+      byOriginalIdx.set(origIdx, {
+        index: origIdx,
         status: normalizeStatus(result.status),
         confidence: typeof result.confidence === 'number' ? result.confidence : 0.5,
         reason: result.reason || 'AIの判断理由が未取得です',
@@ -3153,8 +3251,8 @@ ${itemsList}
 
     const missingIndexes = [];
     const normalizedResults = safeCheckItems.map((_, idx) => {
-      if (!byIndex.has(idx)) missingIndexes.push(idx);
-      return byIndex.get(idx) || {
+      if (!byOriginalIdx.has(idx)) missingIndexes.push(idx);
+      return byOriginalIdx.get(idx) || {
         index: idx,
         status: 'manual_required',
         confidence: 0.3,
@@ -3428,7 +3526,7 @@ app.post('/api/export-report', async (req, res) => {
     const pageStartRow = 11;
     const pageEndRow = pageStartRow + pageTabInfo.length - 1;
     const coverSum = (col) => `=SUM(${col}${pageStartRow}:${col}${pageEndRow})`;
-    const coverOverallScoreFormula = '=IFERROR(ROUND(J6/(B6+D6+F6+H6+J6+B7+D7)*100)&"%","—")';
+    const coverOverallScoreFormula = '=IFERROR(ROUND(J6/(B6+D6+F6+H6+J6+D7)*100)&"%","—")';
 
     function buildPageSummaryFormulas(sheetTitle, coverRowNo) {
       const resultRange = sheetColumnRange(sheetTitle, 'F');
@@ -3441,7 +3539,7 @@ app.post('/api/export-report', async (req, res) => {
         pass: `=COUNTIF(${resultRange},"合格")`,
         na: `=COUNTIF(${resultRange},"該当なし")+COUNTIF(${resultRange},"対象外")`,
         unverified: `=MAX(0,COUNTA(${resultRange})-COUNTIF(${resultRange},"合格")-COUNTIF(${resultRange},"不合格")-COUNTIF(${resultRange},"該当なし")-COUNTIF(${resultRange},"対象外"))`,
-        score: `=IFERROR(ROUND(G${coverRowNo}/SUM(C${coverRowNo}:G${coverRowNo})*100)&"%","—")`
+        score: `=IFERROR(ROUND(G${coverRowNo}/(SUM(C${coverRowNo}:G${coverRowNo})+I${coverRowNo})*100)&"%","—")`
       };
     }
 

@@ -1003,7 +1003,7 @@ function calcScore_(pg) {
       default:         s.unverified++; break;
     }
   });
-  s.applicable = s.pass + s.fail + s.unknown;
+  s.applicable = Math.max(0, s.total - s.na);
   s.rate = s.applicable > 0 ? Math.round(s.pass / s.applicable * 100) : 0;
   return s;
 }
