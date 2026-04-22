@@ -51,6 +51,49 @@ const AI_MODEL_MAP = {
   'gpt-5':         'gpt-5',
 };
 
+const AI_MAX_OUTPUT_TOKENS = 8192;
+
+function compactErrorMessage(error, maxLength = 700) {
+  const raw = error?.message || String(error || '');
+  const compact = raw.replace(/\s+/g, ' ').trim();
+  return compact.length > maxLength ? `${compact.slice(0, maxLength)}...` : compact;
+}
+
+function classifyAIError(error) {
+  const message = compactErrorMessage(error);
+  const status = Number(error?.status || error?.statusCode || 0);
+  const code = String(error?.code || '');
+  const rateLimited = status === 429
+    || code === 'rate_limit_exceeded'
+    || /429|too many requests|rate.?limit|quota/i.test(message);
+  const quotaExceeded = /quota|GenerateRequests|GenerateContentInputTokens|free_tier/i.test(message);
+  const authFailed = status === 401 || status === 403 || /api key|permission|unauthorized|authentication/i.test(message);
+  const retryMatch = message.match(/retry(?:Delay| in)?["\s:]*([\d.]+)s/i);
+  const retryAfterSeconds = retryMatch ? Number(retryMatch[1]) : null;
+  const type = rateLimited ? 'rate_limited' : authFailed ? 'auth_failed' : 'service_error';
+  const label = quotaExceeded ? 'APIクォータ不足' : rateLimited ? 'APIレート制限' : authFailed ? 'API認証エラー' : 'AIサービス接続エラー';
+  return { type, label, status, rateLimited, quotaExceeded, authFailed, retryAfterSeconds, message };
+}
+
+function buildAIErrorResponse(error, provider) {
+  const info = classifyAIError(error);
+  const retryText = info.retryAfterSeconds ? ` ${Math.ceil(info.retryAfterSeconds)}秒後に再試行できます。` : '';
+  const errorMessage = `${info.label}のためMULTI SCANを実行できませんでした。${retryText}${info.message}`;
+  const httpStatus = info.rateLimited ? 429 : info.authFailed ? 401 : 502;
+  return {
+    httpStatus,
+    payload: {
+      success: false,
+      model: provider,
+      error: errorMessage,
+      aiErrorType: info.type,
+      rateLimited: info.rateLimited,
+      quotaExceeded: info.quotaExceeded,
+      retryAfterSeconds: info.retryAfterSeconds
+    }
+  };
+}
+
 // Gemini API設定
 let GEMINI_API_KEY = savedSettings.geminiApiKey || process.env.GEMINI_API_KEY || '';
 let genAI = new GoogleGenerativeAI(GEMINI_API_KEY || 'placeholder');
@@ -294,7 +337,7 @@ async function callGeminiAPI(prompt, imageBase64 = null, modelKey = 'gemini') {
 
   const model = genAI.getGenerativeModel({
     model: modelId,
-    generationConfig: { responseMimeType: "application/json" }
+    generationConfig: { responseMimeType: "application/json", maxOutputTokens: AI_MAX_OUTPUT_TOKENS }
   });
 
   const parts = [{ text: prompt }];
@@ -329,7 +372,7 @@ async function callClaudeAPI(prompt, imageBase64 = null, modelKey = 'claude-sonn
 
   const message = await anthropicClient.messages.create({
     model: modelId,
-    max_tokens: 4096,
+    max_tokens: AI_MAX_OUTPUT_TOKENS,
     messages: [{ role: 'user', content: contentParts }]
   });
 
@@ -355,7 +398,7 @@ async function callOpenAIAPI(prompt, imageBase64 = null, modelKey = 'gpt-4o') {
 
   // o3はmax_completion_tokens、それ以外はmax_tokens
   const isReasoningModel = modelId === 'o3' || modelId.startsWith('o1');
-  const tokenParam = isReasoningModel ? { max_completion_tokens: 8192 } : { max_tokens: 4096 };
+  const tokenParam = isReasoningModel ? { max_completion_tokens: AI_MAX_OUTPUT_TOKENS } : { max_tokens: AI_MAX_OUTPUT_TOKENS };
 
   const completion = await openaiClient.chat.completions.create({
     model: modelId,
@@ -2726,6 +2769,7 @@ app.post('/api/ai-evaluate', async (req, res) => {
 
     const prompt = `あなたはWCAG 2.2アクセシビリティの専門家です。
 提供されたスクリーンショットとHTMLを分析し、以下の各項目を評価してください。
+検出内容は曖昧にせず、判断に使ったHTML断片・CSSセレクタ・画面上の文言など、確認者が再現できる証拠を必ず短く記述してください。
 
 ## 対象URL
 ${url}
@@ -2757,6 +2801,13 @@ ${itemsList}
    - 動画がないページでの動画関連項目
    - フォームがないページでのフォーム項目
    - これらは status: "not_applicable" を返す
+   - reason には「該当要素がHTML/画面に見当たらない」など、該当なしの根拠を書く
+
+4. **証拠の粒度**:
+   - fail の場合: 何が問題か、どの要素・文言・属性で確認したかを具体的に書く
+   - pass の場合: 合格と判断した根拠を1つ以上書く
+   - manual_required の場合: なぜHTML/スクリーンショットだけでは判断できないかを書く
+   - 「問題があります」「確認が必要です」だけの汎用文は禁止
 
 ## 出力形式（JSON配列のみ、説明不要）
 [
@@ -2764,8 +2815,10 @@ ${itemsList}
     "index": 0,
     "status": "pass" | "fail" | "manual_required" | "not_applicable",
     "confidence": 0.5〜1.0,
-    "reason": "判断理由",
-    "suggestion": ""
+    "reason": "具体的な判断理由。検出内容を1文で明記",
+    "evidence": "HTML断片、CSSセレクタ、画面上の文言、属性値などの根拠",
+    "selector": "該当するCSSセレクタ。特定不能なら空文字",
+    "suggestion": "改善案。pass/not_applicableなら空文字"
   }
 ]
 
@@ -2782,12 +2835,9 @@ ${itemsList}
       aiTokenLimited = !!aiResult.tokenLimited;
       if (aiTokenLimited) console.warn('[AI] トークン上限に達しました。応答が途中で切れている可能性があります。');
     } catch (apiError) {
-      const isRateLimit = apiError.status === 429 || apiError.code === 'rate_limit_exceeded';
-      const reason = isRateLimit
-        ? `APIレート制限に達したため手動確認へフォールバックしました: ${apiError.message}`
-        : `AIサービスに接続できないため手動確認へフォールバックしました: ${apiError.message}`;
-      console.warn('[AI] ' + reason);
-      return res.json({ success: true, model: 'manual-fallback', fallback: true, rateLimited: isRateLimit, reason, results: makeFallbackResults(reason) });
+      const { httpStatus, payload } = buildAIErrorResponse(apiError, provider);
+      console.warn('[AI] ' + payload.error);
+      return res.status(httpStatus).json(payload);
     }
     console.log('AI応答受信, 長さ:', aiResponse.length);
     
@@ -2847,21 +2897,44 @@ ${itemsList}
         status: normalizeStatus(result.status),
         confidence: typeof result.confidence === 'number' ? result.confidence : 0.5,
         reason: result.reason || 'AIの判断理由が未取得です',
+        evidence: result.evidence || result.selector || result.target || '',
+        selector: result.selector || '',
         suggestion: result.suggestion || ''
       });
     });
 
+    const missingIndexes = [];
     const normalizedResults = safeCheckItems.map((_, idx) => {
+      if (!byIndex.has(idx)) missingIndexes.push(idx);
       return byIndex.get(idx) || {
         index: idx,
         status: 'manual_required',
         confidence: 0.3,
-        reason: 'AI応答に該当結果が無かったため、手動確認が必要です',
+        reason: aiTokenLimited
+          ? 'AI応答がトークン上限で途中終了したため、手動確認が必要です'
+          : 'AI応答に該当結果が無かったため、手動確認が必要です',
+        evidence: '',
+        selector: '',
         suggestion: '再実行するか手動で確認してください'
       };
     });
 
-    res.json({ success: true, model: usedModel, tokenLimited: aiTokenLimited, results: normalizedResults });
+    const partialResults = aiTokenLimited || missingIndexes.length > 0;
+    const warning = partialResults
+      ? aiTokenLimited
+        ? `AI応答がトークン上限で途中終了した可能性があります（未取得 ${missingIndexes.length} 項目）。`
+        : `AI応答に未取得項目があります（未取得 ${missingIndexes.length} 項目）。`
+      : '';
+
+    res.json({
+      success: true,
+      model: usedModel,
+      tokenLimited: aiTokenLimited,
+      partialResults,
+      missingCount: missingIndexes.length,
+      warning,
+      results: normalizedResults
+    });
 
   } catch (error) {
     console.error('AI評価エラー発生:', error.message);

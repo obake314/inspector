@@ -577,6 +577,7 @@ h1 {
 
 .ai-token-warn {
   display: inline-block;
+  font-family: var(--font-basic);
   font-size: 11px;
   font-weight: 600;
   color: #fff;
@@ -585,6 +586,12 @@ h1 {
   padding: 1px 6px;
   margin-right: 4px;
   vertical-align: middle;
+}
+
+.ai-status-note {
+  margin-top: 6px;
+  color: #92400e;
+  line-height: 1.55;
 }
 
 .score-total{

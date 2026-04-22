@@ -1,6 +1,6 @@
 # SPEC_WEB
 
-最終更新: 2026-04-22（MULTI SCAN トークン上限検出・SC単位ユニーク集計・PLAY/EXT統合カード・予測時間表示を追加）
+最終更新: 2026-04-22（MULTI SCAN API制限/部分応答の明示・SC単位タブ集計整合・PLAY/EXT統合カード・予測時間表示を追加）
 
 ## 対象
 
@@ -44,11 +44,14 @@
 
 - API: `POST /api/ai-evaluate`
 - 入力: `{ url, checkItems[], viewportPreset? }`
-- 出力: `{ success, model, tokenLimited?, rateLimited?, results: [{ index, status, reason, suggestion, confidence? }] }`
+- 出力: `{ success, model, tokenLimited?, partialResults?, missingCount?, warning?, results: [{ index, status, reason, evidence, selector, suggestion, confidence? }] }`
 - status: `pass` / `fail` / `not_applicable` / `manual_required`
-- AI未設定/接続失敗時: `success: true` のまま `model: manual-fallback` で全項目 `manual_required` を返す
+- AI未設定時: `success: true` のまま `model: manual-fallback` で全項目 `manual_required` を返す
+- AI接続失敗/認証失敗/HTTP 429 レート制限時: HTTP `502` / `401` / `429` を返し、`success: false`、`aiErrorType`、`rateLimited`、`quotaExceeded`、`retryAfterSeconds` を可能な範囲で返す
+- クライアントは AI API エラー時、対象項目を `manual_required` のフォールバック結果として保持し、MULTI 行に `API制限` / `APIクォータ不足` / `APIエラー` 等のバッジを表示する
 - トークン上限到達時: `tokenLimited: true` を返す。結果は途中までパースされた内容を返し、未返答分は `manual_required` にフォールバック
-- HTTP 429 レート制限時: `success: true`、`model: manual-fallback`、`rateLimited: true`、全項目 `manual_required`
+- AI応答に未取得項目がある場合: `partialResults: true`、`missingCount`、`warning` を返し、UI に `部分応答` バッジを表示する
+- 検出内容の粒度: `reason` に判断理由、`evidence` にHTML断片・画面文言・属性値等、`selector` に特定可能なCSSセレクタを入れる
 - クライアント側タイムアウト: 10分
 
 ### PLAY SCAN
@@ -173,12 +176,14 @@
   - `batchResultsData`: PCデータ（SPのみ時はSPデータ）
   - `batchEnhancedResults`: `url → DEEP results`
   - `batchAIResults`: `url → MULTI results`
-  - `batchAITokenLimitedMap`: `url → bool`（MULTI トークン上限フラグ）
+  - `batchAITokenLimitedMap`: `url → bool`（MULTI トークン上限/部分応答/API制限フラグ）
+  - `batchAIIssueMap`: `url → { label, message }`（MULTI 警告/エラー表示メタ）
   - `batchNavConsistency`: SC 3.2.3/3.2.4
   - `batchMobileResultsData`: SPデータ（`PC+SP` 時のみ使用）
   - `batchMobileEnhancedResults`: `url → SP DEEP results`
   - `batchMobileAIResults`: `url → SP MULTI results`
-  - `batchMobileAITokenLimitedMap`: `url → bool`（SP MULTI トークン上限フラグ）
+  - `batchMobileAITokenLimitedMap`: `url → bool`（SP MULTI トークン上限/部分応答/API制限フラグ）
+  - `batchMobileAIIssueMap`: `url → { label, message }`（SP MULTI 警告/エラー表示メタ）
   - `batchPlayResults`: `url → PLAY results`
   - `batchExtResults`: `url → EXT results`
   - `batchMobilePlayResults`: `url → SP PLAY results`
@@ -193,7 +198,7 @@
 |---|---|---|---|
 | BASIC | `BASIC` | `axe-core 自動検査` | `#3581B8` |
 | DEEP  | `DEEP`  | `ヒューリスティック検査` | `#304C89` |
-| MULTI | `MULTI` | `AI 検査`（トークン上限時は末尾に `⚠ トークン上限` バッジを追加） | `#0D7A5F` |
+| MULTI | `MULTI` | `AI 検査`（トークン上限/部分応答/API制限時は末尾に警告バッジを追加） | `#0D7A5F` |
 | PLAY  | `PLAY`  | `Playwright 検査` | `#7B4DC8` |
 | EXT   | `EXT`   | `IBM ACE + 拡張検査` | `#D97706` |
 | TOTAL | `TOTAL` | なし | — |
@@ -221,12 +226,11 @@
 
 `全項目数 = 緊急 + 重大 + 中程度 + 軽微 + 合格 + 該当なし + 未検証`
 
-この整合式はスコアテーブルの各行で成立する。詳細タブ横のバッジ数は以下のルールで決定する。
+この整合式はスコアテーブルの各行で成立する。詳細タブ横のバッジ数は `computeTotalScore()` を `normalizeScoreToTarget()` で固定項目数へ正規化した SC 単位の TOTAL スコアと一致させる。
 
-- カードが 1 件以上あるタブ: そのタブのカード枚数（`items.length`）をそのまま表示
-- カードが 0 件のタブ: SC 単位の TOTAL スコア（`computeTotalScore` 出力）にフォールバック
-
-**「該当なし」タブに注意**: BASIC が同一 SC を `pass` で持つ場合、TOTAL スコアでは `na` がゼロになるが、DEEP/PLAY が `not_applicable` を返した場合はカードがバケットに残る。Fix 17 によりバッジはカード実数を優先するため、こうしたケースでもバッジが 0 にならない。
+- 未カバーSCは `unverified` に補完する
+- MULTI の結果カードは MULTI 実行済みデータが存在する場合のみ描画する
+- 詳細カードはエビデンス表示のため複数カードになることがあるが、タブバッジはカード枚数ではなくSC単位スコアを表示する
 
 ### 対象レベルによるフィルタリング
 
@@ -283,6 +287,7 @@
 ### BASIC / MULTI カード
 - カード構成: `[バッジ] [SC番号] [レベル] タイトル ▼ / サマリー / 件数 / 検出箇所`
 - SC番号は数字のみ表示（"SC" プレフィックスなし）
+- MULTI カードの検出箇所には、AIレスポンスの `selector` / `evidence` / `reason` / `suggestion` を「セレクタ」「根拠」「理由」「改善案」として表示する
 - カード内 `[No.n]` 要素は表示しない
 - バッジ色: BASIC `#3581B8` / DEEP `#304C89` / MULTI `#0D7A5F` / PLAY `#7B4DC8` / EXT `#D97706` / BATCH `#334155`
 
@@ -385,14 +390,15 @@
   - GPT-4o / o3 / GPT-5: `OpenAI API Key`（platform.openai.com）
 - `AI_PROVIDER` 環境変数でも設定可能（優先順位: 設定ファイル > 環境変数）
 - API キー未設定時は MULTI SCAN を `disabled`、`manual-fallback` で全項目 `manual_required` を返す
+- 設定保存時に残トークン数は表示しない。各社APIキー単体では正確な残クォータ/残トークン数を取得できないため、クォータ不足はMULTI実行時のAPIエラーとして表示する
 
 ### API呼び出し仕様
 
 | プロバイダー | 関数 | トークンパラメーター | フォーマット指定 |
 |---|---|---|---|
-| Gemini Flash / Pro | `callGeminiAPI()` | なし（SDK依存） | `responseMimeType: "application/json"` |
-| Claude Sonnet / Opus | `callClaudeAPI()` | `max_tokens: 4096` | なし（プロンプト指示） |
-| GPT-4o / GPT-5 | `callOpenAIAPI()` | `max_tokens: 4096` | なし（プロンプト指示） |
+| Gemini Flash / Pro | `callGeminiAPI()` | `maxOutputTokens: 8192` | `responseMimeType: "application/json"` |
+| Claude Sonnet / Opus | `callClaudeAPI()` | `max_tokens: 8192` | なし（プロンプト指示） |
+| GPT-4o / GPT-5 | `callOpenAIAPI()` | `max_tokens: 8192` | なし（プロンプト指示） |
 | o3 / o1系 | `callOpenAIAPI()` | `max_completion_tokens: 8192` | なし（プロンプト指示） |
 
 - `response_format: json_object` は**使用しない**。プロンプトがJSON配列を要求しており `json_object` モードと不整合になるため省略。
@@ -411,9 +417,9 @@
 
 - `callAI()` がフラグを伝播し、`/api/ai-evaluate` レスポンスに `tokenLimited: true` を含める
 - トークン上限時でも途中までパースした結果を正常系として返す。未返答分は `manual_required` にフォールバック
-- UI: スコアテーブル MULTI 行ラベルのサブテキスト末尾に `<span class="score-token-warn">⚠ トークン上限</span>`（amber）を表示
-- UI: MULTI SCAN ステータスメッセージにも `<span class="ai-token-warn">⚠ トークン上限</span>` を表示
-- HTTP 429 はフォールバックレスポンスに `rateLimited: true` を追加
+- UI: スコアテーブル MULTI 行ラベルのサブテキスト末尾に `<span class="score-token-warn">トークン上限</span>`（amber）を表示
+- UI: MULTI SCAN ステータスメッセージにも `<span class="ai-token-warn">トークン上限</span>` と詳細メッセージを表示
+- HTTP 429 / quota exceeded は `success: false` のAPIエラーとして返し、クライアント側で `manual_required` のフォールバックカードと `API制限` / `APIクォータ不足` バッジを表示する
 
 ### ステータスインジケーター
 
