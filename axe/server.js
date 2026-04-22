@@ -505,14 +505,18 @@ async function callOpenAIAPI(prompt, imageBase64 = null, modelKey = 'gpt-4o') {
   const tokenParamName = Object.keys(tokenParam)[0];
   const clientRequestId = crypto.randomUUID();
 
+  // OpenAI 系は json_object モードで確実に JSON を返させる。
+  // プロンプト側で {"results":[...]} ラッパーを要求し、抽出側で配列を取り出す。
+  const systemMessages = [{ role: 'system', content: 'Respond ONLY with valid JSON in the format {"results":[...]}. No markdown fences, no explanation.' }];
+  const responseFormatParam = { response_format: { type: 'json_object' } };
+
   let completion;
   try {
     completion = await openaiClient.chat.completions.create({
       model: modelId,
       ...tokenParam,
-      messages: [{ role: 'user', content: userContent }]
-      // response_format は使わない: プロンプトがJSON配列を要求しており
-      // json_object モードと不整合になるため省略し、パース側で対応する
+      ...responseFormatParam,
+      messages: [...systemMessages, { role: 'user', content: userContent }]
     }, {
       headers: { 'X-Client-Request-Id': clientRequestId }
     });
@@ -550,6 +554,15 @@ async function callAI(prompt, imageBase64 = null) {
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// 直近のAIレスポンス（デバッグ用）
+let _lastAiDebug = null;
+
+/** GET /api/last-ai-debug — 直近のMULTI CHECKでAIが返した生テキストを返す */
+app.get('/api/last-ai-debug', (req, res) => {
+  if (!_lastAiDebug) return res.json({ message: 'まだAI呼び出しがありません' });
+  res.json(_lastAiDebug);
+});
 
 /**
  * 認証API
@@ -1959,8 +1972,14 @@ async function check_1_4_1_use_of_color(page) {
             if (ratio < 3.0) {
               lowContrastCount++;
               if (lowContrastCount <= 5) {
-                const id = link.id ? `#${link.id}` : '';
-                issues.push(`a${id}: 下線なし + 周囲テキストとのコントラスト比${ratio.toFixed(2)}:1 (要3:1以上)`);
+                const id  = link.id ? `#${link.id}` : '';
+                const cls = link.className && typeof link.className === 'string'
+                  ? '.' + link.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+                const href = link.getAttribute('href')
+                  ? ` href="${link.getAttribute('href').slice(0, 40)}"` : '';
+                const txt = (link.textContent || '').trim().slice(0, 20);
+                const label = `a${id || cls}${href}${txt ? ` "${txt}"` : ''}`;
+                issues.push(`${label}: 下線なし + 周囲テキストとのコントラスト比${ratio.toFixed(2)}:1 (要3:1以上)`.slice(0, 120));
               }
             }
           } else {
@@ -1976,7 +1995,13 @@ async function check_1_4_1_use_of_color(page) {
       // エラー表示が色のみか
       for (const el of document.querySelectorAll('[class*="error" i], [aria-invalid="true"]')) {
         const hasNonColor = el.querySelector('svg, img, [aria-label], [title]') || (el.textContent || '').trim().length > 0;
-        if (!hasNonColor) issues.push(`エラー表示が色のみの可能性: ${el.tagName.toLowerCase()}`.slice(0, 80));
+        if (!hasNonColor) {
+          const id  = el.id ? `#${el.id}` : '';
+          const cls = el.className && typeof el.className === 'string'
+            ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+          const txt = (el.textContent || '').trim().slice(0, 20);
+          issues.push(`エラー表示が色のみの可能性: ${el.tagName.toLowerCase()}${id || cls}${txt ? ` "${txt}"` : ''}`.slice(0, 100));
+        }
       }
       return issues;
     });
@@ -2996,6 +3021,7 @@ ${itemsList}
       return res.status(httpStatus).json(payload);
     }
     console.log('AI応答受信, 長さ:', aiResponse.length);
+    _lastAiDebug = { provider, model: usedModel, length: aiResponse.length, tokenLimited: aiTokenLimited, raw: aiResponse, timestamp: new Date().toISOString() };
     
     // ブラケットカウント方式で JSON 配列を抽出
     // 正規表現は文字列内の ] や } に誤反応するため使用しない
