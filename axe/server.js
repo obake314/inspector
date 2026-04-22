@@ -1187,8 +1187,24 @@ async function check_1_4_12_text_spacing(page) {
     const violations = await page.evaluate(() => {
       const issues = [];
       const els = document.querySelectorAll('p, span, div, li, td, th, h1, h2, h3, h4, h5, h6, a, label');
+      const srOnlyPattern = /(^|[\s_-])(sr-only|screen-reader|screenreader|screen-reader-text|visually-hidden|visuallyhidden|visually_hidden|hidden-visually|u-hidden-visually|a11y-hidden|assistive-text|accessible-hidden|reader-only)([\s_-]|$)/i;
+      function isScreenReaderOnlyElement(el) {
+        let current = el;
+        while (current && current !== document.body && current.nodeType === Node.ELEMENT_NODE) {
+          const marker = [
+            current.id,
+            current.getAttribute('class'),
+            current.getAttribute('data-testid'),
+            current.getAttribute('data-test')
+          ].filter(Boolean).join(' ');
+          if (srOnlyPattern.test(marker)) return true;
+          current = current.parentElement;
+        }
+        return false;
+      }
       for (const el of els) {
         if (el.offsetHeight === 0) continue;
+        if (isScreenReaderOnlyElement(el)) continue;
         const style = getComputedStyle(el);
         if (style.overflow === 'hidden' && el.scrollHeight > el.clientHeight + 2) {
           const tag = el.tagName.toLowerCase();
@@ -1209,7 +1225,7 @@ async function check_1_4_12_text_spacing(page) {
       sc: '1.4.12', name: 'テキスト間隔調整',
       status: violations.length === 0 ? 'pass' : 'fail',
       message: violations.length === 0
-        ? 'テキスト間隔を拡張してもコンテンツのクリップなし'
+        ? 'テキスト間隔を拡張してもコンテンツのクリップなし（スクリーンリーダー専用要素を除く）'
         : `${violations.length}個の要素でテキストがクリップされます`,
       violations
     };
@@ -1227,11 +1243,27 @@ async function check_2_4_11_12_focus_obscured(page) {
 
     for (let i = 0; i < maxCheck; i++) {
       await page.keyboard.press('Tab');
+      await new Promise(r => setTimeout(r, 80));
       const info = await page.evaluate(() => {
         const el = document.activeElement;
         if (!el || el === document.body || el === document.documentElement) return null;
         const rect = el.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) return null;
+        const tag = el.tagName.toLowerCase();
+        const id = el.id ? `#${el.id}` : '';
+        const cls = el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+        const text = (el.getAttribute('aria-label') || el.textContent || el.value || '').trim().slice(0, 25);
+        const parentEl = el.parentElement;
+        const ctx = !el.id && parentEl && parentEl !== document.body ? ` in ${parentEl.tagName.toLowerCase()}${parentEl.id ? '#'+parentEl.id : ''}` : '';
+        const label = `${tag}${id}${cls}${text ? ' "'+text+'"' : ''}${ctx}`.slice(0, 80);
+        const selfStyle = getComputedStyle(el);
+        const hiddenOnFocus = rect.width === 0
+          || rect.height === 0
+          || selfStyle.display === 'none'
+          || selfStyle.visibility === 'hidden'
+          || Number(selfStyle.opacity) === 0
+          || selfStyle.clipPath === 'inset(50%)'
+          || selfStyle.clip === 'rect(0px, 0px, 0px, 0px)';
+        if (hiddenOnFocus) return { label, fullyObscured: true, partiallyObscured: false, hiddenOnFocus: true };
         const centerX = rect.left + rect.width / 2;
         const centerY = rect.top + rect.height / 2;
         const topEls = document.elementsFromPoint(centerX, centerY) || [];
@@ -1240,13 +1272,6 @@ async function check_2_4_11_12_focus_obscured(page) {
           const s = getComputedStyle(e);
           return s.position === 'fixed' || s.position === 'sticky';
         });
-        const tag = el.tagName.toLowerCase();
-        const id = el.id ? `#${el.id}` : '';
-        const cls = el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
-        const text = (el.getAttribute('aria-label') || el.textContent || el.value || '').trim().slice(0, 25);
-        const parentEl = el.parentElement;
-        const ctx = !el.id && parentEl && parentEl !== document.body ? ` in ${parentEl.tagName.toLowerCase()}${parentEl.id ? '#'+parentEl.id : ''}` : '';
-        const label = `${tag}${id}${cls}${text ? ' "'+text+'"' : ''}${ctx}`.slice(0, 80);
         if (fixedEls.length === 0) return null;
         // 重複面積計算
         const fixedRects = fixedEls.map(e => e.getBoundingClientRect());
@@ -1265,7 +1290,8 @@ async function check_2_4_11_12_focus_obscured(page) {
         return { label, fullyObscured, partiallyObscured };
       });
       if (!info) continue;
-      if (info.fullyObscured) sc11violations.push(info.label);
+      if (info.hiddenOnFocus) sc11violations.push(`${info.label}: focus時にも表示されません`);
+      else if (info.fullyObscured) sc11violations.push(info.label);
       else if (info.partiallyObscured) sc12violations.push(info.label);
     }
 
@@ -1822,12 +1848,32 @@ async function check_2_3_1_three_flashes(page) {
         'lightbox-zoom-in',
         'lightbox-zoom-out'
       ]);
+      function parseCssTime(value) {
+        const text = String(value || '').trim();
+        if (!text || text === '0') return 0;
+        const num = parseFloat(text);
+        if (!Number.isFinite(num)) return 0;
+        return text.endsWith('ms') ? num / 1000 : num;
+      }
+      const usedAnimationNames = new Set();
+      for (const el of document.querySelectorAll('*')) {
+        const style = getComputedStyle(el);
+        const names = String(style.animationName || '').split(',');
+        const durations = String(style.animationDuration || '').split(',');
+        names.forEach((rawName, idx) => {
+          const name = rawName.trim().replace(/^['"]|['"]$/g, '');
+          if (!name || name === 'none') return;
+          const duration = parseCssTime(durations[idx] || durations[durations.length - 1]);
+          if (duration > 0) usedAnimationNames.add(name);
+        });
+      }
       // @keyframes で急速な色変化を検出
       for (const sheet of document.styleSheets) {
         try {
           for (const rule of sheet.cssRules || []) {
             if (rule.type === CSSRule.KEYFRAMES_RULE) {
               if (ignoredKeyframes.has(rule.name)) continue;
+              if (!usedAnimationNames.has(rule.name)) continue;
               const keys = Array.from(rule.cssRules || []);
               // 明暗反転を0%→50%→100%でチェック
               if (keys.length >= 3) {
@@ -1839,8 +1885,6 @@ async function check_2_3_1_three_flashes(page) {
                   }
                 }
                 if (hasFlash) {
-                  // アニメーション速度を確認（適用要素のanimation-duration）
-                  const elWithAnim = document.querySelector(`[style*="${rule.name}"], *`);
                   issues.push(`@keyframes "${rule.name}": 点滅を含む可能性のあるアニメーション — 速度を手動確認してください`);
                   if (issues.length >= 5) break;
                 }
@@ -4212,11 +4256,27 @@ async function pw_check_2_4_11_focus_obscured(page) {
     const violations = [];
     for (let i = 0; i < maxCheck; i++) {
       await page.keyboard.press('Tab');
+      await new Promise(r => setTimeout(r, 80));
       const info = await page.evaluate(() => {
         const el = document.activeElement;
         if (!el || el === document.body || el === document.documentElement) return null;
         const rect = el.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) return null;
+        const tag = el.tagName.toLowerCase();
+        const id = el.id ? `#${el.id}` : '';
+        const cls = el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+        const text = (el.getAttribute('aria-label') || el.textContent || el.value || '').trim().slice(0, 25);
+        const parentEl = el.parentElement;
+        const ctx = !el.id && parentEl && parentEl !== document.body ? ` in ${parentEl.tagName.toLowerCase()}${parentEl.id ? '#'+parentEl.id : ''}` : '';
+        const label = `${tag}${id}${cls}${text ? ' "'+text+'"' : ''}${ctx}`.slice(0, 80);
+        const selfStyle = getComputedStyle(el);
+        const hiddenOnFocus = rect.width === 0
+          || rect.height === 0
+          || selfStyle.display === 'none'
+          || selfStyle.visibility === 'hidden'
+          || Number(selfStyle.opacity) === 0
+          || selfStyle.clipPath === 'inset(50%)'
+          || selfStyle.clip === 'rect(0px, 0px, 0px, 0px)';
+        if (hiddenOnFocus) return { label, hiddenOnFocus: true };
         const centerX = rect.left + rect.width / 2;
         const centerY = rect.top + rect.height / 2;
         const topEls = document.elementsFromPoint(centerX, centerY) || [];
@@ -4226,13 +4286,6 @@ async function pw_check_2_4_11_focus_obscured(page) {
           return s.position === 'fixed' || s.position === 'sticky';
         });
         if (fixedEls.length === 0) return null;
-        const tag = el.tagName.toLowerCase();
-        const id = el.id ? `#${el.id}` : '';
-        const cls = el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
-        const text = (el.getAttribute('aria-label') || el.textContent || el.value || '').trim().slice(0, 25);
-        const parentEl = el.parentElement;
-        const ctx = !el.id && parentEl && parentEl !== document.body ? ` in ${parentEl.tagName.toLowerCase()}${parentEl.id ? '#'+parentEl.id : ''}` : '';
-        const label = `${tag}${id}${cls}${text ? ' "'+text+'"' : ''}${ctx}`.slice(0, 80);
         for (const fe of fixedEls) {
           const fr = fe.getBoundingClientRect();
           const ox = Math.max(0, Math.min(rect.right, fr.right) - Math.max(rect.left, fr.left));
@@ -4241,7 +4294,8 @@ async function pw_check_2_4_11_focus_obscured(page) {
         }
         return null;
       });
-      if (info && info.fully) violations.push(`フォーカスが完全に隠れる: ${info.label}`);
+      if (info?.hiddenOnFocus) violations.push(`フォーカス時にも表示されない: ${info.label}`);
+      else if (info?.fully) violations.push(`フォーカスが完全に隠れる: ${info.label}`);
     }
     return {
       sc: '2.4.11',

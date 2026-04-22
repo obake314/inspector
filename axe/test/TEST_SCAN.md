@@ -783,3 +783,17 @@
 - 期待結果
   - WordPress標準lightbox由来の4つの keyframes は `点滅を含む可能性のあるアニメーション` に表示されない
   - allowlist外の点滅候補 keyframes は引き続き検出される
+
+## T-SCAN-76: DEEP SCAN 誤検知抑制（screen-reader / focus / 未使用keyframes）
+
+- 手順
+  1. `class="screen-reader-text"` を持つ要素が 1.4.12 のテキスト間隔適用後にクリップされるページで DEEP SCAN を実行する
+  2. 通常時は画面外にあり、`:focus` で画面内に表示されるスキップリンクを含むページで DEEP / PLAY SCAN を実行する
+  3. CSS上に `@keyframes internSlideFade` が存在するが、現在ページ上の要素に `animation-name: internSlideFade` が適用されていないページで DEEP SCAN を実行する
+  4. 別名の keyframes を現在ページ上の要素に `animation-duration > 0` で適用して DEEP SCAN を実行する
+- 期待結果
+  - `screen-reader-text` / `sr-only` / `visually-hidden` 等のスクリーンリーダー専用要素は 1.4.12 のクリップ違反に含まれない
+  - 通常時に隠れていてもfocus時に表示される要素は 2.4.11 / 2.4.12 の違反にならない
+  - focus時にも `display:none` / `visibility:hidden` / `opacity:0` / 0×0 / clipping のままの要素は違反になる
+  - 現在ページで未使用の keyframes は 2.3.1 の点滅候補に含まれない
+  - 現在ページで実際に適用されている allowlist外の点滅候補 keyframes は引き続き検出される

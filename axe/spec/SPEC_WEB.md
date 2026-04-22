@@ -21,8 +21,10 @@
 - API: `POST /api/enhanced-check`
 - 入力: `{ url, includeAAA?, basicAuth?, viewportPreset? }`
 - 出力: `{ success, viewportPreset, results: [{ sc, name, status, message, violations[] }], includeAAA }`
+- SC 1.4.12 テキスト間隔検査では、class/id/data属性に `screen-reader-text` / `sr-only` / `visually-hidden` 等のスクリーンリーダー専用マーカーを持つ要素とその配下をクリップ判定から除外する
 - SC 2.5.8 ターゲットサイズ検査では、class/id/data属性に `sr-only` / `screen-reader` / `screen-reader-text` / `visually-hidden` / `assistive-text` 等のスクリーンリーダー専用マーカーを持つ要素とその配下を24×24px判定から除外する
-- SC 2.3.1 点滅検査では、WordPress標準 lightbox 由来の `turn-on-visibility` / `turn-off-visibility` / `lightbox-zoom-in` / `lightbox-zoom-out` keyframes を点滅候補から除外する
+- SC 2.3.1 点滅検査では、現在ページ上の要素に実際に適用され、`animation-duration > 0` の `animation-name` に対応する keyframes のみを点滅候補にする。WordPress標準 lightbox 由来の `turn-on-visibility` / `turn-off-visibility` / `lightbox-zoom-in` / `lightbox-zoom-out` keyframes は除外する
+- SC 2.4.11 / 2.4.12 フォーカス隠れ検査では、通常時の表示状態ではなく、Tabで実際にfocusした後の表示状態を判定する。通常時は隠れていてもfocus時に表示される要素は違反にしない
 - AAA βは一時停止中。フロントUIはコメントアウトし、`includeAAA` が送信されてもサーバー側で `false` 固定として扱う。
 - status: `pass` / `fail` / `not_applicable` / `manual_required` / `error`
 - タイムアウト仕様:
@@ -87,7 +89,7 @@
 | キーボード完全到達性 | 2.1.1 | Tab キーシーケンスで到達可能要素を列挙（最大60要素） |
 | キーボードトラップ | 2.1.2 | Tab 連続押下で同一要素3回連続 = トラップとして検出（aria-modal 除外） |
 | フォーカス順序 | 2.4.3 | tabindex > 0 の有無・視覚的読み順からの逸脱を検出 |
-| フォーカスが隠れない（最低限） | 2.4.11 | fixed/sticky 要素によるフォーカス完全隠蔽を検出 |
+| フォーカスが隠れない（最低限） | 2.4.11 | Tabでfocusした後に、fixed/sticky 要素による完全隠蔽、またはfocus時にも表示されない要素を検出 |
 
 ### EXT SCAN
 
