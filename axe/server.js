@@ -67,19 +67,30 @@ function classifyAIError(error) {
     || code === 'rate_limit_exceeded'
     || /429|too many requests|rate.?limit|quota/i.test(message);
   const quotaExceeded = /quota|GenerateRequests|GenerateContentInputTokens|free_tier/i.test(message);
+  const modelUnavailable = status === 404
+    || /model.*(not found|does not exist|not available|unsupported|access|permission)/i.test(message)
+    || /(unsupported|invalid).{0,24}model/i.test(message)
+    || /model_not_found/i.test(code);
   const authFailed = status === 401 || status === 403 || /api key|permission|unauthorized|authentication/i.test(message);
   const retryMatch = message.match(/retry(?:Delay| in)?["\s:]*([\d.]+)s/i);
   const retryAfterSeconds = retryMatch ? Number(retryMatch[1]) : null;
-  const type = rateLimited ? 'rate_limited' : authFailed ? 'auth_failed' : 'service_error';
-  const label = quotaExceeded ? 'APIクォータ不足' : rateLimited ? 'APIレート制限' : authFailed ? 'API認証エラー' : 'AIサービス接続エラー';
-  return { type, label, status, rateLimited, quotaExceeded, authFailed, retryAfterSeconds, message };
+  const type = modelUnavailable ? 'model_unavailable'
+    : rateLimited ? 'api_error'
+    : authFailed ? 'api_error'
+    : 'api_error';
+  const detailLabel = modelUnavailable ? 'モデル利用不可'
+    : quotaExceeded ? 'APIクォータ不足'
+    : rateLimited ? 'APIレート制限'
+    : authFailed ? 'API認証エラー'
+    : 'APIエラー';
+  return { type, detailLabel, status, rateLimited, quotaExceeded, authFailed, modelUnavailable, retryAfterSeconds, message };
 }
 
 function buildAIErrorResponse(error, provider) {
   const info = classifyAIError(error);
   const retryText = info.retryAfterSeconds ? ` ${Math.ceil(info.retryAfterSeconds)}秒後に再試行できます。` : '';
-  const errorMessage = `${info.label}のためMULTI SCANを実行できませんでした。${retryText}${info.message}`;
-  const httpStatus = info.rateLimited ? 429 : info.authFailed ? 401 : 502;
+  const errorMessage = `${info.detailLabel}のためMULTI SCANを実行できませんでした。${retryText}${info.message}`;
+  const httpStatus = info.modelUnavailable ? 404 : info.rateLimited ? 429 : info.authFailed ? 401 : 502;
   return {
     httpStatus,
     payload: {
@@ -87,10 +98,25 @@ function buildAIErrorResponse(error, provider) {
       model: provider,
       error: errorMessage,
       aiErrorType: info.type,
+      detailLabel: info.detailLabel,
       rateLimited: info.rateLimited,
       quotaExceeded: info.quotaExceeded,
+      modelUnavailable: info.modelUnavailable,
       retryAfterSeconds: info.retryAfterSeconds
     }
+  };
+}
+
+function buildAIJsonParseErrorResponse(model, responseText) {
+  const preview = String(responseText || '').slice(0, 500);
+  return {
+    success: false,
+    model,
+    error: `JSON解析失敗のためMULTI SCAN結果を取得できませんでした。AI応答が指定形式のJSON配列ではありません。応答先頭: ${preview || '（空）'}`,
+    aiErrorType: 'json_parse_failed',
+    detailLabel: 'JSON解析失敗',
+    parseFailed: true,
+    responsePreview: preview
   };
 }
 
@@ -2710,7 +2736,15 @@ app.post('/api/ai-evaluate', async (req, res) => {
     const keyName = keyNameMap[provider] || 'AI_API_KEY';
     const reason = `${keyName} が未設定のため自動評価をスキップしました`;
     console.warn('[AI] ' + reason);
-    return res.json({ success: true, model: 'manual-fallback', fallback: true, reason, results: makeFallbackResults(reason) });
+    return res.json({
+      success: true,
+      model: 'manual-fallback',
+      fallback: true,
+      aiErrorType: 'api_error',
+      detailLabel: 'APIエラー',
+      reason,
+      results: makeFallbackResults(reason)
+    });
   }
 
   let browser;
@@ -2885,7 +2919,7 @@ ${itemsList}
     // 結果が空の場合はエラー
     if (results.length === 0) {
       console.log('AI応答（先頭500文字）:', aiResponse.substring(0, 500));
-      throw new Error('AI応答の解析に失敗しました。再度お試しください。');
+      return res.status(502).json(buildAIJsonParseErrorResponse(usedModel, aiResponse));
     }
 
     const byIndex = new Map();

@@ -638,7 +638,7 @@
     - スコアテーブルの MULTI 行ラベルに `トークン上限` バッジ（amber: `#d97706`）が表示される
     - MULTI SCAN ステータスメッセージに `トークン上限` バッジと詳細メッセージが表示される
   - `partialResults: true` の場合は `部分応答` バッジが表示される
-  - HTTP 429 / quota exceeded の場合は `API制限` または `APIクォータ不足` バッジが表示され、対象項目は `manual_required` のフォールバックカードとして表示される
+  - HTTP 429 / quota exceeded の場合は `APIエラー` バッジが表示され、対象項目は `manual_required` のフォールバックカードとして表示される
   - `tokenLimited: false` かつ `partialResults: false` の場合: バッジは表示されない
   - `clearScan()` 後は `lastMultiTokenLimited` / `lastMultiIssue` がリセットされ、次回スキャン後のスコアテーブルにバッジが残らない
   - 一括スキャンで URL を切り替えると、そのURLの `tokenLimited` / issue メタに応じてバッジが更新される
@@ -723,3 +723,17 @@
   - `public/index.html` 内インラインスクリプトの構文チェックが通る
   - `gas/ReportGenerator.gs` の構文チェックが通る
   - 終了コードが `0` になる
+
+## T-SCAN-71: MULTI SCAN 実行失敗原因ラベル
+
+- 手順
+  1. `/api/ai-evaluate` のレスポンスを `aiErrorType: "api_error"` / `fallback: true` でモックする
+  2. `/api/ai-evaluate` のレスポンスを `aiErrorType: "model_unavailable"` でモックする
+  3. `/api/ai-evaluate` のレスポンスを `aiErrorType: "json_parse_failed"` でモックする
+  4. 単一スキャンと一括スキャンの MULTI 行バッジを確認する
+- 期待結果
+  - `api_error` は `APIエラー` と表示される
+  - `model_unavailable` は `モデル利用不可` と表示される
+  - `json_parse_failed` は `JSON解析失敗` と表示される
+  - MULTI SCAN の実行失敗原因として `手動確認` バッジは表示されない
+  - 対象項目のフォールバック結果は `manual_required` として詳細カードに残る

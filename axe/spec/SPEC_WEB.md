@@ -1,6 +1,6 @@
 # SPEC_WEB
 
-最終更新: 2026-04-22（MULTI SCAN API制限/部分応答の明示・SC単位タブ集計整合・PLAY/EXT統合カード・予測時間表示を追加）
+最終更新: 2026-04-22（MULTI SCANエラー種別明示・API制限/部分応答の明示・SC単位タブ集計整合・PLAY/EXT統合カード・予測時間表示を追加）
 
 ## 対象
 
@@ -46,9 +46,11 @@
 - 入力: `{ url, checkItems[], viewportPreset? }`
 - 出力: `{ success, model, tokenLimited?, partialResults?, missingCount?, warning?, results: [{ index, status, reason, evidence, selector, suggestion, confidence? }] }`
 - status: `pass` / `fail` / `not_applicable` / `manual_required`
-- AI未設定時: `success: true` のまま `model: manual-fallback` で全項目 `manual_required` を返す
-- AI接続失敗/認証失敗/HTTP 429 レート制限時: HTTP `502` / `401` / `429` を返し、`success: false`、`aiErrorType`、`rateLimited`、`quotaExceeded`、`retryAfterSeconds` を可能な範囲で返す
-- クライアントは AI API エラー時、対象項目を `manual_required` のフォールバック結果として保持し、MULTI 行に `API制限` / `APIクォータ不足` / `APIエラー` 等のバッジを表示する
+- AI未設定時: `success: true` のまま `model: manual-fallback` で全項目 `manual_required` を返し、`aiErrorType: api_error` / `detailLabel: APIエラー` を返す
+- AI接続失敗/認証失敗/HTTP 429 レート制限時: HTTP `502` / `401` / `429` を返し、`success: false`、`aiErrorType: api_error`、`detailLabel`、`rateLimited`、`quotaExceeded`、`retryAfterSeconds` を可能な範囲で返す
+- モデルが存在しない、権限がない、または利用できない場合: HTTP `404`、`aiErrorType: model_unavailable`、`detailLabel: モデル利用不可` を返す
+- AI応答がJSON配列として解析できない場合: HTTP `502`、`aiErrorType: json_parse_failed`、`detailLabel: JSON解析失敗`、`responsePreview` を返す
+- クライアントは AI API エラー時、対象項目を `manual_required` のフォールバック結果として保持し、MULTI 行には原因として `APIエラー` / `モデル利用不可` / `JSON解析失敗` のいずれかを表示する。実行失敗原因のラベルとして `手動確認` は使用しない
 - トークン上限到達時: `tokenLimited: true` を返す。結果は途中までパースされた内容を返し、未返答分は `manual_required` にフォールバック
 - AI応答に未取得項目がある場合: `partialResults: true`、`missingCount`、`warning` を返し、UI に `部分応答` バッジを表示する
 - 検出内容の粒度: `reason` に判断理由、`evidence` にHTML断片・画面文言・属性値等、`selector` に特定可能なCSSセレクタを入れる
@@ -429,7 +431,8 @@
 - トークン上限時でも途中までパースした結果を正常系として返す。未返答分は `manual_required` にフォールバック
 - UI: スコアテーブル MULTI 行ラベルのサブテキスト末尾に `<span class="score-token-warn">トークン上限</span>`（amber）を表示
 - UI: MULTI SCAN ステータスメッセージにも `<span class="ai-token-warn">トークン上限</span>` と詳細メッセージを表示
-- HTTP 429 / quota exceeded は `success: false` のAPIエラーとして返し、クライアント側で `manual_required` のフォールバックカードと `API制限` / `APIクォータ不足` バッジを表示する
+- HTTP 429 / quota exceeded は `success: false` のAPIエラーとして返し、クライアント側で `manual_required` のフォールバックカードと `APIエラー` バッジを表示する
+- モデル未提供/未許可は `モデル利用不可`、AI応答のJSON解析失敗は `JSON解析失敗` バッジを表示する
 
 ### ステータスインジケーター
 

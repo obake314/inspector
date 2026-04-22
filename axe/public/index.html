@@ -1301,11 +1301,14 @@
 
         function buildMultiIssue(data) {
             if (!data) return null;
-            if (data.rateLimited || data.quotaExceeded || data.aiErrorType === 'rate_limited') {
-                return { label: data.quotaExceeded ? 'APIクォータ不足' : 'API制限', message: data.error || data.reason || 'AI APIの利用制限によりMULTI SCANを実行できませんでした' };
+            if (data.aiErrorType === 'model_unavailable' || data.modelUnavailable || data.detailLabel === 'モデル利用不可') {
+                return { label: 'モデル利用不可', message: data.error || data.reason || '選択中のAIモデルを利用できないためMULTI SCANを実行できませんでした' };
             }
-            if (data.fallback) {
-                return { label: '手動確認', message: data.reason || data.error || 'AI評価を実行できないため手動確認に切り替えました' };
+            if (data.aiErrorType === 'json_parse_failed' || data.parseFailed || data.detailLabel === 'JSON解析失敗') {
+                return { label: 'JSON解析失敗', message: data.error || data.reason || 'AI応答が指定形式のJSONとして解析できませんでした' };
+            }
+            if (data.aiErrorType || data.fallback || data.rateLimited || data.quotaExceeded) {
+                return { label: 'APIエラー', message: data.error || data.reason || data.detailLabel || 'AI APIエラーのためMULTI SCANを実行できませんでした' };
             }
             if (data.partialResults || data.tokenLimited) {
                 return { label: data.tokenLimited ? 'トークン上限' : '部分応答', message: data.warning || 'AI応答に未取得項目があります' };
