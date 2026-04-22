@@ -737,3 +737,15 @@
   - `json_parse_failed` は `JSON解析失敗` と表示される
   - MULTI SCAN の実行失敗原因として `手動確認` バッジは表示されない
   - 対象項目のフォールバック結果は `manual_required` として詳細カードに残る
+
+## T-SCAN-72: 詳細カード開閉クリック範囲
+
+- 手順
+  1. DEEP / PLAY / EXT の統合カードが表示されるスキャン結果を開く
+  2. `.item-header` をクリックしてカードを展開する
+  3. 展開後の `.item-source-section` 内の検出内容・検出箇所をクリックする
+  4. 再度 `.item-header` をクリックする
+- 期待結果
+  - `.item-header` クリックでカードが開閉する
+  - `.item-source-section` 内をクリックしてもカードは閉じない
+  - `.item-locations` 内の検出箇所テキストを選択・クリックしても開閉状態は変わらない

@@ -3059,8 +3059,8 @@
                     <button class="decision-btn${dec==='ng'?' active-ng':''}" onclick="setDecision('${escapeHtml(dk)}','ng',this)">NG</button>
                     <button class="decision-btn${dec==='hold'?' active-hold':''}" onclick="setDecision('${escapeHtml(dk)}','hold',this)">保留</button>
                    </div>`;
-            return `<div class="item-card ${decisionClass}" data-impact="${impact||''}" data-default-impact="${impact||'serious'}" onclick="this.classList.toggle('expanded')">
-                <div class="item-header">
+            return `<div class="item-card ${decisionClass}" data-impact="${impact||''}" data-default-impact="${impact||'serious'}">
+                <div class="item-header" onclick="this.closest('.item-card').classList.toggle('expanded')">
                     ${srcBadge}
                     ${scBadge}${lvBadge}
                     <span class="item-title">${escapeHtml(title)}</span>
@@ -3173,8 +3173,8 @@
                 </div>`;
             }).join('');
 
-            return `<div class="item-card ${decisionClass}" data-impact="${impact||''}" data-default-impact="${impact||'serious'}" onclick="this.classList.toggle('expanded')">
-                <div class="item-header">
+            return `<div class="item-card ${decisionClass}" data-impact="${impact||''}" data-default-impact="${impact||'serious'}">
+                <div class="item-header" onclick="this.closest('.item-card').classList.toggle('expanded')">
                     ${srcBadges}
                     ${scBadge}${lvBadge}
                     <span class="item-title">${escapeHtml(titleText)}</span>

@@ -300,6 +300,7 @@
 - SC番号は数字のみ表示（"SC" プレフィックスなし）
 - MULTI カードの検出箇所には、AIレスポンスの `selector` / `evidence` / `reason` / `suggestion` を「セレクタ」「根拠」「理由」「改善案」として表示する
 - カード内 `[No.n]` 要素は表示しない
+- 詳細カードの開閉は `.item-header` のクリックのみで行う。展開後の `.item-source-section` / `.item-locations` 内クリックではカードを閉じない
 - バッジ色: BASIC `#3581B8` / DEEP `#304C89` / MULTI `#0D7A5F` / PLAY `#7B4DC8` / EXT `#D97706` / BATCH `#334155`
 
 ### DEEP / PLAY / EXT 統合カード（UNIFIED）
@@ -312,6 +313,7 @@
   - DEEP → 検出ツール: "Puppeteer検査"
   - PLAY → 検出ツール: "Playwright検査"
   - EXT → `data.source` に応じて "IBM Equal Access" / "ネイティブDOM検査" / "CDP検査"
+- `.item-source-section` は詳細閲覧用の領域であり、クリックしても親 `.item-card` の開閉状態を変更しない
 - タブバッジは `badgeMap[key]`（`computeTotalScore()` と同一の SC 単位集計値）を使用
 
 ## スキャン予測時間表示
