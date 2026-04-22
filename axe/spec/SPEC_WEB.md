@@ -231,6 +231,7 @@
 - 未カバーSCは `unverified` に補完する
 - MULTI の結果カードは MULTI 実行済みデータが存在する場合のみ描画する
 - 詳細カードはエビデンス表示のため複数カードになることがあるが、タブバッジはカード枚数ではなくSC単位スコアを表示する
+- `displayResults(..., { renderTabs: false })` を使う実行経路では、BASIC直後の中間描画で詳細タブを更新せず、全スキャン完了後の `renderAllTabs()` で TOTAL 統合結果を描画する
 
 ### 対象レベルによるフィルタリング
 
@@ -296,6 +297,7 @@
 - タイトル: `getScName(sc)`（`manualCheckItems` → `wcagScNamesExtra` の順で日本語名を解決）
 - ステータス優先順: fail > unverified > pass > na
 - 代表 `dkey` は最優先ソースの dkey を使用（OK/NG/保留判定の継承元）
+- `renderAllTabs()` のカード生成では `sc` / `level` / `entry` を item から受け取り、UNIFIEDカードに渡す
 - カード展開時に、ソース別エビデンスセクション（`.item-source-section`）を表示:
   - DEEP → 検出ツール: "Puppeteer検査"
   - PLAY → 検出ツール: "Playwright検査"

@@ -1153,11 +1153,13 @@
             </div>`;
         }
 
-        function displayResults(results, url) {
+        function displayResults(results, url, options = {}) {
             // axe-coreの生の結果を保存
             lastResults = { ...results, url, timestamp: new Date().toISOString(), level: targetLevel };
 
-            renderAllTabs('pc');
+            if (options.renderTabs !== false) {
+                renderAllTabs('pc');
+            }
             $('results').classList.add('visible');
             $('exportArea').classList.add('visible');
         }
@@ -1220,7 +1222,7 @@
                 }
                 
                 // 新しいレスポンス形式に対応（data.results内にaxe結果がある）
-                displayResults(data.results, url);
+                displayResults(data.results, url, { renderTabs: options.renderTabs !== false });
             } catch (e) {
                 const msg = e.name === 'AbortError' ? 'BASIC SCANがタイムアウトしました（6分超過）' : e.message;
                 if (isTimeoutLike(e, msg)) {
@@ -1731,7 +1733,7 @@
             lastMultiIssue = batchAIIssueMap[r.url] || null;
             lastPlayResults = batchPlayResults[r.url] || null;
             lastExtResults = batchExtResults[r.url] || null;
-            displayResults(r.results, r.url);
+            displayResults(r.results, r.url, { renderTabs: false });
             $('results').classList.add('visible');
             const deepEnabled  = !!lastEnhancedResults;
             const multiEnabled = Object.keys(aiResults).length > 0;
@@ -2312,7 +2314,7 @@
                 progressLabel.textContent = `${labelPrefix}BASIC SCANNING ...`;
                 renderSinglePhases(phaseOffset + 1);
                 const tBasic = startPhaseTimer(phaseOffset);
-                await check(url, { viewportPreset });
+                await check(url, { viewportPreset, renderTabs: false });
                 clearInterval(tBasic);
                 setSinglePhaseProgress(phaseOffset, 1);
                 snapshot.basic = cloneData(lastResults);
@@ -3270,7 +3272,7 @@
                 const el = $(`list-${key}-${suffix}`);
                 if (!el) return;
                 el.innerHTML = items.length
-                    ? items.map(({ src, type, data, dkey }, idx) => {
+                    ? items.map(({ src, type, data, dkey, sc, level, entry }, idx) => {
                         const no = idx + 1;
                         if (type === 'violation' || type === 'incomplete') {
                             const sc       = extractSCFromTags(data.tags);

@@ -245,9 +245,7 @@ h1 {
   outline: none;
   border-color: var(--navy-700);
 }
-#urlInput {
-  font-family: var(--font-latin);
-}
+
 .url-input::placeholder {
   color: var(--navy-400);
 }
