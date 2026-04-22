@@ -20,7 +20,7 @@
   --space-s:8px;
   --space-l:24px;
   --space-xl:48px;
-  --font-size-s:13px;
+  --font-size-s:14px;
   --font-size-m:16px;
   --font-size-l:36px;
 }
@@ -124,7 +124,7 @@ h1 {
 }
 
 .viewport-mode-title {
-  font-size: 12px;
+  font-size: var(--font-size-s);
   font-weight: 700;
   color: var(--navy-700);
   letter-spacing: 0.06em;
@@ -297,7 +297,7 @@ h1 {
 
 .scan-estimate {
   font-family: var(--font-basic);
-  font-size: 12px;
+  font-size: var(--font-size-s);
   color: var(--navy-400);
   margin-bottom: 10px;
   min-height: 18px;
@@ -502,7 +502,7 @@ h1 {
 }
 .scoretable-title {
   font-family: var(--font-latin);
-  padding: var(--space-m);
+  padding: var(--space-m) 0;
   font-size: var(--font-size-s);
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -519,7 +519,7 @@ h1 {
 }
 
 .scoretable thead th.label-all span{
-  font-size:12px;
+  font-size: var(--font-size-s);
   font-weight: normal;
 }
 .scoretable tbody td{
@@ -944,6 +944,19 @@ h1 {
 }
 .item-card.expanded .item-locations {
   display: block;
+}
+.item-card-uncovered {
+  opacity: 0.7;
+}
+.item-uncovered-note {
+  font-size: 10px;
+  color: #94a3b8;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-left: 4px;
+  white-space: nowrap;
 }
 .item-source-section {
   border-top: 1px solid var(--navy-200);
@@ -1435,7 +1448,7 @@ h1 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--font-size-s);
   color: var(--navy-700);
 }
 
@@ -1470,7 +1483,7 @@ h1 {
 .batchsum-num.is-zero {
   color: var(--navy-400);
   font-weight: 400;
-  font-size: 12px;
+  font-size: var(--font-size-s);
 }
 .batchsum-num.tone-critical { color: var(--color-crilical); }
 .batchsum-num.tone-serious  { color: var(--color-serious);  }
@@ -1483,7 +1496,7 @@ h1 {
 .batchsum-error {
   text-align: left;
   color: var(--color-serious);
-  font-size: 12px;
+  font-size: var(--font-size-s);
 }
 
 footer {
@@ -1826,7 +1839,7 @@ footer small {
 }
 .config-status-ai .st-model {
   font-family: var(--font-latin);
-  font-size: 12px;
+  font-size: var(--font-size-s);
   font-weight: 600;
   line-height: 1.3;
   white-space: nowrap;

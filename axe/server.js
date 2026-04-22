@@ -2997,44 +2997,54 @@ ${itemsList}
     }
     console.log('AI応答受信, 長さ:', aiResponse.length);
     
-    let results = [];
-    try {
-      // まず直接パースを試す
-      const parsed = JSON.parse(aiResponse);
-      // 配列なら直接使用、オブジェクトラップ（{ results:[...] } 等）の場合は中の配列を取り出す
-      if (Array.isArray(parsed)) {
-        results = parsed;
-      } else if (parsed && typeof parsed === 'object') {
-        const inner = Object.values(parsed).find(v => Array.isArray(v));
-        if (inner) results = inner;
-      }
-    } catch (e) {
-      console.log('直接パース失敗、JSON抽出を試行...');
-      try {
-        // JSON配列を抽出
-        const jsonMatch = aiResponse.match(/\[[\s\S]*?\]/);
-        if (jsonMatch) {
-          // 不正な文字を修正
-          let cleanJson = jsonMatch[0]
-            .replace(/[\x00-\x1F\x7F]/g, ' ')  // 制御文字を除去
-            .replace(/,\s*}/g, '}')  // 末尾カンマを除去
-            .replace(/,\s*]/g, ']'); // 末尾カンマを除去
-          results = JSON.parse(cleanJson);
-        }
-      } catch (e2) {
-        console.log('JSON抽出も失敗、個別パースを試行...');
-        // 個別のオブジェクトを抽出
-        const objectMatches = aiResponse.matchAll(/\{\s*"index"\s*:\s*(\d+)[^}]*\}/g);
-        for (const match of objectMatches) {
-          try {
-            const obj = JSON.parse(match[0]);
-            results.push(obj);
-          } catch (e3) {
-            // 個別オブジェクトのパースも失敗したらスキップ
+    // ブラケットカウント方式で JSON 配列を抽出
+    // 正規表現は文字列内の ] や } に誤反応するため使用しない
+    function extractJsonArray(text) {
+      // マークダウンコードブロックを除去
+      const cleaned = text.replace(/```(?:json)?\s*/gi, '').replace(/```\s*/g, '').trim();
+      for (const src of [cleaned, text.trim()]) {
+        // 直接パース
+        try {
+          const p = JSON.parse(src);
+          if (Array.isArray(p)) return p;
+          if (p && typeof p === 'object') {
+            const inner = Object.values(p).find(v => Array.isArray(v));
+            if (inner) return inner;
+          }
+        } catch (e) {}
+        // ブラケットカウントで配列位置を特定
+        const start = src.indexOf('[');
+        if (start === -1) continue;
+        let depth = 0, inStr = false, esc = false;
+        for (let i = start; i < src.length; i++) {
+          const c = src[i];
+          if (esc) { esc = false; continue; }
+          if (c === '\\' && inStr) { esc = true; continue; }
+          if (c === '"') { inStr = !inStr; continue; }
+          if (!inStr) {
+            if (c === '[') depth++;
+            else if (c === ']') {
+              depth--;
+              if (depth === 0) {
+                try {
+                  const raw = src.slice(start, i + 1)
+                    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ')
+                    .replace(/,(\s*[}\]])/g, '$1'); // 末尾カンマ除去
+                  const p = JSON.parse(raw);
+                  if (Array.isArray(p)) return p;
+                } catch (e) {}
+                break;
+              }
+            }
           }
         }
       }
+      return null;
     }
+
+    let results = [];
+    const extracted = extractJsonArray(aiResponse);
+    if (extracted) results = extracted;
     
     console.log('パース完了, 結果数:', results.length);
     

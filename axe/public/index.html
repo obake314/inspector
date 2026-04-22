@@ -3271,6 +3271,27 @@
 
             // SC 3.2.3/3.2.4 ナビゲーション一貫性はカード表示せず情報バーで表示
 
+            // 未検査SC補完: どのバケットにも含まれないSCをuncovererdとして未検証バケットへ追加
+            // → badgeMap.unverified（SC単位集計）とカード数を一致させる
+            {
+                const coveredScs = new Set();
+                Object.values(buckets).forEach(arr => arr.forEach(item => {
+                    if (item.sc) {
+                        splitCompositeSc(item.sc).forEach(s => coveredScs.add(s));
+                    } else if (item.data) {
+                        const sc1 = extractSCFromTags(item.data.tags);
+                        if (sc1) coveredScs.add(sc1);
+                        if (item.data.ref) splitCompositeSc(item.data.ref).forEach(s => coveredScs.add(s));
+                    }
+                }));
+                getTargetScList().forEach(sc => {
+                    if (coveredScs.has(sc)) return;
+                    const dkey = `UNCOVERED:${sc}`;
+                    const dest = applyDecision(dkey, 'unverified', null);
+                    (buckets[dest] || buckets.unverified).push({ src: 'NONE', type: 'uncovered', sc, dkey });
+                });
+            }
+
             // 各タブを描画（バッジ数はSC単位のTOTALスコアに合わせる）
             const ts = normalizeScoreToTarget(computeTotalScore(basic, deep || null, hasMultiResults ? multi : null, play || null, ext || null));
             const badgeMap = {
@@ -3326,6 +3347,25 @@
                         }
                         if (type === 'unified') {
                             return renderUnifiedCard(no, sc, level, entry, applyDecision);
+                        }
+                        if (type === 'uncovered') {
+                            const titleText = getScName(sc) || `SC ${sc}`;
+                            const dec = dkey ? manualDecisions.get(dkey) : null;
+                            const decCls = dec === 'ok' ? 'item-card-dec-ok' : dec === 'ng' ? 'item-card-dec-ng' : dec === 'hold' ? 'item-card-dec-hold' : '';
+                            const dk = dkey || `UNCOVERED:${sc}`;
+                            const decBtns = `<div class="decision-btns" onclick="event.stopPropagation()">
+                                <button class="decision-btn${dec==='ok'?' active-ok':''}" onclick="setDecision('${escapeHtml(dk)}','ok',this)">OK</button>
+                                <button class="decision-btn${dec==='ng'?' active-ng':''}" onclick="setDecision('${escapeHtml(dk)}','ng',this)">NG</button>
+                                <button class="decision-btn${dec==='hold'?' active-hold':''}" onclick="setDecision('${escapeHtml(dk)}','hold',this)">保留</button>
+                            </div>`;
+                            return `<div class="item-card item-card-uncovered ${decCls}" data-impact="" data-default-impact="">
+                                <div class="item-header">
+                                    <span class="item-sc">${escapeHtml(sc)}</span>
+                                    <span class="item-title">${escapeHtml(titleText)}</span>
+                                    <span class="item-uncovered-note">未検査</span>
+                                    ${decBtns}
+                                </div>
+                            </div>`;
                         }
                         return '';
                     }).join('')
