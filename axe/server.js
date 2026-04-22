@@ -2908,9 +2908,184 @@ app.post('/api/enhanced-check', async (req, res) => {
 /**
  * AI評価 API
  */
+function compactForAI(value, maxLength = 240) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+}
+
+function splitScForAI(scText) {
+  if (!scText) return [];
+  return String(scText)
+    .split(/[\/,]/)
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
+function axeScFromTagsForAI(tags) {
+  if (!Array.isArray(tags)) return '';
+  for (const tag of tags) {
+    const match = String(tag).match(/^wcag(\d)(\d)(\d{1,2})$/);
+    if (match) return `${match[1]}.${match[2]}.${parseInt(match[3], 10)}`;
+  }
+  return '';
+}
+
+function scMatchesTargetsForAI(scText, targetScSet) {
+  if (!targetScSet || targetScSet.size === 0) return true;
+  const tokens = splitScForAI(scText);
+  if (tokens.length === 0) return true;
+  return tokens.some(sc => {
+    if (targetScSet.has(sc)) return true;
+    if (/^\d+\.\d+\.x$/i.test(sc)) {
+      const prefix = sc.replace(/\.x$/i, '.');
+      return [...targetScSet].some(target => target.startsWith(prefix));
+    }
+    return false;
+  });
+}
+
+function compactAxeNodeForAI(node) {
+  const target = Array.isArray(node?.target) ? node.target.join(' > ') : node?.target;
+  return {
+    target: compactForAI(target, 160),
+    html: compactForAI(node?.html, 220),
+    failureSummary: compactForAI(node?.failureSummary, 220)
+  };
+}
+
+function compactBasicRuleForAI(rule) {
+  return {
+    id: rule.id || '',
+    sc: axeScFromTagsForAI(rule.tags),
+    impact: rule.impact || '',
+    help: compactForAI(rule.help || rule.description, 220),
+    targetCount: Array.isArray(rule.nodes) ? rule.nodes.length : 0,
+    samples: (rule.nodes || []).slice(0, 3).map(compactAxeNodeForAI)
+  };
+}
+
+function cleanBasicResultsForAI(basicResults, targetScSet) {
+  if (!basicResults || typeof basicResults !== 'object') {
+    return { counts: { violations: 0, incomplete: 0, passes: 0 }, violations: [], incomplete: [], passes: [] };
+  }
+  const includeRule = rule => scMatchesTargetsForAI(axeScFromTagsForAI(rule?.tags), targetScSet);
+  const violations = (basicResults.violations || []).filter(includeRule).slice(0, 30).map(compactBasicRuleForAI);
+  const incomplete = (basicResults.incomplete || []).filter(includeRule).slice(0, 20).map(compactBasicRuleForAI);
+  const passes = (basicResults.passes || []).filter(includeRule).slice(0, 40).map(rule => ({
+    id: rule.id || '',
+    sc: axeScFromTagsForAI(rule.tags),
+    help: compactForAI(rule.help || rule.description, 160)
+  }));
+  return {
+    counts: {
+      violations: (basicResults.violations || []).length,
+      incomplete: (basicResults.incomplete || []).length,
+      passes: (basicResults.passes || []).length
+    },
+    violations,
+    incomplete,
+    passes
+  };
+}
+
+function normalizeToolStatusForAI(status) {
+  if (status === 'pass' || status === 'fail' || status === 'not_applicable') return status;
+  if (status === 'manual_required' || status === 'unverified' || status === 'error') return status;
+  return status ? String(status) : 'unverified';
+}
+
+function cleanStructuredResultsForAI(results, targetScSet) {
+  if (!Array.isArray(results)) return [];
+  return results
+    .filter(r => r && scMatchesTargetsForAI(r.sc, targetScSet))
+    .slice(0, 80)
+    .map(r => ({
+      sc: r.sc || '',
+      name: compactForAI(r.name || r.title || '', 120),
+      status: normalizeToolStatusForAI(r.status),
+      message: compactForAI(r.message || r.reason || '', 260),
+      violations: (Array.isArray(r.violations) ? r.violations : [])
+        .slice(0, 4)
+        .map(v => compactForAI(v, 180))
+    }));
+}
+
+function buildToolResultsForAI({ basicResults, extResults, deepResults, playResults, targetScSet }) {
+  return {
+    axe: cleanBasicResultsForAI(basicResults, targetScSet),
+    ext: cleanStructuredResultsForAI(extResults, targetScSet),
+    deep: cleanStructuredResultsForAI(deepResults, targetScSet),
+    play: cleanStructuredResultsForAI(playResults, targetScSet)
+  };
+}
+
+function toolResultCountsForAI(toolResults) {
+  const countByStatus = (items) => {
+    const counts = {};
+    (items || []).forEach(item => {
+      counts[item.status || 'unknown'] = (counts[item.status || 'unknown'] || 0) + 1;
+    });
+    return counts;
+  };
+  return {
+    axeViolations: toolResults.axe?.violations?.length || 0,
+    axeIncomplete: toolResults.axe?.incomplete?.length || 0,
+    axePasses: toolResults.axe?.passes?.length || 0,
+    ext: countByStatus(toolResults.ext),
+    deep: countByStatus(toolResults.deep),
+    play: countByStatus(toolResults.play)
+  };
+}
+
+function relevantToolFindingsForAI(toolResults, ref) {
+  const matches = item => scMatchesTargetsForAI(item?.sc, new Set([ref]));
+  const findings = [];
+  (toolResults.axe?.violations || []).filter(matches).slice(0, 3).forEach(item => {
+    findings.push({ source: 'axe', status: 'fail', id: item.id, message: item.help, samples: item.samples });
+  });
+  (toolResults.axe?.incomplete || []).filter(matches).slice(0, 2).forEach(item => {
+    findings.push({ source: 'axe', status: 'unverified', id: item.id, message: item.help, samples: item.samples });
+  });
+  (toolResults.axe?.passes || []).filter(matches).slice(0, 2).forEach(item => {
+    findings.push({ source: 'axe', status: 'pass', id: item.id, message: item.help });
+  });
+  ['ext', 'deep', 'play'].forEach(source => {
+    (toolResults[source] || []).filter(matches).slice(0, 4).forEach(item => {
+      findings.push({ source, status: item.status, sc: item.sc, message: item.message, violations: item.violations });
+    });
+  });
+  return findings.slice(0, 8);
+}
+
+function getMultiVerificationMethodForAI(item) {
+  const ref = item?.ref || '';
+  const methods = {
+    '1.2.1': 'audio/video/iframe等のメディアをHTMLと画面から探す。音声のみコンテンツがあり、近接する文字起こし・テキスト代替・説明リンクが確認できればpass。メディア内容の聴取が必要ならmanual_required。メディアが無ければnot_applicable。',
+    '1.2.2': '収録済み動画があるか確認し、track kind="captions"、字幕ボタン、キャプション付きプレーヤー、字幕/文字起こしリンクを証拠にする。動画があるが字幕の有無をHTML/画面で確認できなければmanual_required。',
+    '1.2.3': '動画に音声解説または同等のメディア代替があるか、リンク・説明・track・プレーヤー表示から確認する。映像内容の理解が必要で証拠が無い場合はmanual_required。動画が無ければnot_applicable。',
+    '1.2.5': '収録済み動画の音声解説を確認する。音声解説付き版、説明音声トラック、詳細なテキスト代替が明示されていればpass。ページ証拠だけで確認不能ならmanual_required。',
+    '1.3.3': '「右の」「左の」「上の」「丸い」「赤い」「音が鳴ったら」など、位置・形・色・音だけで操作を指示する文言を探す。テキスト名やラベルも併記されていればpass、感覚的特徴だけならfail。',
+    '1.4.1': '色分けされた状態表示、凡例、必須/エラー/選択状態の説明を確認する。「赤いボタン」「緑の項目」等、色だけで情報や操作を伝える場合はfail。文字・アイコン・形状も併用されていればpass。',
+    '1.4.5': 'スクリーンショットとimg/背景画像から、本文や操作説明が画像化されていないか確認する。ロゴ等の例外を除き、読ませる目的の文字画像があればfail。画像内文字の有無が不確実ならmanual_required。',
+    '2.4.4': 'リンクテキストと直近の見出し・段落・aria-label/titleを見て目的が分かるか確認する。「こちら」「詳細」「click here」等が文脈なしで並ぶ場合はfail。リンクが無ければnot_applicable。',
+    '2.4.5': '検索、サイトマップ、グローバルナビ、パンくず、関連リンクなど、ページへ到達する複数手段の証拠を探す。単一ページ証拠ではサイト全体を確認できない場合はmanual_required。',
+    '3.2.3': '複数ページ比較またはツール結果がある場合だけ、ナビゲーション順序・構成の一貫性を判定する。単一ページだけではmanual_required。明確な比較結果があればそれを尊重する。',
+    '3.2.4': '同じ機能を持つコンポーネントの名称・ラベル・アイコンが一貫しているか、ツール結果や画面上の繰り返し要素で確認する。サイト横断確認が必要ならmanual_required。',
+    '3.2.6': 'ヘルプ、問い合わせ、サポート導線の位置が一貫しているかをツール結果とヘッダー/フッターから確認する。複数ページ比較が無い場合はmanual_required。',
+    '3.3.1': 'フォーム送信前後の可視エラー、aria-invalid、role="alert"、エラー文言、入力項目との関連付けを確認する。フォームが無ければnot_applicable。安全に送信できずエラー状態を作れない場合はmanual_required。',
+    '3.3.3': '入力エラーに対して修正提案が具体的に出るか確認する。例、形式、必須理由、許容値などがあればpass。フォームはあるがエラー状態を確認できない場合はmanual_required。',
+    '3.3.4': '法律・金融・データ変更・試験等の重要送信フォームか確認し、取消・確認・修正ステップの証拠を探す。該当フォームが無ければnot_applicable。送信フロー確認が必要ならmanual_required。',
+    '3.3.7': '同じ情報の再入力を求めるフォームや複数ステップの重複入力を探す。autocompleteや前入力の再利用が見える場合はpass。ページ単体でフローを追えない場合はmanual_required。',
+    '3.3.8': 'ログイン/認証フォームに、記憶テスト・CAPTCHA・パズル等の認知機能テストがあるか確認する。代替手段が無ければfail。認証UIが無ければnot_applicable。'
+  };
+  return methods[ref] || 'HTML、スクリーンショット、各自動スキャン結果から判断できる証拠だけで判定する。証拠不足ならmanual_requiredにする。';
+}
+
 app.post('/api/ai-evaluate', async (req, res) => {
-  const { url, checkItems, viewportPreset, playResults } = req.body;
-  const safeCheckItems = Array.isArray(checkItems) ? checkItems : [];
+  const { url, checkItems, viewportPreset, basicResults, extResults, deepResults, playResults } = req.body;
+  const incomingCheckItems = Array.isArray(checkItems) ? checkItems : [];
+  const hasAiTargetFlag = incomingCheckItems.some(item => Object.prototype.hasOwnProperty.call(item || {}, 'aiTarget'));
+  const safeCheckItems = incomingCheckItems.filter(item => item && (!hasAiTargetFlag || item.aiTarget === true));
   const provider = AI_PROVIDER || 'gemini';
   _lastAiDebug = { provider, stage: 'received', url, itemCount: safeCheckItems.length, timestamp: new Date().toISOString() };
   const fallbackSuggestion = 'AI API設定後に再実行してください';
@@ -3012,7 +3187,15 @@ app.post('/api/ai-evaluate', async (req, res) => {
       .substring(0, 15000);
     
     await page.close();
-    _lastAiDebug = { ..._lastAiDebug, stage: 'page_done_calling_ai' };
+    const targetScSet = new Set(safeCheckItems.map(item => item.ref).filter(Boolean));
+    const toolResults = buildToolResultsForAI({ basicResults, extResults, deepResults, playResults, targetScSet });
+    const toolResultCounts = toolResultCountsForAI(toolResults);
+    _lastAiDebug = {
+      ..._lastAiDebug,
+      stage: 'page_done_calling_ai',
+      targetRefs: [...targetScSet],
+      toolResultCounts
+    };
 
     // PLAYスキャン結果でカバー済みのアイテムをAI送信前に解決する
     // playResults は [{ sc, status, message, violations }] 形式
@@ -3056,64 +3239,78 @@ app.post('/api/ai-evaluate', async (req, res) => {
 
     console.log(`[MULTI] PLAY解決済: ${playResolvedByOriginalIdx.size}件, AI送信: ${itemsForAI.length}件`);
 
-    const itemsList = itemsForAI.map((item, i) =>
-      `${i}. ${item.text} (WCAG ${item.ref}, Level ${item.level}, カテゴリ: ${item.category})`
-    ).join('\n');
+    if (itemsForAI.length === 0) {
+      const normalizedPlayResults = safeCheckItems.map((_, idx) => playResolvedByOriginalIdx.get(idx) || {
+        index: idx,
+        status: 'manual_required',
+        confidence: 0.3,
+        reason: 'MULTIのAI評価対象がありませんでした',
+        evidence: '',
+        selector: '',
+        suggestion: '対象項目の設定を確認してください'
+      });
+      return res.json({
+        success: true,
+        model: 'tool-resolved',
+        tokenLimited: false,
+        partialResults: false,
+        missingCount: 0,
+        warning: '',
+        results: normalizedPlayResults
+      });
+    }
 
-    const prompt = `あなたはWCAG 2.2アクセシビリティの専門家です。
-提供されたスクリーンショットとHTMLを分析し、以下の各項目を評価してください。
-検出内容は曖昧にせず、判断に使ったHTML断片・CSSセレクタ・画面上の文言など、確認者が再現できる証拠を必ず短く記述してください。
+    const evaluationItems = itemsForAI.map((item, i) => ({
+      index: i,
+      originalIndex: item.index ?? item._origIdx,
+      wcag: item.ref,
+      level: item.level,
+      category: item.category,
+      item: item.text,
+      verificationMethod: getMultiVerificationMethodForAI(item),
+      relevantToolFindings: relevantToolFindingsForAI(toolResults, item.ref)
+    }));
+
+    const prompt = `あなたはプロのアクセシビリティ監査員です。
+MULTI SCANの役割は、AIが得意な自然言語・視覚的文脈の項目だけを評価し、BASIC/EXT/DEEP/PLAYの自動検査結果を補強・ファクトチェックすることです。
+自動ツールで確定しているfail/pass/not_applicableと矛盾する判定を避け、failの場合は何が違反かと改善案を具体的に書いてください。
+証拠が足りない場合は推測でpass/failにせず、必ずmanual_requiredにしてください。
 
 ## 対象URL
 ${url}
 
+## 自動検査結果（圧縮済み）
+${JSON.stringify(toolResults, null, 2)}
+
 ## HTML（抜粋）
 ${shortHtml}
 
-## 評価項目
-${itemsList}
+## 評価対象
+${JSON.stringify(evaluationItems, null, 2)}
 
-## 重要な評価ルール
-1. **自動確認可能な項目**: スクリーンショットやHTMLから判断できるもの
-   - 画像のalt属性の有無や内容
-   - 見出し構造（h1〜h6の階層）
-   - フォームのラベル
-   - リンクテキストの明確さ
-   - 色コントラスト
-   - ページタイトルの有無
-   
-2. **自動確認不可能な項目**: 実際の操作が必要なもの
-   - キーボード操作性（Tab移動、Enter/Space操作）
-   - フォーカスインジケータの視認性
-   - キーボードトラップの有無
-   - 動画・音声の再生操作
-   - タイムアウト動作
-   - これらは status: "manual_required" を返す
+## 判定ルール
+1. 評価対象配列にない項目は評価しない。
+2. 各項目の verificationMethod に従って判定する。
+3. relevantToolFindings に fail がある場合は、その事実を尊重して違反内容と改善案を具体化する。
+4. relevantToolFindings に pass があり、HTML/画面にも矛盾が無い場合は、同じSCで新たな違反を作らない。
+5. not_applicable は、該当要素や該当フローがページに存在しない根拠を書ける場合だけ使う。
+6. pass/fail には、HTML断片・CSSセレクタ・画面上の文言・自動ツール名など、再現可能なevidenceを必ず入れる。
+7. 「問題があります」「確認が必要です」だけの汎用文は禁止。
 
-3. **該当なし**: ページにその要素が存在しない場合
-   - 動画がないページでの動画関連項目
-   - フォームがないページでのフォーム項目
-   - これらは status: "not_applicable" を返す
-   - reason には「該当要素がHTML/画面に見当たらない」など、該当なしの根拠を書く
-
-4. **証拠の粒度**:
-   - fail の場合: 何が問題か、どの要素・文言・属性で確認したかを具体的に書く
-   - pass の場合: 合格と判断した根拠を1つ以上書く
-   - manual_required の場合: なぜHTML/スクリーンショットだけでは判断できないかを書く
-   - 「問題があります」「確認が必要です」だけの汎用文は禁止
-
-## 出力形式（JSON配列のみ、説明不要）
-[
+## 出力形式（JSONオブジェクトのみ、説明不要）
+{
+  "results": [
   {
     "index": 0,
     "status": "pass" | "fail" | "manual_required" | "not_applicable",
-    "confidence": 0.5〜1.0,
+    "confidence": 0.3〜1.0,
     "reason": "具体的な判断理由。検出内容を1文で明記",
-    "evidence": "HTML断片、CSSセレクタ、画面上の文言、属性値などの根拠",
+    "evidence": "HTML断片、CSSセレクタ、画面上の文言、自動ツール結果などの根拠",
     "selector": "該当するCSSセレクタ。特定不能なら空文字",
     "suggestion": "改善案。pass/not_applicableなら空文字"
   }
-]
+  ]
+}
 
 全${itemsForAI.length}項目を評価してください。`;
 

@@ -148,7 +148,7 @@
                         <dt><span class="scan-option-text scan-option-text-deep">DEEP</span></dt>
                         <dd><strong>Puppeteer</strong>（ヘッドレスブラウザ）を使用してページを実際に操作し、axe-coreだけでは検出できない動的な問題やインタラクションに関する約30項目を検証します。キーボード操作、リフロー、フォーカス表示などが含まれます。</dd>
                         <dt><span class="scan-option-text scan-option-text-multi">MULTI</span></dt>
-                        <dd>選択された<strong>大規模言語モデル（Gemini, Claude, GPTなど）</strong>が、ページのHTML、スクリーンショット、操作結果を総合的に解析します。メディアの代替テキスト、フォームの設計、ナビゲーションの一貫性など、文脈的な判断が必要な約70項目を評価します。APIキーの設定が必要です。</dd>
+                        <dd>選択された<strong>大規模言語モデル（Gemini, Claude, GPTなど）</strong>が、BASIC・DEEP・PLAY等の自動検査結果を分析し、具体的な改善提案を生成して精度を補強します。さらに、「ここをクリック」等の曖昧なリンクや「赤いボタン」等の感覚的表現の検出、代替テキストの妥当性など、AIが得意とする文脈・視覚的認知が必要な項目を集中的に評価します。APIキーの設定が必要です。</dd>
                         <dt><span class="scan-option-text scan-option-text-play">PLAYWRIGHT</span></dt>
                         <dd><strong>Playwright</strong>（ヘッドレスブラウザ）を使用して、キーボード操作、アクセシビリティツリー、フォーカス関連の検証を実際に行います。ページタイトル、言語設定、フォームのラベル、アクセシブルネームなど、より実践的なユーザー操作に基づいたテストを実行します。</dd>
                         <dt><span class="scan-option-text scan-option-text-ext">EXT</span></dt>
@@ -273,7 +273,7 @@
                             <input type="checkbox" id="deepScanOpt" class="scan-option-checkbox" checked>
                             <span class="scan-option-text scan-option-text-deep">DEEP</span>
                         </label>
-                        <label class="scan-option" id="multiScanLabel" title="Gemini AIがページ全体のHTML・スクリーンショット・操作結果を解析し、メディア代替・フォーム設計・ナビゲーション一貫性・可読性など約70のWCAG達成基準を一括評価します。&#10;所要時間：1〜2分（Gemini APIキーが必要）">
+                        <label class="scan-option" id="multiScanLabel" title="AIが自動検査結果を分析して精度を向上させ、改善提案を生成します。また、「ここをクリック」等の曖昧なリンクテキストや「赤いボタン」等の感覚的表現の検出、代替テキストの妥当性評価など、文脈・視覚的認知が必要な項目を集中的に評価します。&#10;所要時間：1〜2分（APIキーが必要）">
                             <input type="checkbox" id="multiScanOpt" class="scan-option-checkbox" checked>
                             <span class="scan-option-text scan-option-text-multi">MULTI</span>
                         </label>
@@ -303,7 +303,7 @@
                             <input type="checkbox" id="batchEnhancedOpt" class="scan-option-checkbox" checked>
                             <span class="scan-option-text scan-option-text-deep">DEEP</span>
                         </label>
-                        <label class="scan-option" id="batchAILabel" title="Gemini AIがページ全体のHTML・スクリーンショット・操作結果を解析し、メディア代替・フォーム設計・ナビゲーション一貫性・可読性など約70のWCAG達成基準を一括評価します。&#10;所要時間：1〜2分（URL1件あたり、Gemini APIキーが必要）">
+                        <label class="scan-option" id="batchAILabel" title="AIが自動検査結果の精度を向上させ、文脈や視覚的認知が必要な項目を集中的に評価します。&#10;所要時間：1〜2分（URL1件あたり、APIキーが必要）">
                             <input type="checkbox" id="batchAIOpt" class="scan-option-checkbox" checked>
                             <span class="scan-option-text scan-option-text-multi">MULTI</span>
                         </label>
@@ -646,74 +646,45 @@
         const manualCheckItems = [
             { text: "すべての機能がキーボードで操作可能", ref: "2.1.1", level: "A", category: "キーボード" },
             { text: "キーボードトラップがない", ref: "2.1.2", level: "A", category: "キーボード" },
-            { text: "キーボード操作可能（例外なし）", ref: "2.1.3", level: "AAA", category: "キーボード" },
             { text: "文字キーショートカットの無効化・変更が可能", ref: "2.1.4", level: "A", category: "キーボード" },
             { text: "論理的なフォーカス順序", ref: "2.4.3", level: "A", category: "キーボード" },
             { text: "フォーカスインジケータが見える", ref: "2.4.7", level: "AA", category: "キーボード" },
             { text: "フォーカスが隠れない（最低限）", ref: "2.4.11", level: "AA", category: "キーボード" },
-            { text: "フォーカスが隠れない（強化）", ref: "2.4.12", level: "AAA", category: "キーボード" },
-            { text: "フォーカス表示が要件を満たす", ref: "2.4.13", level: "AAA", category: "キーボード" },
-            { text: "音声のみのコンテンツにテキスト代替がある", ref: "1.2.1", level: "A", category: "メディア" },
-            { text: "動画にキャプションがある", ref: "1.2.2", level: "A", category: "メディア" },
-            { text: "動画に音声解説がある", ref: "1.2.3", level: "A", category: "メディア" },
+            { text: "音声のみのコンテンツにテキスト代替がある", ref: "1.2.1", level: "A", category: "メディア", aiTarget: true },
+            { text: "動画にキャプションがある", ref: "1.2.2", level: "A", category: "メディア", aiTarget: true },
+            { text: "動画に音声解説がある", ref: "1.2.3", level: "A", category: "メディア", aiTarget: true },
             { text: "ライブ動画にキャプションがある", ref: "1.2.4", level: "AA", category: "メディア" },
-            { text: "収録済み動画に音声解説がある", ref: "1.2.5", level: "AA", category: "メディア" },
-            { text: "手話通訳が提供されている", ref: "1.2.6", level: "AAA", category: "メディア" },
-            { text: "拡張音声解説がある", ref: "1.2.7", level: "AAA", category: "メディア" },
-            { text: "メディアの完全なテキスト代替がある", ref: "1.2.8", level: "AAA", category: "メディア" },
-            { text: "ライブ音声にテキスト代替がある", ref: "1.2.9", level: "AAA", category: "メディア" },
-            { text: "色だけで情報を伝えていない", ref: "1.4.1", level: "A", category: "視覚" },
+            { text: "収録済み動画に音声解説がある", ref: "1.2.5", level: "AA", category: "メディア", aiTarget: true },
+            { text: "色だけで情報を伝えていない", ref: "1.4.1", level: "A", category: "視覚", aiTarget: true },
             { text: "音声の制御が可能", ref: "1.4.2", level: "A", category: "視覚" },
             { text: "テキストを200%まで拡大可能", ref: "1.4.4", level: "AA", category: "視覚" },
-            { text: "文字画像を使用していない", ref: "1.4.5", level: "AA", category: "視覚" },
-            { text: "文字画像を使用していない（例外なし）", ref: "1.4.9", level: "AAA", category: "視覚" },
+            { text: "文字画像を使用していない", ref: "1.4.5", level: "AA", category: "視覚", aiTarget: true },
             { text: "320pxでリフローする", ref: "1.4.10", level: "AA", category: "視覚" },
             { text: "テキスト間隔の調整が可能", ref: "1.4.12", level: "AA", category: "視覚" },
             { text: "ホバー/フォーカス時のコンテンツが解除可能", ref: "1.4.13", level: "AA", category: "視覚" },
-            { text: "背景音が-20dB以下またはなし", ref: "1.4.7", level: "AAA", category: "視覚" },
-            { text: "視覚的表現の要件を満たす", ref: "1.4.8", level: "AAA", category: "視覚" },
             { text: "繰り返しコンテンツをスキップ可能", ref: "2.4.1", level: "A", category: "ナビゲーション" },
-            { text: "ページを見つける複数の方法がある", ref: "2.4.5", level: "AA", category: "ナビゲーション" },
-            { text: "現在位置が示されている", ref: "2.4.8", level: "AAA", category: "ナビゲーション" },
-            { text: "リンクテキストだけで目的がわかる", ref: "2.4.9", level: "AAA", category: "ナビゲーション" },
-            { text: "セクション見出しが使用されている", ref: "2.4.10", level: "AAA", category: "ナビゲーション" },
-            { text: "ナビゲーションが一貫している", ref: "3.2.3", level: "AA", category: "ナビゲーション" },
-            { text: "コンポーネントの識別が一貫している", ref: "3.2.4", level: "AA", category: "ナビゲーション" },
-            { text: "ヘルプの位置が一貫している", ref: "3.2.6", level: "A", category: "ナビゲーション" },
+            { text: "リンクの目的が文脈からわかる", ref: "2.4.4", level: "A", category: "ナビゲーション", aiTarget: true },
+            { text: "ページを見つける複数の方法がある", ref: "2.4.5", level: "AA", category: "ナビゲーション", aiTarget: true },
+            { text: "ナビゲーションが一貫している", ref: "3.2.3", level: "AA", category: "ナビゲーション", aiTarget: true },
+            { text: "コンポーネントの識別が一貫している", ref: "3.2.4", level: "AA", category: "ナビゲーション", aiTarget: true },
+            { text: "ヘルプの位置が一貫している", ref: "3.2.6", level: "A", category: "ナビゲーション", aiTarget: true },
             { text: "フォーカス時に予期しない変化がない", ref: "3.2.1", level: "A", category: "フォーム" },
             { text: "入力時に予期しない変化がない", ref: "3.2.2", level: "A", category: "フォーム" },
-            { text: "ユーザーの要求でのみ変化する", ref: "3.2.5", level: "AAA", category: "フォーム" },
-            { text: "エラーが特定されている", ref: "3.3.1", level: "A", category: "フォーム" },
-            { text: "エラー修正の提案がある", ref: "3.3.3", level: "AA", category: "フォーム" },
-            { text: "送信の取消・確認・修正が可能", ref: "3.3.4", level: "AA", category: "フォーム" },
-            { text: "状況に応じたヘルプがある", ref: "3.3.5", level: "AAA", category: "フォーム" },
-            { text: "すべての送信でエラー防止", ref: "3.3.6", level: "AAA", category: "フォーム" },
-            { text: "冗長な入力が不要", ref: "3.3.7", level: "A", category: "フォーム" },
-            { text: "認知テストなしで認証可能（最低限）", ref: "3.3.8", level: "AA", category: "フォーム" },
-            { text: "認知テストなしで認証可能（強化）", ref: "3.3.9", level: "AAA", category: "フォーム" },
+            { text: "エラーが特定されている", ref: "3.3.1", level: "A", category: "フォーム", aiTarget: true },
+            { text: "エラー修正の提案がある", ref: "3.3.3", level: "AA", category: "フォーム", aiTarget: true },
+            { text: "送信の取消・確認・修正が可能", ref: "3.3.4", level: "AA", category: "フォーム", aiTarget: true },
+            { text: "冗長な入力が不要", ref: "3.3.7", level: "A", category: "フォーム", aiTarget: true },
+            { text: "認知テストなしで認証可能（最低限）", ref: "3.3.8", level: "AA", category: "フォーム", aiTarget: true },
             { text: "制限時間の調整・延長が可能", ref: "2.2.1", level: "A", category: "時間" },
             { text: "動くコンテンツを停止可能", ref: "2.2.2", level: "A", category: "時間" },
-            { text: "制限時間がない", ref: "2.2.3", level: "AAA", category: "時間" },
-            { text: "中断の抑制が可能", ref: "2.2.4", level: "AAA", category: "時間" },
-            { text: "再認証後もデータが保持される", ref: "2.2.5", level: "AAA", category: "時間" },
-            { text: "タイムアウトの警告がある", ref: "2.2.6", level: "AAA", category: "時間" },
             { text: "3回/秒以上の点滅がない", ref: "2.3.1", level: "A", category: "発作" },
-            { text: "点滅コンテンツがない", ref: "2.3.2", level: "AAA", category: "発作" },
-            { text: "アニメーションを無効化可能", ref: "2.3.3", level: "AAA", category: "発作" },
             { text: "マルチポイントジェスチャの代替がある", ref: "2.5.1", level: "A", category: "ポインタ" },
             { text: "ポインタ操作のキャンセルが可能", ref: "2.5.2", level: "A", category: "ポインタ" },
             { text: "モーション操作の代替がある", ref: "2.5.4", level: "A", category: "ポインタ" },
-            { text: "ターゲットサイズが44x44px以上", ref: "2.5.5", level: "AAA", category: "ポインタ" },
-            { text: "複数の入力方式をサポート", ref: "2.5.6", level: "AAA", category: "ポインタ" },
             { text: "ドラッグ操作の代替がある", ref: "2.5.7", level: "AA", category: "ポインタ" },
             { text: "ターゲットサイズが24x24px以上", ref: "2.5.8", level: "AA", category: "ポインタ" },
-            { text: "専門用語が定義されている", ref: "3.1.3", level: "AAA", category: "可読性" },
-            { text: "略語が展開されている", ref: "3.1.4", level: "AAA", category: "可読性" },
-            { text: "中学校レベルの読解力で読める", ref: "3.1.5", level: "AAA", category: "可読性" },
-            { text: "発音が提供されている", ref: "3.1.6", level: "AAA", category: "可読性" },
             { text: "読み順序が意味のある順序", ref: "1.3.2", level: "A", category: "構造" },
-            { text: "感覚的特徴だけに依存しない", ref: "1.3.3", level: "A", category: "構造" },
-            { text: "UI要素の目的が特定可能", ref: "1.3.6", level: "AAA", category: "構造" },
+            { text: "感覚的特徴だけに依存しない", ref: "1.3.3", level: "A", category: "構造", aiTarget: true },
             { text: "ステータスメッセージがARIAで通知される", ref: "4.1.3", level: "AA", category: "構造" },
             { text: "aria-expanded がトグル要素に適切に設定されている", ref: "4.1.2", level: "A", category: "ARIA" },
             { text: "aria-current='page' が現在ページのナビゲーションリンクに設定されている", ref: "4.1.2", level: "AA", category: "ARIA" },
@@ -786,7 +757,7 @@
         function refreshScoreTable() {
             if (!lastResults) return;
             const doDeep  = !!lastEnhancedResults;
-            const doMulti = Object.keys(aiResults).length > 0;
+            const doMulti = Object.keys(aiResults).length > 0 || isBlockingMultiIssue(lastMultiIssue);
             const doPlay  = !!lastPlayResults;
             const doExt   = !!lastExtResults;
             // PC テーブル
@@ -1107,61 +1078,32 @@
             'AAA': 'Level AAA: A + AA + AAA の全基準をチェック（最高水準）'
         };
         const impactLabels = {
-            'critical': '緊急',
-            'serious': '重大',
-            'moderate': '中程度',
-            'minor': '軽微'
+            'critical': '緊急', 'serious': '重大', 'moderate': '中程度', 'minor': '軽微'
         };
 
         document.querySelectorAll('.level-select-btn').forEach(b => b.addEventListener('click', () => {
             document.querySelectorAll('.level-select-btn').forEach(x => x.classList.remove('active'));
             b.classList.add('active');
             targetLevel = b.dataset.level;
-            $('levelNote').textContent = levelNotes[targetLevel];
+            $('levelNote').textContent = levelNotes[targetLevel] || '';
         }));
 
         ['pc', 'sp'].forEach(scope => {
             const tabsEl = $(`resultTabs-${scope}`);
             if (!tabsEl) return;
-            tabsEl.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+            tabsEl.addEventListener('click', e => {
+                const targetTab = e.target.closest('.tab');
+                if (!targetTab) return;
                 tabsEl.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
                 const block = tabsEl.closest('.scoretable-wrap');
                 if (block) block.querySelectorAll('.tab-content').forEach(x => x.classList.remove('active'));
-                t.classList.add('active');
-                $(`tab-${t.dataset.tab}-${scope}`).classList.add('active');
-            }));
+                targetTab.classList.add('active');
+                $(`tab-${targetTab.dataset.tab}-${scope}`).classList.add('active');
+            });
         });
         
 
         function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
-
-        function renderViolation(v) {
-            const els = v.nodes.slice(0, 5),
-                more = v.nodes.length - 5;
-            const impactLabel = impactLabels[v.impact] || v.impact || '情報';
-            const wcagLevel = getWcagLevel(v.tags);
-            const wcagRef = extractWcagRef(v.tags);
-            const jaName = getJaRuleName(v.id);
-            const jaDesc = getJaRuleDesc(v.id, v.description || v.help);
-            return `<div class="violation-item" data-level="${wcagLevel.toLowerCase()}" data-impact="${v.impact || ''}" onclick="this.classList.toggle('expanded')">
-                <div class="violation-header">
-                    <div class="badges"><span class="badge ${v.impact}">${impactLabel}</span><span class="badge">${wcagLevel}</span></div>
-                    <div class="violation-info">
-                        <div class="violation-title">${jaName} <span class="wcag-ref">${v.id}</span> ${wcagRef ? `<span class="wcag-ref">${wcagRef}</span>` : ''}</div>
-                        <div class="violation-desc">${jaDesc}</div>
-                        <div class="violation-meta"><span>${v.nodes.length}件</span> ${v.helpUrl ? `<a href="${v.helpUrl}" target="_blank" onclick="event.stopPropagation()">詳細</a>` : ''}</div>
-                    </div>
-                    <svg class="expand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-                </div>
-                <div class="violation-details">
-                    <div class="element-list">
-                        ${els.map(n => `<div class="element-item"><div class="element-target">${escapeHtml(Array.isArray(n.target) ? n.target.join(' > ') : n.target)}</div><div class="element-html">${escapeHtml((n.html || '').substring(0, 300))}${(n.html || '').length > 300 ? '...' : ''}</div></div>`).join('')}
-                        ${more > 0 ? `<div class="element-item element-item-more">他${more}件</div>` : ''}
-                    </div>
-                    ${v.nodes[0]?.failureSummary ? `<div class="fix-suggestion"><div class="fix-suggestion-title">修正方法</div><div class="fix-suggestion-text">${escapeHtml(translateFailureSummary(v.nodes[0].failureSummary))}</div></div>` : ''}
-                </div>
-            </div>`;
-        }
 
         function displayResults(results, url, options = {}) {
             // axe-coreの生の結果を保存
@@ -1326,6 +1268,21 @@
             return null;
         }
 
+        function isBlockingMultiIssue(issue) {
+            if (!issue) return false;
+            return !!issue.scoreTableError || ['モデル利用不可', 'JSON解析失敗', 'APIエラー', '結果反映エラー', '結果なし'].includes(issue.label);
+        }
+
+        function buildMultiScoreReflectionIssue(resultCount) {
+            return {
+                label: resultCount > 0 ? '結果反映エラー' : '結果なし',
+                message: resultCount > 0
+                    ? 'MULTI SCANは結果を返しましたが、スコアテーブル用の項目番号に対応付けできませんでした'
+                    : 'MULTI SCANは完了しましたが、スコアテーブルに反映できる結果がありませんでした',
+                scoreTableError: true
+            };
+        }
+
         function makeClientFallbackAiResults(filteredItems, reason) {
             return filteredItems.map((_, index) => ({
                 index,
@@ -1397,7 +1354,7 @@
                 const targetLevelNum = levelOrder[targetLevel];
                 const filteredItems = manualCheckItems
                     .map((item, index) => ({ ...item, index }))
-                    .filter(item => levelOrder[item.level] <= targetLevelNum);
+                    .filter(item => levelOrder[item.level] <= targetLevelNum && item.aiTarget);
 
                 if (!silent) status.textContent = `${filteredItems.length}項目 SCORING...（1-2分かかります）`;
 
@@ -1412,7 +1369,10 @@
                             url: lastResults.url,
                             checkItems: filteredItems,
                             viewportPreset: options.viewportPreset || 'desktop',
-                            playResults: lastPlayResults || null
+                            playResults: lastPlayResults || null,
+                            basicResults: lastResults || null,
+                            extResults: lastExtResults || null,
+                            deepResults: lastEnhancedResults || null
                         }),
                         signal: controller.signal
                     }, '/api/ai-evaluate');
@@ -1432,8 +1392,12 @@
                 }
 
                 // 結果を適用
-                aiResults = mapAiResultsByOriginalIndex(data.results || [], filteredItems);
-                lastMultiIssue = buildMultiIssue(data);
+                const rawMultiResults = Array.isArray(data.results) ? data.results : [];
+                aiResults = mapAiResultsByOriginalIndex(rawMultiResults, filteredItems);
+                const multiIssue = buildMultiIssue(data);
+                lastMultiIssue = Object.keys(aiResults).length === 0
+                    ? buildMultiScoreReflectionIssue(rawMultiResults.length)
+                    : multiIssue;
                 lastMultiTokenLimited = !!(data.tokenLimited || data.partialResults || data.rateLimited || data.quotaExceeded);
                 let passCount = 0, failCount = 0, manualCount = 0, naCount = 0;
 
@@ -1689,10 +1653,12 @@
                 const multi = batchAIResults[r.url] || null;
                 const play = batchPlayResults[r.url] || null;
                 const ext = batchExtResults[r.url] || null;
+                const hasMulti = Object.prototype.hasOwnProperty.call(batchAIResults, r.url);
+                const multiIssue = batchAIIssueMap[r.url] || null;
                 const sc = normalizeScoreToTarget(computeTotalScore(
                     r.results,
                     deep,
-                    Object.keys(multi || {}).length > 0 ? multi : null,
+                    hasMulti && !isBlockingMultiIssue(multiIssue) ? (multi || {}) : null,
                     play,
                     ext
                 ));
@@ -1792,7 +1758,7 @@
             displayResults(r.results, r.url, { renderTabs: false });
             $('results').classList.add('visible');
             const deepEnabled  = !!lastEnhancedResults;
-            const multiEnabled = Object.keys(aiResults).length > 0;
+            const multiEnabled = Object.prototype.hasOwnProperty.call(batchAIResults, r.url) || Object.keys(aiResults).length > 0;
             const playEnabledBatch = !!lastPlayResults;
             const extEnabledBatch  = !!lastExtResults;
             renderScanScoreTable(
@@ -1820,7 +1786,7 @@
                 const mobilePlay     = batchMobilePlayResults[mobileR.url] || null;
                 const mobileExt      = batchMobileExtResults[mobileR.url] || null;
                 const mDeepEnabled   = !!mobileEnhanced;
-                const mMultiEnabled  = Object.keys(mobileAI).length > 0;
+                const mMultiEnabled  = Object.prototype.hasOwnProperty.call(batchMobileAIResults, mobileR.url) || Object.keys(mobileAI).length > 0;
                 const mPlayEnabled   = !!mobilePlay;
                 const mExtEnabled    = !!mobileExt;
                 renderScanScoreTable(
@@ -1901,10 +1867,10 @@
                 if (runMobile)  viewports.push(runDesktop ? 'SP' : '');
                 for (const vp of viewports) {
                     labels.push(vp ? `${vp} BASIC` : 'BASIC');
-                    if (doEnhanced)  labels.push(vp ? `${vp} DEEP` : 'DEEP');
-                    if (doAI)        labels.push(vp ? `${vp} MULTI` : 'MULTI');
-                    if (doPlayBatch) labels.push(vp ? `${vp} PLAY` : 'PLAY');
                     if (doExtBatch)  labels.push(vp ? `${vp} EXT` : 'EXT');
+                    if (doEnhanced)  labels.push(vp ? `${vp} DEEP` : 'DEEP');
+                    if (doPlayBatch) labels.push(vp ? `${vp} PLAY` : 'PLAY');
+                    if (doAI)        labels.push(vp ? `${vp} MULTI` : 'MULTI');
                 }
                 return labels;
             }
@@ -1936,7 +1902,7 @@
                 const basicAuth = (basicUser && basicPassVal) ? { user: basicUser, pass: basicPassVal } : null;
                 const levelOrder = { 'A': 1, 'AA': 2, 'AAA': 3 };
                 const filteredItems = manualCheckItems.map((item, index) => ({ ...item, index }))
-                    .filter(item => levelOrder[item.level] <= levelOrder[targetLevel]);
+                    .filter(item => levelOrder[item.level] <= levelOrder[targetLevel] && item.aiTarget);
 
                 // ビュー1件分のパイプライン（BASIC → DEEP → MULTI）を実行
                 async function runBatchViewport(viewportPreset, viewLabel, phaseOffset) {
@@ -2004,7 +1970,55 @@
                     const aiResultsMap = {};
                     const aiTokenLimitedMap = {};
                     const aiIssueMap = {};
+                    const playResultsMap = {};
+                    const extResultsMap = {};
                     let localPhase = phaseOffset + 1;
+
+                    // EXT
+                    if (doExtBatch && successUrls.length > 0) {
+                        renderPhases(localPhase + 1);
+                        for (let i = 0; i < successUrls.length; i++) {
+                            const shortUrl = successUrls[i].replace(/^https?:\/\//, '').substring(0, 40);
+                            progressLabel.textContent = `${vPrefix}EXT SCANNING: ${shortUrl}`;
+                            progressSub.textContent = `${i + 1} / ${successUrls.length} URL`;
+                            setPhaseProgress(localPhase, i / successUrls.length);
+                            try {
+                                const extController = new AbortController();
+                                const extTimer = setTimeout(() => extController.abort(), 7 * 60 * 1000);
+                                let er, ed;
+                                try {
+                                    const r = await fetchApiJson(apiUrl('/api/ext-check'), {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ url: successUrls[i], basicAuth, viewportPreset }),
+                                        signal: extController.signal
+                                    }, '/api/ext-check');
+                                    er = r.response; ed = r.data;
+                                } finally {
+                                    clearTimeout(extTimer);
+                                }
+                                if (er && er.ok) {
+                                    extResultsMap[successUrls[i]] = ed.results;
+                                    console.log(`[BATCH-EXT] ${successUrls[i]}: ${ed.results.length} 項目`);
+                                } else {
+                                    const errorMsg = ed?.error || 'EXT SCAN失敗';
+                                    if (isTimeoutLike(null, errorMsg)) {
+                                        recordTimeoutRetry({ url: successUrls[i], scanType: 'EXT', mode: 'batch', viewportPreset, message: errorMsg });
+                                    }
+                                    console.error(`[BATCH-EXT] ${successUrls[i]}: ${errorMsg}`);
+                                }
+                            } catch (e) {
+                                const msg = e.name === 'AbortError'
+                                    ? 'EXTタイムアウト（7分超過）'
+                                    : e.message;
+                                if (isTimeoutLike(e, msg)) {
+                                    recordTimeoutRetry({ url: successUrls[i], scanType: 'EXT', mode: 'batch', viewportPreset, message: msg });
+                                }
+                                console.error(`[BATCH-EXT] ${successUrls[i]}: ${msg}`);
+                            }
+                            setPhaseProgress(localPhase, (i + 1) / successUrls.length);
+                        }
+                    }
 
                     // DEEP
                     if (doEnhanced && successUrls.length > 0) {
@@ -2053,63 +2067,8 @@
                         localPhase++;
                     }
 
-                    // MULTI
-                    if (doAI && successUrls.length > 0) {
-                        renderPhases(localPhase + 1);
-                        for (let i = 0; i < successUrls.length; i++) {
-                            const shortUrl = successUrls[i].replace(/^https?:\/\//, '').substring(0, 40);
-                            progressLabel.textContent = `${vPrefix}MULTI SCANNING: ${shortUrl}`;
-                            progressSub.textContent = `${i + 1} / ${successUrls.length} URL`;
-                            setPhaseProgress(localPhase, i / successUrls.length);
-                            try {
-                                const aiController = new AbortController();
-                                const aiTimer = setTimeout(() => aiController.abort(), 10 * 60 * 1000);
-                                let ar, ad;
-                                try {
-                                    const r = await fetchApiJson(apiUrl('/api/ai-evaluate'), {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ url: successUrls[i], checkItems: filteredItems, viewportPreset }),
-                                        signal: aiController.signal
-                                    }, '/api/ai-evaluate');
-                                    ar = r.response; ad = r.data;
-                                } finally {
-                                    clearTimeout(aiTimer);
-                                }
-                                if (ar && ar.ok) {
-                                    const processed = mapAiResultsByOriginalIndex(ad.results || [], filteredItems);
-                                    aiResultsMap[successUrls[i]] = processed;
-                                    aiTokenLimitedMap[successUrls[i]] = !!(ad.tokenLimited || ad.partialResults);
-                                    aiIssueMap[successUrls[i]] = buildMultiIssue(ad);
-                                    console.log(`[BATCH-MULTI] ${successUrls[i]}: ${(ad.results || []).length} 結果${ad.tokenLimited ? ' [トークン上限]' : ad.partialResults ? ' [部分応答]' : ''}`);
-                                } else {
-                                    const errorMsg = ad?.error || 'MULTI SCAN失敗';
-                                    const processed = mapAiResultsByOriginalIndex(makeClientFallbackAiResults(filteredItems, errorMsg), filteredItems);
-                                    aiResultsMap[successUrls[i]] = processed;
-                                    aiTokenLimitedMap[successUrls[i]] = true;
-                                    aiIssueMap[successUrls[i]] = buildMultiIssue(ad) || { label: 'APIエラー', message: errorMsg };
-                                    if (isTimeoutLike(null, errorMsg)) {
-                                        recordTimeoutRetry({ url: successUrls[i], scanType: 'MULTI', mode: 'batch', viewportPreset, message: errorMsg });
-                                    }
-                                    console.error(`[BATCH-MULTI] ${successUrls[i]}: ${errorMsg}`);
-                                }
-                            } catch (e) {
-                                const msg = e.name === 'AbortError'
-                                    ? 'MULTIタイムアウト（10分超過）'
-                                    : e.message;
-                                if (isTimeoutLike(e, msg)) {
-                                    recordTimeoutRetry({ url: successUrls[i], scanType: 'MULTI', mode: 'batch', viewportPreset, message: msg });
-                                }
-                                console.error(`[BATCH-MULTI] ${successUrls[i]}: ${msg}`);
-                            }
-                            setPhaseProgress(localPhase, (i + 1) / successUrls.length);
-                        }
-                    }
-
                     // PLAY
-                    const playResultsMap = {};
                     if (doPlayBatch && successUrls.length > 0) {
-                        localPhase++;
                         renderPhases(localPhase + 1);
                         for (let i = 0; i < successUrls.length; i++) {
                             const shortUrl = successUrls[i].replace(/^https?:\/\//, '').substring(0, 40);
@@ -2152,54 +2111,72 @@
                             }
                             setPhaseProgress(localPhase, (i + 1) / successUrls.length);
                         }
+                        localPhase++;
                     }
 
-                    // EXT
-                    const extResultsMap = {};
-                    if (doExtBatch && successUrls.length > 0) {
-                        localPhase++;
+                    // MULTI
+                    if (doAI && successUrls.length > 0) {
                         renderPhases(localPhase + 1);
                         for (let i = 0; i < successUrls.length; i++) {
                             const shortUrl = successUrls[i].replace(/^https?:\/\//, '').substring(0, 40);
-                            progressLabel.textContent = `${vPrefix}EXT SCANNING: ${shortUrl}`;
+                            progressLabel.textContent = `${vPrefix}MULTI SCANNING: ${shortUrl}`;
                             progressSub.textContent = `${i + 1} / ${successUrls.length} URL`;
                             setPhaseProgress(localPhase, i / successUrls.length);
                             try {
-                                const extController = new AbortController();
-                                const extTimer = setTimeout(() => extController.abort(), 7 * 60 * 1000);
-                                let er, ed;
+                                const aiController = new AbortController();
+                                const aiTimer = setTimeout(() => aiController.abort(), 10 * 60 * 1000);
+                                let ar, ad;
                                 try {
-                                    const r = await fetchApiJson(apiUrl('/api/ext-check'), {
+                                    const r = await fetchApiJson(apiUrl('/api/ai-evaluate'), {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ url: successUrls[i], basicAuth, viewportPreset }),
-                                        signal: extController.signal
-                                    }, '/api/ext-check');
-                                    er = r.response; ed = r.data;
+                                        body: JSON.stringify({
+                                            url: successUrls[i],
+                                            checkItems: filteredItems,
+                                            viewportPreset,
+                                            basicResults: resultsData.find(rd => rd.url === successUrls[i])?.results || null,
+                                            extResults: extResultsMap[successUrls[i]] || null,
+                                            deepResults: enhancedResults[successUrls[i]] || null,
+                                            playResults: playResultsMap[successUrls[i]] || null
+                                        }),
+                                        signal: aiController.signal
+                                    }, '/api/ai-evaluate');
+                                    ar = r.response; ad = r.data;
                                 } finally {
-                                    clearTimeout(extTimer);
+                                    clearTimeout(aiTimer);
                                 }
-                                if (er && er.ok) {
-                                    extResultsMap[successUrls[i]] = ed.results;
-                                    console.log(`[BATCH-EXT] ${successUrls[i]}: ${ed.results.length} 項目`);
+                                if (ar && ar.ok) {
+                                    const processed = mapAiResultsByOriginalIndex(ad.results || [], filteredItems);
+                                    const issue = Object.keys(processed).length === 0
+                                        ? buildMultiScoreReflectionIssue((ad.results || []).length)
+                                        : buildMultiIssue(ad);
+                                    aiResultsMap[successUrls[i]] = processed;
+                                    aiTokenLimitedMap[successUrls[i]] = !!(ad.tokenLimited || ad.partialResults);
+                                    aiIssueMap[successUrls[i]] = issue;
+                                    console.log(`[BATCH-MULTI] ${successUrls[i]}: ${(ad.results || []).length} 結果${ad.tokenLimited ? ' [トークン上限]' : ad.partialResults ? ' [部分応答]' : ''}`);
                                 } else {
-                                    const errorMsg = ed?.error || 'EXT SCAN失敗';
+                                    const errorMsg = ad?.error || 'MULTI SCAN失敗';
+                                    const processed = mapAiResultsByOriginalIndex(makeClientFallbackAiResults(filteredItems, errorMsg), filteredItems);
+                                    aiResultsMap[successUrls[i]] = processed;
+                                    aiTokenLimitedMap[successUrls[i]] = true;
+                                    aiIssueMap[successUrls[i]] = buildMultiIssue(ad) || { label: 'APIエラー', message: errorMsg };
                                     if (isTimeoutLike(null, errorMsg)) {
-                                        recordTimeoutRetry({ url: successUrls[i], scanType: 'EXT', mode: 'batch', viewportPreset, message: errorMsg });
+                                        recordTimeoutRetry({ url: successUrls[i], scanType: 'MULTI', mode: 'batch', viewportPreset, message: errorMsg });
                                     }
-                                    console.error(`[BATCH-EXT] ${successUrls[i]}: ${errorMsg}`);
+                                    console.error(`[BATCH-MULTI] ${successUrls[i]}: ${errorMsg}`);
                                 }
                             } catch (e) {
                                 const msg = e.name === 'AbortError'
-                                    ? 'EXTタイムアウト（7分超過）'
+                                    ? 'MULTIタイムアウト（10分超過）'
                                     : e.message;
                                 if (isTimeoutLike(e, msg)) {
-                                    recordTimeoutRetry({ url: successUrls[i], scanType: 'EXT', mode: 'batch', viewportPreset, message: msg });
+                                    recordTimeoutRetry({ url: successUrls[i], scanType: 'MULTI', mode: 'batch', viewportPreset, message: msg });
                                 }
-                                console.error(`[BATCH-EXT] ${successUrls[i]}: ${msg}`);
+                                console.error(`[BATCH-MULTI] ${successUrls[i]}: ${msg}`);
                             }
                             setPhaseProgress(localPhase, (i + 1) / successUrls.length);
                         }
+                        localPhase++;
                     }
 
                     return { resultsData, navConsistency, enhancedResults, aiResultsMap, aiTokenLimitedMap, aiIssueMap, playResultsMap, extResultsMap, succeededCount };
@@ -2728,26 +2705,13 @@
                 '3.2.3', '3.2.4',
                 '3.3.3', '3.3.4', '3.3.8',
                 '4.1.3'
-            ],
-            AAA: [
-                '1.2.6', '1.2.7', '1.2.8', '1.2.9',
-                '1.3.6',
-                '1.4.6', '1.4.7', '1.4.8', '1.4.9',
-                '2.1.3',
-                '2.2.3', '2.2.4', '2.2.5', '2.2.6',
-                '2.3.2', '2.3.3',
-                '2.4.8', '2.4.9', '2.4.10', '2.4.12', '2.4.13',
-                '2.5.5', '2.5.6',
-                '3.1.3', '3.1.4', '3.1.5', '3.1.6',
-                '3.2.5',
-                '3.3.5', '3.3.6', '3.3.9'
             ]
         };
 
         function getTargetScList() {
             if (targetLevel === 'A') return [...WCAG_SC.A];
             if (targetLevel === 'AA') return [...WCAG_SC.A, ...WCAG_SC.AA];
-            return [...WCAG_SC.A, ...WCAG_SC.AA, ...WCAG_SC.AAA];
+            return [...WCAG_SC.A, ...WCAG_SC.AA];
         }
 
         function splitCompositeSc(scText) {
@@ -2771,7 +2735,6 @@
 
         function normalizeScoreToTarget(score) {
             if (!score) return score;
-            const fixedTotal = getTargetScList().length;
             const critical = score.critical ?? 0;
             const serious = score.serious ?? 0;
             const moderate = score.moderate ?? 0;
@@ -2779,6 +2742,22 @@
             const pass = score.pass ?? 0;
             const na = score.na ?? 0;
             const covered = critical + serious + moderate + minor + pass + na;
+            if (score.useOwnTotal) {
+                const ownTotal = Math.max(score.total ?? covered, covered);
+                return {
+                    ...score,
+                    total: ownTotal,
+                    critical,
+                    serious,
+                    moderate,
+                    minor,
+                    pass,
+                    na,
+                    unverified: score.unverified ?? Math.max(0, ownTotal - covered),
+                    score: score.score ?? calculateAchievementRate(pass, ownTotal, na)
+                };
+            }
+            const fixedTotal = getTargetScList().length;
             return {
                 ...score,
                 total: fixedTotal,
@@ -2945,7 +2924,10 @@
             const lo = { 'A': 1, 'AA': 2, 'AAA': 3 };
             const lim = lo[targetLevel] || 2;
             let fail = 0, pass = 0, na = 0, unverified = 0;
-            manualCheckItems.forEach((item, i) => {
+            const targetItems = manualCheckItems
+                .map((item, i) => ({ item, i }))
+                .filter(({ item }) => (lo[item.level] || 2) <= lim && item.aiTarget);
+            targetItems.forEach(({ item, i }) => {
                 if ((lo[item.level] || 2) > lim) return;
                 const r = aiData[i];
                 const rawStatus = !r ? 'unverified' : r.status === 'pass' ? 'pass'
@@ -2958,9 +2940,10 @@
                 else unverified++;
             });
             return { total: fail+pass+na+unverified,
+                     useOwnTotal: true,
                      critical: 0, serious: fail, moderate: 0, minor: 0,
                      pass, na, unverified,
-                     score: calculateAchievementRate(pass, getTargetScList().length, na) };
+                     score: calculateAchievementRate(pass, targetItems.length, na) };
         }
 
         function computeTotalScore(basicResults, deepResults, multiAiData, playResults, extResults) {
@@ -3042,7 +3025,9 @@
             if (multiAiData) {
                 manualCheckItems.forEach((item, i) => {
                     if ((lo[item.level] || 2) > lim) return;
+                    if (!item.aiTarget) return;
                     const r = multiAiData[i];
+                    if (!r) return;
                     const rawStatus = !r ? 'unverified' : r.status === 'pass' ? 'pass'
                                : r.status === 'fail' ? 'fail'
                                : r.status === 'not_applicable' ? 'na' : 'unverified';
@@ -3279,6 +3264,7 @@
             if (hasMultiResults) {
                 manualCheckItems.forEach((item, i) => {
                     if ((lo[item.level] || 2) > lim) return;
+                    if (!item.aiTarget) return;
                     const r = multi[i];
                     const dkey = `MULTI:${i}`;
                     const defaultBucket = !r ? 'unverified'
@@ -3516,11 +3502,12 @@
             const multiAiData = state.multiAiData !== undefined ? state.multiAiData : (multiEnabled && Object.keys(aiResults).length > 0 ? aiResults : null);
             const playData    = state.playResults  !== undefined ? state.playResults  : (playEnabled ? lastPlayResults : null);
             const extData     = state.extResults   !== undefined ? state.extResults   : (extEnabled ? lastExtResults : null);
+            const multiBlockingIssue = isBlockingMultiIssue(multiIssue) ? multiIssue : null;
 
             const totalScore = computeTotalScore(
                 basicResults,
                 deepEnabled ? deepResults : null,
-                multiEnabled ? multiAiData : null,
+                multiEnabled && !multiBlockingIssue ? multiAiData : null,
                 playEnabled ? playData : null,
                 extEnabled ? extData : null
             );
@@ -3547,6 +3534,12 @@
                     return `<tr class="${rowClass}">
                         <td class="score-cell score-label ${labelClass}">${labelHtml}</td>
                         <td colspan="8" class="score-cell score-cell-empty">${isTotal ? '' : '— 未実行 —'}</td>
+                    </tr>`;
+                }
+                if (data.error) {
+                    return `<tr class="${rowClass}">
+                        <td class="score-cell score-label ${labelClass}">${labelHtml}</td>
+                        <td colspan="8" class="score-cell score-cell-empty">${escapeHtml(data.error)}</td>
                     </tr>`;
                 }
                 return `<tr class="${rowClass}">
@@ -3577,7 +3570,7 @@
             body.innerHTML =
                 row(basicLabel, 'label-basic', nb, true, false) +
                 row(deepLabel, 'label-deep', nd, deepEnabled, false) +
-                row(multiLabel, 'label-multi', nm, multiEnabled, false) +
+                row(multiLabel, 'label-multi', multiBlockingIssue ? { error: `— ${multiBlockingIssue.label}: ${multiBlockingIssue.message || 'MULTI SCANの結果をスコアに反映できませんでした'} —` } : nm, multiEnabled, false) +
                 row(playLabel, 'label-play', np, playEnabled, false) +
                 row(extLabel, 'label-ext', ne, extEnabled, false) +
                 row('TOTAL', 'label-total', normalizeScoreToTarget(totalScore), true, true);
@@ -3702,7 +3695,7 @@
             if (enhancedData && enhancedData.length > 0) {
                 const reportScSet = new Set(getTargetScList());
                 const scLevelMap = {};
-                Object.entries({ A: WCAG_SC.A, AA: WCAG_SC.AA, AAA: WCAG_SC.AAA }).forEach(([lv, list]) => {
+                Object.entries({ A: WCAG_SC.A || [], AA: WCAG_SC.AA || [], AAA: WCAG_SC.AAA || [] }).forEach(([lv, list]) => {
                     list.forEach(sc => { scLevelMap[sc] = lv; });
                 });
                 const enhancedStatusMap = { pass: '合格', fail: '不合格', error: 'エラー', not_applicable: '対象外', manual_required: '要手動確認' };
@@ -3728,7 +3721,7 @@
             if (playData && playData.length > 0) {
                 const reportScSet = new Set(getTargetScList());
                 const scLevelMap = {};
-                Object.entries({ A: WCAG_SC.A, AA: WCAG_SC.AA, AAA: WCAG_SC.AAA }).forEach(([lv, list]) => {
+                Object.entries({ A: WCAG_SC.A || [], AA: WCAG_SC.AA || [], AAA: WCAG_SC.AAA || [] }).forEach(([lv, list]) => {
                     list.forEach(sc => { scLevelMap[sc] = lv; });
                 });
                 const playStatusMap = { pass: '合格', fail: '不合格', error: 'エラー', not_applicable: '対象外', unverified: '判定不能' };
@@ -3753,7 +3746,7 @@
             if (extData && extData.length > 0) {
                 const reportScSet = new Set(getTargetScList());
                 const scLevelMap = {};
-                Object.entries({ A: WCAG_SC.A, AA: WCAG_SC.AA, AAA: WCAG_SC.AAA }).forEach(([lv, list]) => {
+                Object.entries({ A: WCAG_SC.A || [], AA: WCAG_SC.AA || [], AAA: WCAG_SC.AAA || [] }).forEach(([lv, list]) => {
                     list.forEach(sc => { scLevelMap[sc] = lv; });
                 });
                 const extStatusMap = { pass: '合格', fail: '不合格', error: 'エラー', not_applicable: '対象外', unverified: '判定不能' };
@@ -4098,9 +4091,6 @@
             const el = document.getElementById('enhancedResults');
             const statusLabels = { pass: '合格', fail: '不合格', error: 'エラー', not_applicable: '対象外', manual_required: '要手動確認' }; 
 
-            // AAA SC セット（バッジ表示用）
-            const AAA_SCS = new Set(['2.3.3','2.4.12','2.4.13','2.1.3','3.3.9','2.3.2','2.2.3','2.2.4','2.2.5','2.2.6','2.4.6','2.4.8','2.4.9','2.4.10','1.4.6','1.4.7','1.4.8','1.4.9','2.5.5','2.5.6','3.1.3','3.1.4','3.1.5','3.1.6','3.2.5','3.3.5','3.3.6','3.3.9']);
-
             // Phase別のSC分類
             const phase1SCs = new Set(['1.4.10','2.5.8','2.1.2','2.4.1','2.3.3','1.4.12','2.4.11','2.4.12','3.2.1/3.2.2','3.3.1']);
             const phase2SCs = new Set(['2.1.1','2.4.7','2.4.13','2.4.3','1.4.4','1.2.x','2.2.2','3.3.8','2.3.1']);
@@ -4164,7 +4154,6 @@
                 }
                 const label = statusLabels[r.status] || r.status;
                 const violations = r.violations || [];
-                const isAAA = AAA_SCS.has(r.sc);
                 const statusClass = (
                     r.status === 'pass' ? 'is-pass'
                     : r.status === 'fail' ? 'is-fail'
@@ -4175,7 +4164,6 @@
                 html += `<div class="enhanced-item ${statusClass}">
                     <div class="enhanced-item-head">
                         <span class="enhanced-item-status">${label}</span>
-                        ${isAAA ? `<span class="enhanced-item-aaa">AAA β</span>` : ''}
                         <span class="enhanced-item-title">SC ${r.sc} ${r.name}</span>
                     </div>
                     <div class="enhanced-item-message${violations.length > 0 ? ' has-violations' : ''}">${escapeHtml(r.message || '')}</div>

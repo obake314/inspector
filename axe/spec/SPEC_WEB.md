@@ -1,6 +1,6 @@
 # SPEC_WEB
 
-最終更新: 2026-04-23（スキャン順序変更・SC権威マージ・MULTIスコア反映修正・PLAY→MULTI事前解決・OpenAI response_format対応・デバッグエンドポイント追加）
+最終更新: 2026-04-23（MULTI対象項目再定義・自動検査結果連携・スキャン順序変更・SC権威マージ・MULTIスコア反映修正・PLAY→MULTI事前解決・OpenAI response_format対応・デバッグエンドポイント追加）
 
 ## 対象
 
@@ -47,9 +47,13 @@
 ### MULTI SCAN
 
 - API: `POST /api/ai-evaluate`
-- 入力: `{ url, checkItems[], viewportPreset? }`
+- 入力: `{ url, checkItems[], viewportPreset?, basicResults?, extResults?, deepResults?, playResults? }`
 - 出力: `{ success, model, tokenLimited?, partialResults?, missingCount?, warning?, results: [{ index, status, reason, evidence, selector, suggestion, confidence? }] }`
 - status: `pass` / `fail` / `not_applicable` / `manual_required`
+- MULTIは全WCAG項目をAIで一括判定する機能ではない。`manualCheckItems` のうち `aiTarget: true` の項目のみを対象にする。
+- `aiTarget: true` は、自然言語・視覚的文脈・ページ間一貫性・フォームエラー文脈など、BASIC/EXT/DEEP/PLAYだけでは確定しにくい項目に限定する。
+- BASIC/EXT/DEEP/PLAYの結果を圧縮してAIプロンプトに渡し、自動ツールのfail/pass/not_applicableと矛盾する判定を避ける。
+- AIには各対象項目ごとの `verificationMethod` をサーバー側で付与し、証拠不足の場合は推測せず `manual_required` を返させる。
 - AI未設定時: `success: true` のまま `model: manual-fallback` で全項目 `manual_required` を返し、`aiErrorType: api_error` / `detailLabel: APIエラー` を返す
 - AI接続失敗/認証失敗/HTTP 429 レート制限時: HTTP `502` / `401` / `429` を返し、`success: false`、`aiErrorType: api_error`、`detailLabel`、`rateLimited`、`quotaExceeded`、`retryAfterSeconds` を可能な範囲で返す
 - モデルが存在しない、権限がない、または利用できない場合: HTTP `404`、`aiErrorType: model_unavailable`、`detailLabel: モデル利用不可` を返す
@@ -151,10 +155,10 @@
 選択されたビューごとに以下を実行する。
 
 1. `check(url, { viewportPreset })`（BASIC）
-2. `runEnhancedCheck(true, { viewportPreset })`（DEEP、有効時）
-3. `runAIEvaluation(true, { viewportPreset })`（MULTI、有効時）
+2. `runExtCheck(true, { viewportPreset })`（EXT、有効時）
+3. `runEnhancedCheck(true, { viewportPreset })`（DEEP、有効時）
 4. `runPlaywrightCheck(true, { viewportPreset })`（PLAY、有効時）
-5. `runExtCheck(true, { viewportPreset })`（EXT、有効時）
+5. `runAIEvaluation(true, { viewportPreset })`（MULTI、有効時）
 
 ビュー選択別の動作:
 
@@ -239,10 +243,11 @@
 
 例: 全55項目、合格25項目、該当なし5項目の場合は `25 / (55 - 5) = 50%`。
 
-この整合式はスコアテーブルの各行で成立する。詳細タブ横のバッジ数は `computeTotalScore()` を `normalizeScoreToTarget()` で固定項目数へ正規化した SC 単位の TOTAL スコアと一致させる。
+この整合式はスコアテーブルの各行で成立する。TOTALは `computeTotalScore()` を `normalizeScoreToTarget()` で固定項目数へ正規化した SC 単位スコアと一致させる。
 
 - 未カバーSCは `unverified` に補完する
-- MULTI の結果カードは MULTI 実行済みデータが存在する場合のみ描画する
+- MULTI行はAI対象項目（`aiTarget: true`）だけを分母にする。AI対象外の手動項目をMULTIの未検証として積み上げない
+- MULTI の結果カードは MULTI 実行済みデータが存在する場合のみ描画し、`aiTarget: true` の項目に限定する
 - 詳細カードはエビデンス表示のため複数カードになることがあるが、タブバッジはカード枚数ではなくSC単位スコアを表示する
 - `displayResults(..., { renderTabs: false })` を使う実行経路では、BASIC直後の中間描画で詳細タブを更新せず、全スキャン完了後の `renderAllTabs()` で TOTAL 統合結果を描画する
 
@@ -255,7 +260,7 @@
 - フィルタリング対象:
   - BASIC violations / incomplete / passes: `getWcagLevel(tags)` でレベル判定
   - DEEP results: `splitCompositeSc(r.sc).some(sc => scSet.has(sc))` で判定
-  - MULTI items: `levelOrder[item.level] <= lim` で判定（従来から変更なし）
+  - MULTI items: `levelOrder[item.level] <= lim && item.aiTarget` で判定
 
 ### TOTAL算出
 
@@ -269,6 +274,7 @@
   - アクセシビリティ名/ロールSC（4.1.2/4.1.3/1.3.1/1.3.5）→ **EXTが権威**
   - 権威スキャンの結果は他スキャンのfailより強く適用される（例: PLAYがpassなら2.4.7はpassになる）
 - **MULTIはギャップ補完のみ**: 他スキャンが`unverified`のSCのみMULTI結果を適用。BASIC/EXT/DEEP/PLAYが確定済みのSCには上書きしない
+- MULTIは `aiTarget: true` の結果だけをTOTALへ補完する。AI対象外の手動項目はTOTAL上で未カバーSC補完に任せる
 
 ## Web系API一覧
 
