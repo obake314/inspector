@@ -660,9 +660,20 @@
   3. 一括モードで URL を複数行入力して件数が反映されることを確認する
   4. MULTI のチェックボックスが disabled の場合（AIキー未設定）の動作を確認する
 - 期待結果
-  - URL 未入力時: "URLを入力すると予測時間を表示します" が表示される
+  - URL 未入力時: "URLを入力すると予測時間を表示します" が現在モード側にだけ表示される
+  - 単一モードでは `#batchScanEstimate` が非表示、一括モードでは `#singleScanEstimate` が非表示
   - URL 入力後: `予測時間: 約X〜Y分 / Nページ / PC|SP|PC+SP / BASIC+...` の形式で表示される
   - チェックボックス・viewport・URL 変更のたびに即座に更新される
   - PC+SP 選択時は viewport 数 ×2 として計算される
   - MULTI が disabled の場合は MULTI を除外した予測時間が表示される
   - 一括モードでは有効な URL 行数がページ数として計算される
+
+## T-SCAN-66: favicon.png 表示
+
+- 手順
+  1. `public/favicon.png` が存在することを確認する
+  2. `public/index.html` の `<head>` に favicon の `<link>` があることを確認する
+  3. アプリをブラウザで開き、タブアイコンを確認する
+- 期待結果
+  - `<link rel="icon" type="image/png" href="favicon.png">` が設定されている
+  - ブラウザタブに PNG ファビコンが表示される

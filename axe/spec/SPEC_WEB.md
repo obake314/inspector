@@ -300,9 +300,16 @@
 ## スキャン予測時間表示
 
 - 場所: `#singleScanEstimate`（単一スキャンコントロール内）/ `#batchScanEstimate`（一括スキャンコントロール内）
-- URL 未入力時: "URLを入力すると予測時間を表示します" を表示
+- 表示対象: 現在のモードに対応する片方のみ表示する（単一モードは `#singleScanEstimate`、一括モードは `#batchScanEstimate`）
+- URL 未入力時: "URLを入力すると予測時間を表示します" を現在モード側にだけ表示
 - URL 入力後: `予測時間: 約X〜Y分 / Nページ / PC|SP|PC+SP / BASIC+DEEP+...` の形式で表示
 - 更新タイミング: URL 入力・一括 URL 入力・viewport radio 変更・scan checkbox 変更・モード切替
+
+## ファビコン
+
+- ファイル: `public/favicon.png`
+- HTML: `<link rel="icon" type="image/png" href="favicon.png">`
+- アプリ起動時、ブラウザタブにはアクセシビリティ検査を示す虫眼鏡 + チェックの PNG アイコンを表示する
 
 ### 1ページ・1ビューあたりの目安時間
 

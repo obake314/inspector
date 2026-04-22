@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ACCESSIBILITY INSPECTOR</title>
+    <link rel="icon" type="image/png" href="favicon.png">
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
@@ -1406,6 +1407,10 @@
             const bc = $('batchScanControls');
             if (sc) sc.style.display = currentMode === 'single' ? 'flex' : 'none';
             if (bc) bc.style.display = currentMode === 'batch'  ? 'flex' : 'none';
+            const singleEstimate = $('singleScanEstimate');
+            const batchEstimate = $('batchScanEstimate');
+            if (singleEstimate) singleEstimate.style.display = currentMode === 'single' ? '' : 'none';
+            if (batchEstimate) batchEstimate.style.display = currentMode === 'batch' ? '' : 'none';
             const viewportWrap = $('viewportModeWrap');
             const viewportOptions = Array.from(document.querySelectorAll('input[name="viewportMode"]'));
             if (viewportWrap && viewportOptions.length) {
