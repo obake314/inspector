@@ -317,6 +317,10 @@
                         </label>
                         <span class="batch-count" id="batchCount">0 / 10</span>
                     </div>
+                    <div class="scan-state-actions">
+                        <button type="button" class="export-btn" id="scanStateImportBtn" onclick="document.getElementById('scanStateImportInput').click()">JSON読込</button>
+                        <input type="file" id="scanStateImportInput" accept="application/json,.json" hidden onchange="importScanStateJsonFile(this)">
+                    </div>
                     <div id="batchScanEstimate" class="scan-estimate"></div>
                 </div>
             </div>
@@ -423,7 +427,6 @@
                 <button class="export-btn" id="reportBtn" onclick="exportToSheets()">GoogleSheet</button>
                 <button class="export-btn" id="jsonExportBtn" onclick="exportScanStateJson()">JSON保存</button>
                 <button class="export-btn" id="jsonImportBtn" onclick="document.getElementById('scanStateImportInput').click()">JSON読込</button>
-                <input type="file" id="scanStateImportInput" accept="application/json,.json" hidden onchange="importScanStateJsonFile(this)">
                 <button class="export-btn clear-btn" id="clearBtn" onclick="clearScan()">クリア</button>
             </div>
         </div>
@@ -763,7 +766,18 @@
             else if (val === 'ng') card.classList.add('item-card-dec-ng');
             else if (val === 'hold') card.classList.add('item-card-dec-hold');
             renderAllTabs('pc');
-            if (lastMobileScanSnapshot) {
+            if (currentMode === 'batch' && currentBatchIdx !== null) {
+                const mobileR = batchMobileResultsData[currentBatchIdx];
+                if (mobileR?.success) {
+                    renderAllTabs('sp', mobileR.results,
+                        batchMobileEnhancedResults[mobileR.url] || null,
+                        batchMobileAIResults[mobileR.url] || {},
+                        batchMobilePlayResults[mobileR.url] || null,
+                        batchMobileExtResults[mobileR.url] || null,
+                        batchMobileNavConsistency
+                    );
+                }
+            } else if (lastMobileScanSnapshot) {
                 const sp = lastMobileScanSnapshot;
                 renderAllTabs('sp', sp.basic, sp.deep || null, sp.multi || {}, sp.play || null, sp.ext || null);
             }
@@ -776,16 +790,18 @@
             const doMulti = Object.keys(aiResults).length > 0 || isBlockingMultiIssue(lastMultiIssue);
             const doPlay  = !!lastPlayResults;
             const doExt   = !!lastExtResults;
+            const pcDecisionScope = getDecisionScope(lastResults, 'pc');
             // PC テーブル
             renderScanScoreTable(
-                computeBasicScore(lastResults),
-                doDeep  ? computeDeepScore(lastEnhancedResults)  : null,
-                doMulti ? computeMultiScore(aiResults)           : null,
+                computeBasicScore(lastResults, pcDecisionScope),
+                doDeep  ? computeDeepScore(lastEnhancedResults, pcDecisionScope)  : null,
+                doMulti ? computeMultiScore(aiResults, pcDecisionScope)           : null,
                 doDeep, doMulti,
                 {
                     scoreBodyId: 'scanScoreBody', scoreTableId: 'scanScoreTable', scoreBlockId: 'scoreBlockDesktop',
-                    playEnabled: doPlay, playScore: doPlay ? computePlayScore(lastPlayResults) : null,
-                    extEnabled: doExt, extScore: doExt ? computeExtScore(lastExtResults) : null,
+                    playEnabled: doPlay, playScore: doPlay ? computePlayScore(lastPlayResults, pcDecisionScope) : null,
+                    extEnabled: doExt, extScore: doExt ? computeExtScore(lastExtResults, pcDecisionScope) : null,
+                    decisionScope: pcDecisionScope,
                     state: {
                         basicResults: lastResults,
                         deepResults: lastEnhancedResults,
@@ -797,29 +813,53 @@
                     multiIssue: lastMultiIssue
                 }
             );
-            // SP テーブル（スナップショットがある場合のみ）
-            if (lastMobileScanSnapshot) {
-                const sp = lastMobileScanSnapshot;
-                const spDeep  = !!sp.deep;
-                const spMulti = (sp.multi && Object.keys(sp.multi).length > 0) || isBlockingMultiIssue(sp.multiIssue);
-                const spPlay  = !!sp.play;
-                const spExt   = !!sp.ext;
+            // SP テーブル（BATCHモード or SINGLE PC+SP スナップショットがある場合）
+            const spData = (() => {
+                if (currentMode === 'batch' && currentBatchIdx !== null) {
+                    const mobileR = batchMobileResultsData[currentBatchIdx];
+                    if (!mobileR?.success) return null;
+                    const url = mobileR.url;
+                    return {
+                        basic: mobileR.results,
+                        deep: batchMobileEnhancedResults[url] || null,
+                        multi: batchMobileAIResults[url] || {},
+                        play: batchMobilePlayResults[url] || null,
+                        ext: batchMobileExtResults[url] || null,
+                        multiIssue: batchMobileAIIssueMap[url] || null,
+                        multiTokenLimited: !!batchMobileAITokenLimitedMap[url],
+                        navConsistency: batchMobileNavConsistency
+                    };
+                }
+                if (lastMobileScanSnapshot) return { ...lastMobileScanSnapshot, navConsistency: null };
+                return null;
+            })();
+            if (spData) {
+                const spDeep  = !!spData.deep;
+                const spMulti = (spData.multi && Object.keys(spData.multi).length > 0) || isBlockingMultiIssue(spData.multiIssue);
+                const spPlay  = !!spData.play;
+                const spExt   = !!spData.ext;
+                const spDecisionScope = getDecisionScope(spData.basic, 'sp');
                 renderScanScoreTable(
-                    computeBasicScore(sp.basic),
-                    spDeep  ? computeDeepScore(sp.deep)   : null,
-                    spMulti ? computeMultiScore(sp.multi) : null,
+                    computeBasicScore(spData.basic, spDecisionScope),
+                    spDeep  ? computeDeepScore(spData.deep, spDecisionScope)   : null,
+                    spMulti ? computeMultiScore(spData.multi, spDecisionScope) : null,
                     spDeep, spMulti,
                     {
                         scoreBodyId: 'scanScoreBodyMobile', scoreTableId: 'scanScoreTableMobile', scoreBlockId: 'scoreBlockMobile',
-                        playEnabled: spPlay, playScore: spPlay ? computePlayScore(sp.play) : null,
-                        extEnabled: spExt, extScore: spExt ? computeExtScore(sp.ext) : null,
-                        multiTokenLimited: !!sp.multiTokenLimited,
-                        multiIssue: sp.multiIssue || null,
-                        state: { basicResults: sp.basic, deepResults: sp.deep, multiAiData: sp.multi, playResults: sp.play, extResults: sp.ext }
+                        playEnabled: spPlay, playScore: spPlay ? computePlayScore(spData.play, spDecisionScope) : null,
+                        extEnabled: spExt, extScore: spExt ? computeExtScore(spData.ext, spDecisionScope) : null,
+                        decisionScope: spDecisionScope,
+                        multiTokenLimited: !!spData.multiTokenLimited,
+                        multiIssue: spData.multiIssue || null,
+                        state: {
+                            basicResults: spData.basic, deepResults: spData.deep, multiAiData: spData.multi,
+                            playResults: spData.play, extResults: spData.ext, navConsistency: spData.navConsistency
+                        }
                     }
                 );
             }
         }
+        let scoreRescanInProgress = false;
         let targetLevel = 'AA';
         const $ = id => document.getElementById(id);
         // Production is served from /axe/, local dev from /.
@@ -864,6 +904,12 @@
 
         function getViewportLabel(viewportPreset) {
             return viewportPreset === 'iphone-se' || viewportPreset === 'mobile' ? 'SP' : 'PC';
+        }
+
+        function getBasicAuthPayload() {
+            const basicUser = $('basicUser')?.value?.trim() || '';
+            const basicPass = $('basicPass')?.value || '';
+            return (basicUser && basicPass) ? { user: basicUser, pass: basicPass } : null;
         }
 
         function updateBatchCount() {
@@ -1824,6 +1870,7 @@
             manualImpacts.clear();
             batchResultsData = [];
             batchNavConsistency = null;
+            currentBatchIdx = null;
             batchEnhancedResults = {};
             batchAIResults = {};
             batchAITokenLimitedMap = {};
@@ -1916,6 +1963,7 @@
         // --- Batch results state ---
         let batchResultsData = [];
         let batchNavConsistency = null;
+        let currentBatchIdx = null;
         let batchEnhancedResults = {}; // url → enhanced results array
         let batchAIResults = {};       // url → processed aiResults object
         let batchAITokenLimitedMap = {};  // url → bool (token limit flag)
@@ -1974,13 +2022,15 @@
                 const ext = batchExtResults[r.url] || null;
                 const hasMulti = Object.prototype.hasOwnProperty.call(batchAIResults, r.url);
                 const multiIssue = batchAIIssueMap[r.url] || null;
+                const decisionScope = getDecisionScope(r.results, 'pc');
                 const sc = normalizeScoreToTarget(computeTotalScore(
                     r.results,
                     deep,
                     hasMulti && !isBlockingMultiIssue(multiIssue) ? (multi || {}) : null,
                     play,
                     ext,
-                    batchNavConsistency
+                    batchNavConsistency,
+                    decisionScope
                 ));
                 const scoreClass = sc.score >= 80 ? 'is-high' : sc.score >= 50 ? 'is-mid' : 'is-low';
                 const d = (n, tone) => n > 0
@@ -2057,7 +2107,8 @@
             if (resultsEl) resultsEl.prepend(bar);
         }
 
-        window.showBatchDetail = function(idx) {
+        window.showBatchDetail = function(idx, options = {}) {
+            currentBatchIdx = idx;
             renderBatchNav(idx);
             const r = batchResultsData[idx];
             if (!r.success) {
@@ -2079,20 +2130,22 @@
             lastExtResults = batchExtResults[r.url] || null;
             displayResults(r.results, r.url, { renderTabs: false });
             $('results').classList.add('visible');
+            const pcDecisionScope = getDecisionScope(lastResults, 'pc');
             const deepEnabled  = !!lastEnhancedResults;
             const multiEnabled = Object.prototype.hasOwnProperty.call(batchAIResults, r.url) || Object.keys(aiResults).length > 0;
             const playEnabledBatch = !!lastPlayResults;
             const extEnabledBatch  = !!lastExtResults;
             const pcMultiAttempted = Object.prototype.hasOwnProperty.call(batchAIResults, r.url) || !!lastMultiIssue || !!lastImprovementPlan;
             renderScanScoreTable(
-                computeBasicScore(lastResults),
-                deepEnabled  ? computeDeepScore(lastEnhancedResults) : null,
-                multiEnabled ? computeMultiScore(aiResults) : null,
+                computeBasicScore(lastResults, pcDecisionScope),
+                deepEnabled  ? computeDeepScore(lastEnhancedResults, pcDecisionScope) : null,
+                multiEnabled ? computeMultiScore(aiResults, pcDecisionScope) : null,
                 deepEnabled, multiEnabled,
                 {
                     scoreBodyId: 'scanScoreBody', scoreTableId: 'scanScoreTable', scoreBlockId: 'scoreBlockDesktop',
-                    playEnabled: playEnabledBatch, playScore: playEnabledBatch ? computePlayScore(lastPlayResults) : null,
-                    extEnabled: extEnabledBatch, extScore: extEnabledBatch ? computeExtScore(lastExtResults) : null,
+                    playEnabled: playEnabledBatch, playScore: playEnabledBatch ? computePlayScore(lastPlayResults, pcDecisionScope) : null,
+                    extEnabled: extEnabledBatch, extScore: extEnabledBatch ? computeExtScore(lastExtResults, pcDecisionScope) : null,
+                    decisionScope: pcDecisionScope,
                     state: { navConsistency: batchNavConsistency },
                     multiTokenLimited: lastMultiTokenLimited,
                     multiIssue: lastMultiIssue
@@ -2119,15 +2172,17 @@
                 mobileAttempted      = mMultiEnabled || !!mobileIssue || !!mobilePlan;
                 const mPlayEnabled   = !!mobilePlay;
                 const mExtEnabled    = !!mobileExt;
+                const spDecisionScope = getDecisionScope(mobileR.results, 'sp');
                 renderScanScoreTable(
-                    computeBasicScore(mobileR.results),
-                    mDeepEnabled  ? computeDeepScore(mobileEnhanced) : null,
-                    mMultiEnabled ? computeMultiScore(mobileAI) : null,
+                    computeBasicScore(mobileR.results, spDecisionScope),
+                    mDeepEnabled  ? computeDeepScore(mobileEnhanced, spDecisionScope) : null,
+                    mMultiEnabled ? computeMultiScore(mobileAI, spDecisionScope) : null,
                     mDeepEnabled, mMultiEnabled,
                     {
                         scoreBodyId: 'scanScoreBodyMobile', scoreTableId: 'scanScoreTableMobile', scoreBlockId: 'scoreBlockMobile',
-                        playEnabled: mPlayEnabled, playScore: mPlayEnabled ? computePlayScore(mobilePlay) : null,
-                        extEnabled: mExtEnabled, extScore: mExtEnabled ? computeExtScore(mobileExt) : null,
+                        playEnabled: mPlayEnabled, playScore: mPlayEnabled ? computePlayScore(mobilePlay, spDecisionScope) : null,
+                        extEnabled: mExtEnabled, extScore: mExtEnabled ? computeExtScore(mobileExt, spDecisionScope) : null,
+                        decisionScope: spDecisionScope,
                         state: {
                             basicResults: mobileR.results,
                             deepResults: mobileEnhanced,
@@ -2159,8 +2214,10 @@
                 spIssue: mobileIssueForPanel,
                 spAttempted: mobileAttempted
             });
-            const st = $('scanScoreTable');
-            if (st) st.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (options.scrollToScore) {
+                const st = $('scanScoreTable');
+                if (st) st.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
         };
 
         async function batchCheck() {
@@ -2600,7 +2657,7 @@
                 renderPhases(totalPhases + 1);
 
                 const firstOk = batchResultsData.findIndex(r => r.success);
-                if (firstOk >= 0) showBatchDetail(firstOk);
+                if (firstOk >= 0) showBatchDetail(firstOk, { scrollToScore: true });
 
             } catch (e) {
                 $('errorText').textContent = e.message;
@@ -3126,13 +3183,36 @@
             return [...new Set(expanded)];
         }
 
+        function getDecisionScope(results, suffix = 'pc') {
+            const view = suffix === 'sp' ? 'sp' : 'pc';
+            const url = String(results?.url || '').trim() || 'unknown-url';
+            return `${view}|${url}`;
+        }
+
+        function scopedDecisionKey(rawKey, scope) {
+            if (!rawKey) return rawKey;
+            return scope ? `${encodeURIComponent(scope)}::${rawKey}` : rawKey;
+        }
+
+        function getManualDecision(rawKey, scope) {
+            return manualDecisions.get(scopedDecisionKey(rawKey, scope));
+        }
+
+        function hasManualDecision(rawKey, scope) {
+            return manualDecisions.has(scopedDecisionKey(rawKey, scope));
+        }
+
+        function getManualImpact(rawKey, scope) {
+            return manualImpacts.get(scopedDecisionKey(rawKey, scope));
+        }
+
         // decision を raw ステータスに上書き適用するヘルパー
         // dkey: decisionのキー、rawStatus: 'fail'|'pass'|'na'|'unverified'
         // impact: NG時に返す重要度（元のimpact）
-        function applyDecisionToStatus(dkey, rawStatus, rawImpact) {
-            const dec = dkey ? manualDecisions.get(dkey) : null;
+        function applyDecisionToStatus(dkey, rawStatus, rawImpact, scope = null) {
+            const dec = dkey ? getManualDecision(dkey, scope) : null;
             if (dec === 'ok')   return { status: 'pass',       impact: null };
-            if (dec === 'ng')   return { status: 'fail',       impact: manualImpacts.get(dkey) || rawImpact || 'serious' };
+            if (dec === 'ng')   return { status: 'fail',       impact: getManualImpact(dkey, scope) || rawImpact || 'serious' };
             if (dec === 'hold') return { status: 'unverified', impact: null };
             return { status: rawStatus, impact: rawImpact };
         }
@@ -3195,7 +3275,7 @@
             };
         }
 
-        function computeBasicScore(results) {
+        function computeBasicScore(results, decisionScope = null) {
             if (!results) return null;
             const scSet = new Set(getTargetScList());
             const rank = { fail: 0, pass: 1, unverified: 2 };
@@ -3205,7 +3285,7 @@
             function merge(sc, status, impact, dkey) {
                 if (!sc || !scSet.has(sc)) return;
                 const cur = scMap[sc];
-                const isManual = dkey && manualDecisions.has(dkey);
+                const isManual = dkey && hasManualDecision(dkey, decisionScope);
                 if (cur && cur.isManual && !isManual) return;
                 if (isManual) {
                     scMap[sc] = { status, impact: impact || cur?.impact || null, isManual: true };
@@ -3225,15 +3305,15 @@
             }
 
             (results.violations || []).forEach(v => {
-                const d = applyDecisionToStatus(`BASIC:${v.id}`, 'fail', v.impact);
+                const d = applyDecisionToStatus(`BASIC:${v.id}`, 'fail', v.impact, decisionScope);
                 merge(extractSCFromTags(v.tags), d.status, d.impact, `BASIC:${v.id}`);
             });
             (results.incomplete || []).forEach(v => {
-                const d = applyDecisionToStatus(`BASIC:${v.id}`, 'unverified', v.impact);
+                const d = applyDecisionToStatus(`BASIC:${v.id}`, 'unverified', v.impact, decisionScope);
                 merge(extractSCFromTags(v.tags), d.status, d.impact, `BASIC:${v.id}`);
             });
             (results.passes || []).forEach(v => {
-                const d = applyDecisionToStatus(`BASIC:pass:${v.id}`, 'pass', null);
+                const d = applyDecisionToStatus(`BASIC:pass:${v.id}`, 'pass', null, decisionScope);
                 merge(extractSCFromTags(v.tags), d.status, d.impact, `BASIC:pass:${v.id}`);
             });
 
@@ -3254,7 +3334,7 @@
                      score: calculateScanAchievementRate(pass, total, unverified) };
         }
 
-        function computeDeepScore(results) {
+        function computeDeepScore(results, decisionScope = null) {
             if (!results || !results.length) return null;
             const scSet = new Set(getTargetScList());
             const rank = { fail: 0, pass: 1, unverified: 2, na: 3 };
@@ -3263,7 +3343,7 @@
             function merge(sc, status, impact, dkey) {
                 if (!sc || !scSet.has(sc)) return;
                 const cur = scMap[sc];
-                const isManual = dkey && manualDecisions.has(dkey);
+                const isManual = dkey && hasManualDecision(dkey, decisionScope);
                 if (cur && cur.isManual && !isManual) return;
                 if (isManual) {
                     scMap[sc] = { status, impact, isManual: true };
@@ -3276,9 +3356,11 @@
                 const rawStatus = r.status === 'fail' ? 'fail'
                     : r.status === 'pass' ? 'pass'
                     : r.status === 'not_applicable' ? 'na' : 'unverified';
-                const dkey = `DEEP:${r.sc}`;
-                const d = applyDecisionToStatus(dkey, rawStatus, 'serious');
-                splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, d.impact, dkey));
+                splitCompositeSc(r.sc).forEach(sc => {
+                    const dkey = `DEEP:${r.sc}:SC:${sc}`;
+                    const d = applyDecisionToStatus(dkey, rawStatus, 'serious', decisionScope);
+                    merge(sc, d.status, d.impact, dkey);
+                });
             });
 
             let fail = 0, pass = 0, na = 0, unverified = 0;
@@ -3297,7 +3379,7 @@
                      score: calculateScanAchievementRate(pass, total, unverified) };
         }
 
-        function computePlayScore(playData) {
+        function computePlayScore(playData, decisionScope = null) {
             if (!playData || !playData.length) return null;
             const scSet = new Set(getTargetScList());
             const rank = { fail: 0, pass: 1, unverified: 2, na: 3 };
@@ -3305,7 +3387,7 @@
             function merge(sc, status, dkey) {
                 if (!sc || !scSet.has(sc)) return;
                 const cur = scMap[sc];
-                const isManual = dkey && manualDecisions.has(dkey);
+                const isManual = dkey && hasManualDecision(dkey, decisionScope);
                 if (cur && cur.isManual && !isManual) return;
                 if (isManual) {
                     scMap[sc] = { status, isManual: true };
@@ -3317,9 +3399,11 @@
                 const rawStatus = r.status === 'fail' ? 'fail'
                     : r.status === 'pass' ? 'pass'
                     : r.status === 'not_applicable' ? 'na' : 'unverified';
-                const dkey = `PLAY:${r.sc}`;
-                const d = applyDecisionToStatus(dkey, rawStatus, 'serious');
-                splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, dkey));
+                splitCompositeSc(r.sc).forEach(sc => {
+                    const dkey = `PLAY:${r.sc}:SC:${sc}`;
+                    const d = applyDecisionToStatus(dkey, rawStatus, 'serious', decisionScope);
+                    merge(sc, d.status, dkey);
+                });
             });
             let fail = 0, pass = 0, na = 0, unverified = 0;
             Object.values(scMap).forEach(({ status }) => {
@@ -3335,7 +3419,7 @@
                      score: calculateScanAchievementRate(pass, total, unverified) };
         }
 
-        function computeExtScore(extData) {
+        function computeExtScore(extData, decisionScope = null) {
             if (!extData || !extData.length) return null;
             const scSet = new Set(getTargetScList());
             const rank = { fail: 0, pass: 1, unverified: 2, na: 3 };
@@ -3343,7 +3427,7 @@
             function merge(sc, status, dkey) {
                 if (!sc || !scSet.has(sc)) return;
                 const cur = scMap[sc];
-                const isManual = dkey && manualDecisions.has(dkey);
+                const isManual = dkey && hasManualDecision(dkey, decisionScope);
                 if (cur && cur.isManual && !isManual) return;
                 if (isManual) {
                     scMap[sc] = { status, isManual: true };
@@ -3355,9 +3439,11 @@
                 const rawStatus = r.status === 'fail' ? 'fail'
                     : r.status === 'pass' ? 'pass'
                     : r.status === 'not_applicable' ? 'na' : 'unverified';
-                const dkey = `EXT:${r.sc}`;
-                const d = applyDecisionToStatus(dkey, rawStatus, 'serious');
-                splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, dkey));
+                splitCompositeSc(r.sc).forEach(sc => {
+                    const dkey = `EXT:${r.sc}:SC:${sc}`;
+                    const d = applyDecisionToStatus(dkey, rawStatus, 'serious', decisionScope);
+                    merge(sc, d.status, dkey);
+                });
             });
             let fail = 0, pass = 0, na = 0, unverified = 0;
             Object.values(scMap).forEach(({ status }) => {
@@ -3373,7 +3459,7 @@
                      score: calculateScanAchievementRate(pass, total, unverified) };
         }
 
-        function computeMultiScore(aiData) {
+        function computeMultiScore(aiData, decisionScope = null) {
             if (!aiData) return null;
             const lo = { 'A': 1, 'AA': 2, 'AAA': 3 };
             const lim = lo[targetLevel] || 2;
@@ -3387,7 +3473,7 @@
                 const rawStatus = !r ? 'unverified' : r.status === 'pass' ? 'pass'
                     : r.status === 'fail' ? 'fail'
                     : r.status === 'not_applicable' ? 'na' : 'unverified';
-                const { status } = applyDecisionToStatus(`MULTI:${i}`, rawStatus, 'serious');
+                const { status } = applyDecisionToStatus(`MULTI:${i}`, rawStatus, 'serious', decisionScope);
                 if (status === 'pass') pass++;
                 else if (status === 'fail') fail++;
                 else if (status === 'na') na++;
@@ -3415,7 +3501,7 @@
             };
         }
 
-        function buildTotalScMap(basicResults, deepResults, multiAiData, playResults, extResults, navConsistency = null) {
+        function buildTotalScMap(basicResults, deepResults, multiAiData, playResults, extResults, navConsistency = null, decisionScope = null) {
             const rank = { fail: 0, pass: 1, unverified: 2, na: 3 };
             const scMap = {}; // sc → { result, impact, source }
             const lo = { 'A': 1, 'AA': 2, 'AAA': 3 };
@@ -3433,11 +3519,12 @@
             function merge(sc, result, impact, source, dkey) {
                 if (!sc || !scSet.has(sc)) return;
                 const cur = scMap[sc];
-                const isManual = dkey && manualDecisions.has(dkey);
+                const isManual = dkey && hasManualDecision(dkey, decisionScope);
+                const renderDkey = scopedDecisionKey(dkey, decisionScope);
 
                 if (cur && cur.isManual && !isManual) return;
                 if (isManual) {
-                    scMap[sc] = { result, impact: impact || null, source, dkey, isManual: true };
+                    scMap[sc] = { result, impact: impact || null, source, dkey: renderDkey, isManual: true };
                     return;
                 }
 
@@ -3445,33 +3532,33 @@
                 if (source === 'MULTI' && cur && cur.result !== 'unverified') return;
                 const authority = SC_AUTHORITY[sc];
                 if (!cur) {
-                    scMap[sc] = { result, impact: impact || null, source, dkey };
+                    scMap[sc] = { result, impact: impact || null, source, dkey: renderDkey };
                     return;
                 }
                 // 権威スキャンの結果は他のfail/passより優先
                 if (authority && source === authority) {
-                    scMap[sc] = { result, impact: impact || cur.impact || null, source, dkey };
+                    scMap[sc] = { result, impact: impact || cur.impact || null, source, dkey: renderDkey };
                     return;
                 }
                 // 現在の結果が権威スキャン由来なら上書き不可
                 if (authority && cur.source === authority) return;
                 // 通常のステータス優先度
                 if (rank[result] < rank[cur.result]) {
-                    scMap[sc] = { result, impact: impact || cur.impact || null, source, dkey };
+                    scMap[sc] = { result, impact: impact || cur.impact || null, source, dkey: renderDkey };
                 }
             }
 
             if (basicResults) {
                 (basicResults.violations || []).forEach(v => {
-                    const d = applyDecisionToStatus(`BASIC:${v.id}`, 'fail', v.impact);
+                    const d = applyDecisionToStatus(`BASIC:${v.id}`, 'fail', v.impact, decisionScope);
                     merge(extractSCFromTags(v.tags), d.status, d.impact, 'BASIC', `BASIC:${v.id}`);
                 });
                 (basicResults.passes    || []).forEach(v => {
-                    const d = applyDecisionToStatus(`BASIC:pass:${v.id}`, 'pass', null);
+                    const d = applyDecisionToStatus(`BASIC:pass:${v.id}`, 'pass', null, decisionScope);
                     merge(extractSCFromTags(v.tags), d.status, d.impact, 'BASIC', `BASIC:pass:${v.id}`);
                 });
                 (basicResults.incomplete|| []).forEach(v => {
-                    const d = applyDecisionToStatus(`BASIC:${v.id}`, 'unverified', v.impact);
+                    const d = applyDecisionToStatus(`BASIC:${v.id}`, 'unverified', v.impact, decisionScope);
                     merge(extractSCFromTags(v.tags), d.status, d.impact, 'BASIC', `BASIC:${v.id}`);
                 });
             }
@@ -3480,24 +3567,33 @@
                     if (!r.sc) return;
                     const rawStatus = r.status === 'fail' ? 'fail' : r.status === 'pass' ? 'pass'
                                : r.status === 'not_applicable' ? 'na' : 'unverified';
-                    const d = applyDecisionToStatus(`EXT:${r.sc}`, rawStatus, 'serious');
-                    splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, d.impact, 'EXT', `EXT:${r.sc}`));
+                    splitCompositeSc(r.sc).forEach(sc => {
+                        const dkey = `EXT:${r.sc}:SC:${sc}`;
+                        const d = applyDecisionToStatus(dkey, rawStatus, 'serious', decisionScope);
+                        merge(sc, d.status, d.impact, 'EXT', dkey);
+                    });
                 });
             }
             if (deepResults) {
                 deepResults.forEach(r => {
                     const rawStatus = r.status === 'fail' ? 'fail' : r.status === 'pass' ? 'pass'
                                : r.status === 'not_applicable' ? 'na' : 'unverified';
-                    const d = applyDecisionToStatus(`DEEP:${r.sc}`, rawStatus, 'serious');
-                    splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, d.impact, 'DEEP', `DEEP:${r.sc}`));
+                    splitCompositeSc(r.sc).forEach(sc => {
+                        const dkey = `DEEP:${r.sc}:SC:${sc}`;
+                        const d = applyDecisionToStatus(dkey, rawStatus, 'serious', decisionScope);
+                        merge(sc, d.status, d.impact, 'DEEP', dkey);
+                    });
                 });
             }
             if (playResults) {
                 playResults.forEach(r => {
                     const rawStatus = r.status === 'fail' ? 'fail' : r.status === 'pass' ? 'pass'
                                : r.status === 'not_applicable' ? 'na' : 'unverified';
-                    const d = applyDecisionToStatus(`PLAY:${r.sc}`, rawStatus, 'serious');
-                    splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, d.impact, 'PLAY', `PLAY:${r.sc}`));
+                    splitCompositeSc(r.sc).forEach(sc => {
+                        const dkey = `PLAY:${r.sc}:SC:${sc}`;
+                        const d = applyDecisionToStatus(dkey, rawStatus, 'serious', decisionScope);
+                        merge(sc, d.status, d.impact, 'PLAY', dkey);
+                    });
                 });
             }
             if (multiAiData) {
@@ -3509,29 +3605,32 @@
                     const rawStatus = !r ? 'unverified' : r.status === 'pass' ? 'pass'
                                : r.status === 'fail' ? 'fail'
                                : r.status === 'not_applicable' ? 'na' : 'unverified';
-                    const d = applyDecisionToStatus(`MULTI:${i}`, rawStatus, 'serious');
+                    const d = applyDecisionToStatus(`MULTI:${i}`, rawStatus, 'serious', decisionScope);
                     merge(item.ref, d.status, d.impact, 'MULTI', `MULTI:${i}`);
                 });
             }
             const navTargets = getNavConsistencyTargets(navConsistency);
             if (navTargets) {
-                const d = applyDecisionToStatus('BATCH:NAV_CONSISTENCY', navTargets.rawStatus, navTargets.impact);
-                navTargets.scs.forEach(sc => merge(sc, d.status, d.impact, 'BATCH', 'BATCH:NAV_CONSISTENCY'));
+                navTargets.scs.forEach(sc => {
+                    const dkey = `BATCH:NAV_CONSISTENCY:SC:${sc}`;
+                    const d = applyDecisionToStatus(dkey, navTargets.rawStatus, navTargets.impact, decisionScope);
+                    merge(sc, d.status, d.impact, 'BATCH', dkey);
+                });
             }
 
             // 末尾にUNCOVEREDの手動判定を追加
             getTargetScList().forEach(sc => {
                 const decKeyUncov = `UNCOVERED:${sc}`;
-                if (manualDecisions.has(decKeyUncov)) {
-                    const d = applyDecisionToStatus(decKeyUncov, 'unverified', 'serious');
+                if (hasManualDecision(decKeyUncov, decisionScope)) {
+                    const d = applyDecisionToStatus(decKeyUncov, 'unverified', 'serious', decisionScope);
                     merge(sc, d.status, d.impact, 'MANUAL', decKeyUncov);
                 }
             });
             return scMap;
         }
 
-        function computeTotalScore(basicResults, deepResults, multiAiData, playResults, extResults, navConsistency = null) {
-            const scMap = buildTotalScMap(basicResults, deepResults, multiAiData, playResults, extResults, navConsistency);
+        function computeTotalScore(basicResults, deepResults, multiAiData, playResults, extResults, navConsistency = null, decisionScope = null) {
+            const scMap = buildTotalScMap(basicResults, deepResults, multiAiData, playResults, extResults, navConsistency, decisionScope);
             const imp = { critical: 0, serious: 0, moderate: 0, minor: 0 };
             let pass = 0, na = 0, unverified = 0, fail = 0;
             Object.values(scMap).forEach(({ result, impact }) => {
@@ -3627,7 +3726,7 @@
             return '';
         }
 
-        function buildScUnifiedMap(basic, multi, deep, play, ext, scSet, lim, lo, navConsistency = null) {
+        function buildScUnifiedMap(basic, multi, deep, play, ext, scSet, lim, lo, navConsistency = null, decisionScope = null) {
             const STATUS_RANK = { fail: 0, pass: 1, unverified: 2, na: 3 };
             const SC_AUTHORITY = {
                 '2.1.1':'PLAY','2.1.2':'PLAY','2.1.4':'PLAY',
@@ -3644,7 +3743,13 @@
                     if (!map.has(targetSc)) {
                         map.set(targetSc, { sc: targetSc, consolidatedStatus: 'unverified', impact: null, primaryDkey: null, sources: [] });
                     }
-                    map.get(targetSc).sources.push({ ...sourceEntry, status, impact: impact || null });
+                    map.get(targetSc).sources.push({
+                        ...sourceEntry,
+                        dkey: scopedDecisionKey(sourceEntry.dkey, decisionScope),
+                        rawDkey: sourceEntry.dkey,
+                        status,
+                        impact: impact || null
+                    });
                 });
             }
 
@@ -3723,25 +3828,30 @@
             }
 
             if (deep) deep.forEach(r => {
-                if (!splitCompositeSc(r.sc).some(s => scSet.has(s))) return;
                 const st = r.status === 'fail' ? 'fail' : r.status === 'pass' ? 'pass' : r.status === 'not_applicable' ? 'na' : 'unverified';
-                addSource(r.sc, st, st === 'fail' ? 'serious' : null, { src: 'DEEP', type: 'deep', data: r, dkey: `DEEP:${r.sc}` });
+                splitCompositeSc(r.sc).filter(s => scSet.has(s)).forEach(sc => {
+                    addSource(sc, st, st === 'fail' ? 'serious' : null, { src: 'DEEP', type: 'deep', data: r, dkey: `DEEP:${r.sc}:SC:${sc}` });
+                });
             });
             if (play) play.forEach(r => {
-                if (!splitCompositeSc(r.sc).some(s => scSet.has(s))) return;
                 const st = r.status === 'fail' ? 'fail' : r.status === 'pass' ? 'pass' : r.status === 'not_applicable' ? 'na' : 'unverified';
-                addSource(r.sc, st, st === 'fail' ? 'serious' : null, { src: 'PLAY', type: 'play', data: r, dkey: `PLAY:${r.sc}` });
+                splitCompositeSc(r.sc).filter(s => scSet.has(s)).forEach(sc => {
+                    addSource(sc, st, st === 'fail' ? 'serious' : null, { src: 'PLAY', type: 'play', data: r, dkey: `PLAY:${r.sc}:SC:${sc}` });
+                });
             });
             if (ext) ext.forEach(r => {
-                if (!r.sc || !splitCompositeSc(r.sc).some(s => scSet.has(s))) return;
+                if (!r.sc) return;
                 const st = r.status === 'fail' ? 'fail' : r.status === 'pass' ? 'pass' : r.status === 'not_applicable' ? 'na' : 'unverified';
-                addSource(r.sc, st, st === 'fail' ? 'serious' : null, { src: 'EXT', type: 'ext', data: r, dkey: `EXT:${r.sc}` });
+                splitCompositeSc(r.sc).filter(s => scSet.has(s)).forEach(sc => {
+                    addSource(sc, st, st === 'fail' ? 'serious' : null, { src: 'EXT', type: 'ext', data: r, dkey: `EXT:${r.sc}:SC:${sc}` });
+                });
             });
             const navTargets = getNavConsistencyTargets(navConsistency);
             if (navTargets) {
-                const d = applyDecisionToStatus('BATCH:NAV_CONSISTENCY', navTargets.rawStatus, navTargets.impact);
                 navTargets.scs.forEach(sc => {
-                    addSource(sc, d.status, d.impact, { src: 'BATCH', type: 'nav', data: navConsistency, dkey: 'BATCH:NAV_CONSISTENCY' });
+                    const dkey = `BATCH:NAV_CONSISTENCY:SC:${sc}`;
+                    const d = applyDecisionToStatus(dkey, navTargets.rawStatus, navTargets.impact, decisionScope);
+                    addSource(sc, d.status, d.impact, { src: 'BATCH', type: 'nav', data: navConsistency, dkey });
                 });
             }
 
@@ -3920,6 +4030,7 @@
         function renderAllTabs(suffix = 'pc', basic = lastResults, deep = lastEnhancedResults, multi = aiResults, play = lastPlayResults, ext = lastExtResults, navConsistency = undefined) {
             const lo    = { 'A': 1, 'AA': 2, 'AAA': 3 };
             const lim   = lo[targetLevel] || 2;
+            const decisionScope = getDecisionScope(basic, suffix);
             const effectiveNavConsistency = navConsistency === undefined
                 ? (currentMode === 'batch' ? batchNavConsistency : null)
                 : navConsistency;
@@ -3938,16 +4049,16 @@
             const buckets = { critical: [], serious: [], moderate: [], minor: [], pass: [], na: [], unverified: [] };
             const scSet = new Set(getTargetScList());
             const hasMultiResults = Object.keys(multi || {}).length > 0;
-            const totalScMap = buildTotalScMap(basic, deep || null, hasMultiResults ? multi : null, play || null, ext || null, effectiveNavConsistency);
+            const totalScMap = buildTotalScMap(basic, deep || null, hasMultiResults ? multi : null, play || null, ext || null, effectiveNavConsistency, decisionScope);
 
             // BASIC/MULTI/DEEP/PLAY/EXT → SC単位統合
-            const scUnifiedMap = buildScUnifiedMap(basic, hasMultiResults ? multi : null, deep, play, ext, scSet, lim, lo, effectiveNavConsistency);
+            const scUnifiedMap = buildScUnifiedMap(basic, hasMultiResults ? multi : null, deep, play, ext, scSet, lim, lo, effectiveNavConsistency, decisionScope);
             getTargetScList().forEach(sc => {
                 const totalEntry = totalScMap[sc];
-                const fallback = totalEntry || applyDecisionToStatus(`UNCOVERED:${sc}`, 'unverified', null);
+                const fallback = totalEntry || applyDecisionToStatus(`UNCOVERED:${sc}`, 'unverified', null, decisionScope);
                 const result = totalEntry ? totalEntry.result : fallback.status;
                 const impact = totalEntry ? totalEntry.impact : fallback.impact;
-                const dkey = totalEntry?.dkey || `UNCOVERED:${sc}`;
+                const dkey = totalEntry?.dkey || scopedDecisionKey(`UNCOVERED:${sc}`, decisionScope);
                 const defaultBucket = result === 'fail' ? (impact || 'serious')
                     : result === 'pass' ? 'pass'
                     : result === 'na' ? 'na' : 'unverified';
@@ -3967,7 +4078,7 @@
             });
 
             // 各タブを描画（バッジ数はSC単位のTOTALスコアに合わせる）
-            const ts = normalizeScoreToTarget(computeTotalScore(basic, deep || null, hasMultiResults ? multi : null, play || null, ext || null, effectiveNavConsistency));
+            const ts = normalizeScoreToTarget(computeTotalScore(basic, deep || null, hasMultiResults ? multi : null, play || null, ext || null, effectiveNavConsistency, decisionScope));
             const badgeMap = {
                 critical:   ts.critical   || 0,
                 serious:    ts.serious    || 0,
@@ -4145,6 +4256,7 @@
             const scoreBodyId = options.scoreBodyId || 'scanScoreBody';
             const scoreTableId = options.scoreTableId || 'scanScoreTable';
             const scoreBlockId = options.scoreBlockId || null;
+            const viewScope = scoreBodyId === 'scanScoreBodyMobile' ? 'sp' : 'pc';
             const playEnabled = !!options.playEnabled;
             const playScore   = options.playScore || null;
             const extEnabled  = !!options.extEnabled;
@@ -4160,6 +4272,7 @@
             const navConsistency = state.navConsistency !== undefined
                 ? state.navConsistency
                 : (currentMode === 'batch' ? batchNavConsistency : null);
+            const decisionScope = options.decisionScope || getDecisionScope(basicResults, scoreBodyId === 'scanScoreBodyMobile' ? 'sp' : 'pc');
             const multiBlockingIssue = isBlockingMultiIssue(multiIssue) ? multiIssue : null;
 
             const totalScore = computeTotalScore(
@@ -4168,7 +4281,8 @@
                 multiEnabled && !multiBlockingIssue ? multiAiData : null,
                 playEnabled ? playData : null,
                 extEnabled ? extData : null,
-                navConsistency
+                navConsistency,
+                decisionScope
             );
 
             const nb = normalizeScoreToTarget(basicScore, { mode: 'scan' });
@@ -4191,22 +4305,35 @@
                 const denominator = isTotal ? (data.targetTotal || getTargetScList().length) : data.total;
                 return `${data.pass} / ${denominator}`;
             }
-            function row(labelHtml, labelClass, data, enabled, isTotal) {
+            function labelCell(scanType, labelHtml, isTotal) {
+                if (isTotal) return labelHtml;
+                const disabled = (scanInProgress || scoreRescanInProgress) ? ' disabled' : '';
+                return `<div class="score-label-content">
+                    <div class="score-label-title">${labelHtml}</div>
+                    <button type="button"
+                        class="score-rescan-btn"
+                        onclick="event.stopPropagation(); rescanFromScoreTable('${scanType}', '${viewScope}', this)"
+                        aria-label="${scanType}を個別再スキャン"
+                        title="${scanType}だけを現在のURLで再スキャン"${disabled}>再SCAN</button>
+                </div>`;
+            }
+            function row(scanType, labelHtml, labelClass, data, enabled, isTotal) {
                 const rowClass = `score-row${isTotal ? ' is-total' : ''}`;
+                const renderedLabel = labelCell(scanType, labelHtml, isTotal);
                 if (!enabled || !data) {
                     return `<tr class="${rowClass}">
-                        <td class="score-cell score-label ${labelClass}">${labelHtml}</td>
+                        <td class="score-cell score-label ${labelClass}">${renderedLabel}</td>
                         <td colspan="8" class="score-cell score-cell-empty">${isTotal ? '' : '— 未実行 —'}</td>
                     </tr>`;
                 }
                 if (data.error) {
                     return `<tr class="${rowClass}">
-                        <td class="score-cell score-label ${labelClass}">${labelHtml}</td>
+                        <td class="score-cell score-label ${labelClass}">${renderedLabel}</td>
                         <td colspan="8" class="score-cell score-cell-empty">${escapeHtml(data.error)}</td>
                     </tr>`;
                 }
                 return `<tr class="${rowClass}">
-                    <td class="score-cell score-label ${labelClass}">${labelHtml}</td>
+                    <td class="score-cell score-label ${labelClass}">${renderedLabel}</td>
                     <td class="score-cell score-main">
                         <div class="score-total">${totalText(data, isTotal)}</div>
                         <div>${scoreChip(data.score)}</div>
@@ -4231,12 +4358,12 @@
             const playLabel  = `PLAY<br><span class="score-row-sub">Playwright 検査</span>`;
             const extLabel   = `EXT<br><span class="score-row-sub">IBM ACE + 拡張検査</span>`;
             body.innerHTML =
-                row(basicLabel, 'label-basic', nb, true, false) +
-                row(deepLabel, 'label-deep', nd, deepEnabled, false) +
-                row(multiLabel, 'label-multi', multiBlockingIssue ? { error: `— ${multiBlockingIssue.label}: ${multiBlockingIssue.message || 'MULTI SCANの結果をスコアに反映できませんでした'} —` } : nm, multiEnabled, false) +
-                row(playLabel, 'label-play', np, playEnabled, false) +
-                row(extLabel, 'label-ext', ne, extEnabled, false) +
-                row('TOTAL', 'label-total', normalizeScoreToTarget(totalScore, { mode: 'total' }), true, true);
+                row('BASIC', basicLabel, 'label-basic', nb, true, false) +
+                row('DEEP', deepLabel, 'label-deep', nd, deepEnabled, false) +
+                row('MULTI', multiLabel, 'label-multi', multiBlockingIssue ? { error: `— ${multiBlockingIssue.label}: ${multiBlockingIssue.message || 'MULTI SCANの結果をスコアに反映できませんでした'} —` } : nm, multiEnabled, false) +
+                row('PLAY', playLabel, 'label-play', np, playEnabled, false) +
+                row('EXT', extLabel, 'label-ext', ne, extEnabled, false) +
+                row(null, 'TOTAL', 'label-total', normalizeScoreToTarget(totalScore, { mode: 'total' }), true, true);
 
             const table = $(scoreTableId);
             if (table) table.style.display = 'block';
@@ -4245,6 +4372,322 @@
                 if (block) block.style.display = 'block';
             }
         }
+
+        function getFilteredAiItemsForTargetLevel() {
+            const levelOrder = { 'A': 1, 'AA': 2, 'AAA': 3 };
+            const targetLevelNum = levelOrder[targetLevel] || 2;
+            return manualCheckItems
+                .map((item, index) => ({ ...item, index }))
+                .filter(item => levelOrder[item.level] <= targetLevelNum && item.aiTarget);
+        }
+
+        async function postScoreRescanJson(endpoint, body, timeoutMs) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                return await fetchApiJson(apiUrl(endpoint), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                    signal: controller.signal
+                }, endpoint);
+            } finally {
+                clearTimeout(timer);
+            }
+        }
+
+        function getScoreRescanContext(view = 'pc') {
+            const requestedView = view === 'sp' ? 'sp' : 'pc';
+            if (currentMode === 'batch' && currentBatchIdx !== null) {
+                if (requestedView === 'sp' && batchMobileResultsData[currentBatchIdx]?.success) {
+                    const record = batchMobileResultsData[currentBatchIdx];
+                    const url = record.url;
+                    return {
+                        mode: 'batch', store: 'batch-mobile', view: 'sp',
+                        url, viewportPreset: 'mobile', record,
+                        basic: record.results,
+                        deep: batchMobileEnhancedResults[url] || null,
+                        multi: batchMobileAIResults[url] || {},
+                        play: batchMobilePlayResults[url] || null,
+                        ext: batchMobileExtResults[url] || null
+                    };
+                }
+                const record = batchResultsData[currentBatchIdx];
+                if (!record?.success) return null;
+                const url = record.url;
+                const isMobileOnlyBatch = batchViewportMode === 'mobile';
+                return {
+                    mode: 'batch', store: 'batch-main', view: isMobileOnlyBatch ? 'sp' : 'pc',
+                    url, viewportPreset: isMobileOnlyBatch ? 'mobile' : 'desktop', record,
+                    basic: record.results,
+                    deep: batchEnhancedResults[url] || null,
+                    multi: batchAIResults[url] || {},
+                    play: batchPlayResults[url] || null,
+                    ext: batchExtResults[url] || null
+                };
+            }
+
+            const primaryIsMobileOnly = getViewportMode() === 'mobile' && !!lastMobileScanSnapshot?.basic;
+            if (requestedView === 'sp' || primaryIsMobileOnly) {
+                const sp = lastMobileScanSnapshot;
+                if (!sp?.basic) return null;
+                return {
+                    mode: 'single', store: 'single-mobile', view: 'sp',
+                    url: sp.basic.url || lastResults?.url || $('urlInput')?.value?.trim() || '',
+                    viewportPreset: sp.viewportPreset || 'iphone-se',
+                    basic: sp.basic,
+                    deep: sp.deep || null,
+                    multi: sp.multi || {},
+                    play: sp.play || null,
+                    ext: sp.ext || null,
+                    syncPrimary: primaryIsMobileOnly
+                };
+            }
+
+            if (!lastResults?.url) return null;
+            return {
+                mode: 'single', store: 'single-primary', view: 'pc',
+                url: lastResults.url,
+                viewportPreset: 'desktop',
+                basic: lastResults,
+                deep: lastEnhancedResults || null,
+                multi: aiResults || {},
+                play: lastPlayResults || null,
+                ext: lastExtResults || null,
+                syncPrimary: true
+            };
+        }
+
+        async function fetchScoreRescanResult(scanType, ctx) {
+            const basicAuth = getBasicAuthPayload();
+            const baseBody = { url: ctx.url, viewportPreset: ctx.viewportPreset };
+            if (basicAuth) baseBody.basicAuth = basicAuth;
+
+            if (scanType === 'BASIC') {
+                const { response, data } = await postScoreRescanJson('/api/check', {
+                    ...baseBody,
+                    level: targetLevel
+                }, 6 * 60 * 1000);
+                if (!response.ok || !data.success) throw new Error(data.message || data.error || 'BASIC SCANに失敗しました');
+                return {
+                    basic: {
+                        ...data.results,
+                        url: ctx.url,
+                        timestamp: new Date().toISOString(),
+                        level: targetLevel
+                    }
+                };
+            }
+
+            if (scanType === 'DEEP') {
+                sessionAAABeta = false;
+                const { response, data } = await postScoreRescanJson('/api/enhanced-check', {
+                    ...baseBody,
+                    includeAAA: false
+                }, 9 * 60 * 1000);
+                if (!response.ok) throw new Error(data.error || data.message || 'DEEP SCANに失敗しました');
+                return { deep: data.results || [] };
+            }
+
+            if (scanType === 'PLAY') {
+                const { response, data } = await postScoreRescanJson('/api/playwright-check', baseBody, 6 * 60 * 1000);
+                if (!response.ok) throw new Error(data.error || data.message || 'PLAY SCANに失敗しました');
+                return { play: data.results || [] };
+            }
+
+            if (scanType === 'EXT') {
+                const { response, data } = await postScoreRescanJson('/api/ext-check', baseBody, 7 * 60 * 1000);
+                if (!response.ok) throw new Error(data.error || data.message || 'EXT SCANに失敗しました');
+                return { ext: data.results || [] };
+            }
+
+            if (scanType === 'MULTI') {
+                const filteredItems = getFilteredAiItemsForTargetLevel();
+                const { response, data: rawData } = await postScoreRescanJson('/api/ai-evaluate', {
+                    url: ctx.url,
+                    checkItems: filteredItems,
+                    viewportPreset: ctx.viewportPreset,
+                    basicResults: ctx.basic || null,
+                    extResults: ctx.ext || null,
+                    deepResults: ctx.deep || null,
+                    playResults: ctx.play || null
+                }, 10 * 60 * 1000);
+                let data = rawData || {};
+                const fallback = !response.ok;
+                if (fallback) {
+                    const reason = data.message || data.error || 'MULTI SCANに失敗しました';
+                    data = {
+                        ...data,
+                        fallback: true,
+                        results: makeClientFallbackAiResults(filteredItems, reason)
+                    };
+                }
+                const rawMultiResults = Array.isArray(data.results) ? data.results : [];
+                const multi = mapAiResultsByOriginalIndex(rawMultiResults, filteredItems);
+                const multiIssue = Object.keys(multi).length === 0
+                    ? buildMultiScoreReflectionIssue(rawMultiResults.length)
+                    : buildMultiIssue(data);
+                return {
+                    multi,
+                    multiIssue,
+                    improvementPlan: normalizeImprovementPlanClient(data.improvementPlan),
+                    multiTokenLimited: fallback || !!(data.tokenLimited || data.partialResults || data.rateLimited || data.quotaExceeded)
+                };
+            }
+
+            throw new Error(`未対応のスキャン種別です: ${scanType}`);
+        }
+
+        function syncPrimaryFromMobileSnapshot() {
+            if (!lastMobileScanSnapshot?.basic) return;
+            lastResults = cloneData(lastMobileScanSnapshot.basic);
+            lastEnhancedResults = cloneData(lastMobileScanSnapshot.deep || null);
+            aiResults = lastMobileScanSnapshot.multi ? cloneData(lastMobileScanSnapshot.multi) : {};
+            lastMultiTokenLimited = !!lastMobileScanSnapshot.multiTokenLimited;
+            lastMultiIssue = cloneData(lastMobileScanSnapshot.multiIssue || null);
+            lastImprovementPlan = cloneData(lastMobileScanSnapshot.improvementPlan || null);
+            lastPlayResults = cloneData(lastMobileScanSnapshot.play || null);
+            lastExtResults = cloneData(lastMobileScanSnapshot.ext || null);
+        }
+
+        function applyScoreRescanResult(ctx, result) {
+            const has = key => Object.prototype.hasOwnProperty.call(result, key);
+            if (ctx.mode === 'batch') {
+                const url = ctx.url;
+                const isMobileStore = ctx.store === 'batch-mobile';
+                const target = isMobileStore
+                    ? {
+                        deep: batchMobileEnhancedResults,
+                        multi: batchMobileAIResults,
+                        token: batchMobileAITokenLimitedMap,
+                        issue: batchMobileAIIssueMap,
+                        plan: batchMobileImprovementPlans,
+                        play: batchMobilePlayResults,
+                        ext: batchMobileExtResults
+                    }
+                    : {
+                        deep: batchEnhancedResults,
+                        multi: batchAIResults,
+                        token: batchAITokenLimitedMap,
+                        issue: batchAIIssueMap,
+                        plan: batchImprovementPlans,
+                        play: batchPlayResults,
+                        ext: batchExtResults
+                    };
+
+                if (has('basic')) {
+                    ctx.record.results = cloneData(result.basic);
+                    ctx.record.success = true;
+                    delete ctx.record.error;
+                }
+                if (has('deep')) target.deep[url] = cloneData(result.deep);
+                if (has('multi')) {
+                    target.multi[url] = cloneData(result.multi || {});
+                    target.token[url] = !!result.multiTokenLimited;
+                    target.issue[url] = cloneData(result.multiIssue || null);
+                    target.plan[url] = cloneData(result.improvementPlan || null);
+                }
+                if (has('play')) target.play[url] = cloneData(result.play);
+                if (has('ext')) target.ext[url] = cloneData(result.ext);
+
+                renderBatchSummary();
+                showBatchDetail(currentBatchIdx);
+                return;
+            }
+
+            if (ctx.store === 'single-mobile') {
+                if (!lastMobileScanSnapshot) {
+                    lastMobileScanSnapshot = { viewportPreset: ctx.viewportPreset, basic: cloneData(ctx.basic) };
+                }
+                if (has('basic')) lastMobileScanSnapshot.basic = cloneData(result.basic);
+                if (has('deep')) lastMobileScanSnapshot.deep = cloneData(result.deep);
+                if (has('multi')) {
+                    lastMobileScanSnapshot.multi = cloneData(result.multi || {});
+                    lastMobileScanSnapshot.multiTokenLimited = !!result.multiTokenLimited;
+                    lastMobileScanSnapshot.multiIssue = cloneData(result.multiIssue || null);
+                    lastMobileScanSnapshot.improvementPlan = cloneData(result.improvementPlan || null);
+                }
+                if (has('play')) lastMobileScanSnapshot.play = cloneData(result.play);
+                if (has('ext')) lastMobileScanSnapshot.ext = cloneData(result.ext);
+                if (ctx.syncPrimary) syncPrimaryFromMobileSnapshot();
+            } else {
+                if (has('basic')) lastResults = cloneData(result.basic);
+                if (has('deep')) lastEnhancedResults = cloneData(result.deep);
+                if (has('multi')) {
+                    aiResults = cloneData(result.multi || {});
+                    lastMultiTokenLimited = !!result.multiTokenLimited;
+                    lastMultiIssue = cloneData(result.multiIssue || null);
+                    lastImprovementPlan = cloneData(result.improvementPlan || null);
+                }
+                if (has('play')) lastPlayResults = cloneData(result.play);
+                if (has('ext')) lastExtResults = cloneData(result.ext);
+            }
+
+            refreshScoreTable();
+            if (lastResults) renderAllTabs('pc');
+            if (lastMobileScanSnapshot?.basic) {
+                renderAllTabs(
+                    'sp',
+                    lastMobileScanSnapshot.basic,
+                    lastMobileScanSnapshot.deep || null,
+                    lastMobileScanSnapshot.multi || {},
+                    lastMobileScanSnapshot.play || null,
+                    lastMobileScanSnapshot.ext || null
+                );
+            }
+            renderImprovementPlanPanel();
+        }
+
+        function setScoreRescanBusy(btn, busy) {
+            document.querySelectorAll('.score-rescan-btn').forEach(button => {
+                button.disabled = busy;
+            });
+            if (!btn) return;
+            if (busy) {
+                btn.dataset.originalText = btn.textContent;
+                btn.textContent = '実行中';
+            } else {
+                btn.textContent = btn.dataset.originalText || '再SCAN';
+                delete btn.dataset.originalText;
+            }
+        }
+
+        window.rescanFromScoreTable = async function(scanType, view, btn) {
+            const normalizedScanType = String(scanType || '').toUpperCase();
+            if (!['BASIC', 'DEEP', 'MULTI', 'PLAY', 'EXT'].includes(normalizedScanType)) return;
+            if (scanInProgress || scoreRescanInProgress) return;
+            const ctx = getScoreRescanContext(view);
+            if (!ctx?.url || !ctx.basic) {
+                alert('再スキャン対象のURLが見つかりません');
+                return;
+            }
+
+            scoreRescanInProgress = true;
+            setScoreRescanBusy(btn, true);
+            try {
+                const result = await fetchScoreRescanResult(normalizedScanType, ctx);
+                applyScoreRescanResult(ctx, result);
+            } catch (error) {
+                const msg = error.name === 'AbortError'
+                    ? `${normalizedScanType} SCANがタイムアウトしました`
+                    : (error.message || `${normalizedScanType} SCANに失敗しました`);
+                if (isTimeoutLike(error, msg)) {
+                    recordTimeoutRetry({
+                        url: ctx.url,
+                        scanType: normalizedScanType,
+                        mode: ctx.mode,
+                        viewportPreset: ctx.viewportPreset,
+                        message: msg
+                    });
+                }
+                alert(`${normalizedScanType}再スキャンエラー: ${msg}`);
+                console.error(`[SCORE-RESCAN] ${normalizedScanType}`, error);
+            } finally {
+                scoreRescanInProgress = false;
+                setScoreRescanBusy(btn, false);
+                refreshScoreTable();
+            }
+        };
 
         /**
          * 統合レポート行を生成（1URL分）
@@ -4324,6 +4767,15 @@
             const targetLevelNum = levelOrder[targetLevel] || 2;
             const rows = [];
             let itemNo = 1;
+            const reportScope = getDecisionScope(results, /SP/i.test(viewLabel) ? 'sp' : 'pc');
+            const reportDecision = (rawKey, scText = null) => {
+                const direct = getManualDecision(rawKey, reportScope);
+                if (direct) return direct;
+                if (!scText) return null;
+                return splitCompositeSc(scText)
+                    .map(sc => getManualDecision(`${rawKey}:SC:${sc}`, reportScope))
+                    .find(Boolean) || null;
+            };
 
             // --- 自動検査: violations → 不合格 ---
             (results.violations || []).forEach(v => {
@@ -4350,7 +4802,7 @@
                     Array.isArray(n.target) ? n.target.join(' > ') : n.target
                 );
                 const locationStr = targets.join('\n') + (v.nodes.length > 5 ? '\n他' + (v.nodes.length - 5) + '件' : '');
-                const decB = manualDecisions.get(`BASIC:${v.id}`);
+                const decB = reportDecision(`BASIC:${v.id}`);
                 const resultB = decB ? (decB === 'ok' ? '合格' : decB === 'ng' ? '不合格' : '判定不能') : '判定不能';
                 rows.push([
                     String(itemNo++), '自動', extractSCFromTags(v.tags),
@@ -4387,7 +4839,7 @@
                     if (ai.status === 'fail' || ai.status === 'manual_required') location = '（AI評価による検出）';
                 }
                 // 手動決定（OK/NG/保留）があれば上書き
-                const dec = manualDecisions.get(`MULTI:${i}`);
+                const dec = reportDecision(`MULTI:${i}`);
                 if (dec) result = dec === 'ok' ? '合格' : dec === 'ng' ? '不合格' : '未検証';
                 rows.push([
                     String(itemNo++), ai ? 'AI' : '手動', item.ref,
@@ -4409,7 +4861,7 @@
                     const level = scLevelMap[r.sc] || (splitCompositeSc(r.sc).map(sc => scLevelMap[sc]).find(Boolean) || 'AA');
                     const violations = r.violations || [];
                     // 手動決定（未検証タブでのOK/NG/保留）で上書き
-                    const decD = manualDecisions.get(`DEEP:${r.sc}`);
+                    const decD = reportDecision(`DEEP:${r.sc}`, r.sc);
                     const resultD = decD ? (decD === 'ok' ? '合格' : decD === 'ng' ? '不合格' : enhancedStatusMap[r.status] || r.status)
                                         : enhancedStatusMap[r.status] || r.status;
                     rows.push([
@@ -4434,7 +4886,7 @@
                     if (!splitCompositeSc(r.sc).some(sc => reportScSet.has(sc))) return;
                     const level = scLevelMap[r.sc] || 'A';
                     const violations = r.violations || [];
-                    const decP = manualDecisions.get(`PLAY:${r.sc}`);
+                    const decP = reportDecision(`PLAY:${r.sc}`, r.sc);
                     const resultP = decP ? (decP === 'ok' ? '合格' : decP === 'ng' ? '不合格' : playStatusMap[r.status] || r.status)
                                         : playStatusMap[r.status] || r.status;
                     rows.push([
@@ -4460,7 +4912,7 @@
                     if (!splitCompositeSc(r.sc).some(sc => reportScSet.has(sc))) return;
                     const level = scLevelMap[r.sc] || 'A';
                     const violations = r.violations || [];
-                    const decE = manualDecisions.get(`EXT:${r.sc}`);
+                    const decE = reportDecision(`EXT:${r.sc}`, r.sc);
                     const resultE = decE ? (decE === 'ok' ? '合格' : decE === 'ng' ? '不合格' : extStatusMap[r.status] || r.status)
                                         : extStatusMap[r.status] || r.status;
                     rows.push([

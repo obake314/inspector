@@ -305,6 +305,12 @@ h1 {
   min-height: 18px;
 }
 
+.scan-state-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin: -8px 0 10px;
+}
+
 .scan-option{
   display: inline-flex;
   align-items: center;
@@ -550,6 +556,45 @@ h1 {
   line-height: 1;
   font-weight: 500;
 }
+
+.score-label-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.score-label-title {
+  min-width: 0;
+}
+
+.score-rescan-btn {
+  appearance: none;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  background: var(--color-white);
+  color: inherit;
+  cursor: pointer;
+  font-family: var(--font-basic);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+
+.score-rescan-btn:hover,
+.score-rescan-btn:focus-visible {
+  background: #f8fafc;
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.score-rescan-btn:disabled {
+  cursor: progress;
+  opacity: 0.45;
+}
+
 .score-row-sub {
     font-family: var(--font-basic);
     display: block;
