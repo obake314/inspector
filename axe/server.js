@@ -4782,25 +4782,57 @@ async function ext_check_ibm_ace(page) {
     });
     if (!Array.isArray(raw)) return { source: 'IBM_ACE', sc: null, status: 'error', violations: [], message: raw._error || 'ACE実行エラー' };
 
-    // VIOLATION/POTENTIAL のみ抽出
-    const fails = raw.filter(r => Array.isArray(r.value) && r.value[1] === 'FAIL' && r.value[0] !== 'PASS');
     // SC別に集約
     const scMap = {};
-    fails.forEach(r => {
+    raw.forEach(r => {
       const sc = ibmRuleToSC(r.ruleId);
       if (!sc) return;
-      if (!scMap[sc]) scMap[sc] = { ruleId: r.ruleId, sc, violations: [], message: r.message };
-      const loc = r.path && r.path.dom ? r.path.dom : (r.snippet ? r.snippet.slice(0, 80) : '');
-      if (loc && !scMap[sc].violations.includes(loc)) scMap[sc].violations.push(loc);
+
+      const isFail = Array.isArray(r.value) && r.value[1] === 'FAIL' && r.value[0] !== 'PASS';
+      const isPass = Array.isArray(r.value) && r.value[1] === 'PASS';
+      const isPotential = Array.isArray(r.value) && (r.value[1] === 'POTENTIAL' || r.value[1] === 'MANUAL');
+
+      if (!scMap[sc]) {
+        scMap[sc] = { sc, failRules: [], potentialRules: [], violations: [], passCount: 0, potentialCount: 0 };
+      }
+
+      if (isFail) {
+        scMap[sc].failRules.push(r.ruleId);
+        const loc = r.path && r.path.dom ? r.path.dom : (r.snippet ? r.snippet.slice(0, 80) : '');
+        if (loc && !scMap[sc].violations.includes(loc)) scMap[sc].violations.push(loc);
+      } else if (isPass) {
+        scMap[sc].passCount++;
+      } else if (isPotential) {
+        scMap[sc].potentialRules.push(r.ruleId);
+        scMap[sc].potentialCount++;
+        const loc = r.path && r.path.dom ? r.path.dom : (r.snippet ? r.snippet.slice(0, 80) : '');
+        if (loc && !scMap[sc].violations.includes(loc)) scMap[sc].violations.push(loc);
+      }
     });
-    return Object.values(scMap).map(s => ({
-      source: 'IBM_ACE',
-      sc: s.sc,
-      status: 'fail',
-      violations: s.violations.slice(0, 10),
-      message: `IBM ACE: SC ${s.sc} - ${s.ruleId} (${s.violations.length}件)`,
-      name: `IBM Equal Access: SC ${s.sc}`
-    }));
+
+    return Object.values(scMap).map(s => {
+      let status = 'unverified';
+      let message = '';
+      if (s.failRules.length > 0) {
+        status = 'fail';
+        message = `IBM ACE: SC ${s.sc} で違反を検出 (${s.violations.length}件)`;
+      } else if (s.potentialCount > 0) {
+        status = 'manual_required';
+        message = `IBM ACE: SC ${s.sc} の手動確認が必要です (${s.potentialCount}件)`;
+      } else if (s.passCount > 0) {
+        status = 'pass';
+        message = `IBM ACE: SC ${s.sc} をパスしました`;
+      }
+
+      return {
+        source: 'IBM_ACE',
+        sc: s.sc,
+        status,
+        violations: s.violations.slice(0, 10),
+        message,
+        name: `IBM Equal Access: SC ${s.sc}`
+      };
+    });
   } catch (e) {
     return [{ source: 'IBM_ACE', sc: null, status: 'error', violations: [], message: e.message }];
   }

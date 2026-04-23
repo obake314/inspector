@@ -345,7 +345,7 @@
                             <thead>
                                 <tr>
                                     <th class="label">SCAN</th>
-                                    <th class="label-all"><span>全項目数</span><br>スコア</th>
+                                    <th class="label-all"><span>対象項目/全項目数</span><br>スコア</th>
                                     <th class="label-item">緊急</th>
                                     <th class="label-item">重大</th>
                                     <th class="label-item">中程度</th>
@@ -383,7 +383,7 @@
                             <thead>
                                 <tr>
                                     <th class="label">SCAN</th>
-                                    <th class="label-all"><span>全項目数</span><br>スコア</th>
+                                    <th class="label-all"><span>対象項目/全項目数</span><br>スコア</th>
                                     <th class="label-item">緊急</th>
                                     <th class="label-item">重大</th>
                                     <th class="label-item">中程度</th>
@@ -3036,9 +3036,15 @@
             const impactRank = { critical: 0, serious: 1, moderate: 2, minor: 3 };
             const scMap = {}; // sc -> { status, impact }
 
-            function merge(sc, status, impact) {
+            function merge(sc, status, impact, dkey) {
                 if (!sc || !scSet.has(sc)) return;
                 const cur = scMap[sc];
+                const isManual = dkey && manualDecisions.has(dkey);
+                if (cur && cur.isManual && !isManual) return;
+                if (isManual) {
+                    scMap[sc] = { status, impact: impact || cur?.impact || null, isManual: true };
+                    return;
+                }
                 if (!cur || rank[status] < rank[cur.status]) {
                     scMap[sc] = { status, impact: impact || cur?.impact || null };
                     return;
@@ -3054,15 +3060,15 @@
 
             (results.violations || []).forEach(v => {
                 const d = applyDecisionToStatus(`BASIC:${v.id}`, 'fail', v.impact);
-                merge(extractSCFromTags(v.tags), d.status, d.impact);
+                merge(extractSCFromTags(v.tags), d.status, d.impact, `BASIC:${v.id}`);
             });
             (results.incomplete || []).forEach(v => {
                 const d = applyDecisionToStatus(`BASIC:${v.id}`, 'unverified', v.impact);
-                merge(extractSCFromTags(v.tags), d.status, d.impact);
+                merge(extractSCFromTags(v.tags), d.status, d.impact, `BASIC:${v.id}`);
             });
             (results.passes || []).forEach(v => {
                 const d = applyDecisionToStatus(`BASIC:pass:${v.id}`, 'pass', null);
-                merge(extractSCFromTags(v.tags), d.status, d.impact);
+                merge(extractSCFromTags(v.tags), d.status, d.impact, `BASIC:pass:${v.id}`);
             });
 
             let critical = 0, serious = 0, moderate = 0, minor = 0;
@@ -3088,9 +3094,15 @@
             const rank = { fail: 0, pass: 1, unverified: 2, na: 3 };
             const scMap = {}; // sc -> { status, impact }
 
-            function merge(sc, status, impact) {
+            function merge(sc, status, impact, dkey) {
                 if (!sc || !scSet.has(sc)) return;
                 const cur = scMap[sc];
+                const isManual = dkey && manualDecisions.has(dkey);
+                if (cur && cur.isManual && !isManual) return;
+                if (isManual) {
+                    scMap[sc] = { status, impact, isManual: true };
+                    return;
+                }
                 if (!cur || rank[status] < rank[cur.status]) scMap[sc] = { status, impact };
             }
 
@@ -3098,8 +3110,9 @@
                 const rawStatus = r.status === 'fail' ? 'fail'
                     : r.status === 'pass' ? 'pass'
                     : r.status === 'not_applicable' ? 'na' : 'unverified';
-                const d = applyDecisionToStatus(`DEEP:${r.sc}`, rawStatus, 'serious');
-                splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, d.impact));
+                const dkey = `DEEP:${r.sc}`;
+                const d = applyDecisionToStatus(dkey, rawStatus, 'serious');
+                splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, d.impact, dkey));
             });
 
             let fail = 0, pass = 0, na = 0, unverified = 0;
@@ -3123,17 +3136,24 @@
             const scSet = new Set(getTargetScList());
             const rank = { fail: 0, pass: 1, unverified: 2, na: 3 };
             const scMap = {};
-            function merge(sc, status) {
+            function merge(sc, status, dkey) {
                 if (!sc || !scSet.has(sc)) return;
                 const cur = scMap[sc];
+                const isManual = dkey && manualDecisions.has(dkey);
+                if (cur && cur.isManual && !isManual) return;
+                if (isManual) {
+                    scMap[sc] = { status, isManual: true };
+                    return;
+                }
                 if (!cur || rank[status] < rank[cur.status]) scMap[sc] = { status };
             }
             playData.forEach(r => {
                 const rawStatus = r.status === 'fail' ? 'fail'
                     : r.status === 'pass' ? 'pass'
                     : r.status === 'not_applicable' ? 'na' : 'unverified';
-                const d = applyDecisionToStatus(`PLAY:${r.sc}`, rawStatus, 'serious');
-                splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status));
+                const dkey = `PLAY:${r.sc}`;
+                const d = applyDecisionToStatus(dkey, rawStatus, 'serious');
+                splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, dkey));
             });
             let fail = 0, pass = 0, na = 0, unverified = 0;
             Object.values(scMap).forEach(({ status }) => {
@@ -3154,17 +3174,24 @@
             const scSet = new Set(getTargetScList());
             const rank = { fail: 0, pass: 1, unverified: 2, na: 3 };
             const scMap = {};
-            function merge(sc, status) {
+            function merge(sc, status, dkey) {
                 if (!sc || !scSet.has(sc)) return;
                 const cur = scMap[sc];
+                const isManual = dkey && manualDecisions.has(dkey);
+                if (cur && cur.isManual && !isManual) return;
+                if (isManual) {
+                    scMap[sc] = { status, isManual: true };
+                    return;
+                }
                 if (!cur || rank[status] < rank[cur.status]) scMap[sc] = { status };
             }
             extData.forEach(r => {
                 const rawStatus = r.status === 'fail' ? 'fail'
                     : r.status === 'pass' ? 'pass'
                     : r.status === 'not_applicable' ? 'na' : 'unverified';
-                const d = applyDecisionToStatus(`EXT:${r.sc}`, rawStatus, 'serious');
-                splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status));
+                const dkey = `EXT:${r.sc}`;
+                const d = applyDecisionToStatus(dkey, rawStatus, 'serious');
+                splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, dkey));
             });
             let fail = 0, pass = 0, na = 0, unverified = 0;
             Object.values(scMap).forEach(({ status }) => {
@@ -3240,6 +3267,14 @@
             function merge(sc, result, impact, source, dkey) {
                 if (!sc || !scSet.has(sc)) return;
                 const cur = scMap[sc];
+                const isManual = dkey && manualDecisions.has(dkey);
+
+                if (cur && cur.isManual && !isManual) return;
+                if (isManual) {
+                    scMap[sc] = { result, impact: impact || null, source, dkey, isManual: true };
+                    return;
+                }
+
                 // MULTIはunverifiedのSCのみ補完する（他スキャンの確定結果を上書きしない）
                 if (source === 'MULTI' && cur && cur.result !== 'unverified') return;
                 const authority = SC_AUTHORITY[sc];
@@ -3317,6 +3352,15 @@
                 const d = applyDecisionToStatus('BATCH:NAV_CONSISTENCY', navTargets.rawStatus, navTargets.impact);
                 navTargets.scs.forEach(sc => merge(sc, d.status, d.impact, 'BATCH', 'BATCH:NAV_CONSISTENCY'));
             }
+
+            // 末尾にUNCOVEREDの手動判定を追加
+            getTargetScList().forEach(sc => {
+                const decKeyUncov = `UNCOVERED:${sc}`;
+                if (manualDecisions.has(decKeyUncov)) {
+                    const d = applyDecisionToStatus(decKeyUncov, 'unverified', 'serious');
+                    merge(sc, d.status, d.impact, 'MANUAL', decKeyUncov);
+                }
+            });
             return scMap;
         }
 
