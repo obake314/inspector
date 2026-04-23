@@ -3292,10 +3292,11 @@ ${JSON.stringify(evaluationItems, null, 2)}
 1. 評価対象配列にない項目は評価しない。
 2. 各項目の verificationMethod に従って判定する。
 3. relevantToolFindings に fail がある場合は、その事実を尊重して違反内容と改善案を具体化する。
-4. relevantToolFindings に pass があり、HTML/画面にも矛盾が無い場合は、同じSCで新たな違反を作らない。
-5. not_applicable は、該当要素や該当フローがページに存在しない根拠を書ける場合だけ使う。
-6. pass/fail には、HTML断片・CSSセレクタ・画面上の文言・自動ツール名など、再現可能なevidenceを必ず入れる。
-7. 「問題があります」「確認が必要です」だけの汎用文は禁止。
+4. relevantToolFindings に fail または unverified がある場合は、1〜2文の簡潔な修正アクションを suggestion に必ず入れる。
+5. relevantToolFindings に pass があり、HTML/画面にも矛盾が無い場合は、同じSCで新たな違反を作らない。
+6. not_applicable は、該当要素や該当フローがページに存在しない根拠を書ける場合だけ使う。
+7. pass/fail には、HTML断片・CSSセレクタ・画面上の文言・自動ツール名など、再現可能なevidenceを必ず入れる。
+8. 「問題があります」「確認が必要です」だけの汎用文は禁止。
 
 ## 出力形式（JSONオブジェクトのみ、説明不要）
 {
@@ -3307,7 +3308,7 @@ ${JSON.stringify(evaluationItems, null, 2)}
     "reason": "具体的な判断理由。検出内容を1文で明記",
     "evidence": "HTML断片、CSSセレクタ、画面上の文言、自動ツール結果などの根拠",
     "selector": "該当するCSSセレクタ。特定不能なら空文字",
-    "suggestion": "改善案。pass/not_applicableなら空文字"
+    "suggestion": "修正アクション。fail/manual_requiredなら1〜2文で具体的に書く。pass/not_applicableなら空文字"
   }
   ],
   "improvementPlan": {

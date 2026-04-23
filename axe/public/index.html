@@ -278,11 +278,11 @@
                             <span class="scan-option-text scan-option-text-multi">MULTI</span>
                         </label>
                         <label class="scan-option" id="playScanLabel" title="Playwright（ヘッドレスブラウザ）でキーボード操作・アクセシビリティツリー・フォーカス表示を実際に検証します。&#10;確認項目: SC 2.4.2(ページタイトル), 3.1.1(ページ言語), 2.1.4(文字キーショートカット), 1.3.5(入力目的), 3.3.2(フォームラベル), 2.5.3(名前の中のラベル), 4.1.2(アクセシブルネーム), 4.1.3(ステータスメッセージ), 2.4.6(見出し・ラベル), 1.3.1(情報と関係性), 2.4.7(フォーカス表示), 2.1.1(キーボード到達性), 2.1.2(キーボードトラップ), 2.4.3(フォーカス順序), 2.4.11(フォーカスが隠れない)&#10;APIコスト不要・所要時間：3〜5分">
-                            <input type="checkbox" id="playScanOpt" class="scan-option-checkbox">
+                            <input type="checkbox" id="playScanOpt" class="scan-option-checkbox" checked>
                             <span class="scan-option-text scan-option-text-play">PLAYWRIGHT</span>
                         </label>
                         <label class="scan-option" id="extScanLabel" title="IBM Equal Access Checker + Lighthouse相当の独自検査 + CDP（Chrome DevTools Protocol）イベントリスナー解析を組み合わせた拡張検査です。&#10;IBM Equal Access: axe-coreとは異なるルールセットで追加の違反を検出&#10;ネイティブ検査: SC 4.1.1(重複ID), 2.4.1(ランドマーク), 2.1.1(スクロール領域), 2.4.6(見出し順序)&#10;CDP拡張: SC 2.1.4(キーボードイベントリスナー検出)&#10;APIコスト不要・所要時間：2〜4分">
-                            <input type="checkbox" id="extScanOpt" class="scan-option-checkbox">
+                            <input type="checkbox" id="extScanOpt" class="scan-option-checkbox" checked>
                             <span class="scan-option-text scan-option-text-ext">EXT</span>
                         </label>
                     </div>
@@ -308,11 +308,11 @@
                             <span class="scan-option-text scan-option-text-multi">MULTI</span>
                         </label>
                         <label class="scan-option" id="batchPlayLabel" title="Playwright（ヘッドレスブラウザ）でキーボード操作・アクセシビリティツリー・フォーカス表示を実際に検証します。&#10;確認項目: SC 2.4.2, 3.1.1, 2.1.4, 1.3.5, 3.3.2, 2.5.3, 4.1.2, 4.1.3, 2.4.6, 1.3.1, 2.4.7, 2.1.1, 2.1.2, 2.4.3, 2.4.11&#10;APIコスト不要・所要時間：3〜5分（URL1件あたり）">
-                            <input type="checkbox" id="batchPlayOpt" class="scan-option-checkbox">
+                            <input type="checkbox" id="batchPlayOpt" class="scan-option-checkbox" checked>
                             <span class="scan-option-text scan-option-text-play">PLAYWRIGHT</span>
                         </label>
                         <label class="scan-option" id="batchExtLabel" title="IBM Equal Access + Lighthouse相当検査 + CDP拡張。APIコスト不要・所要時間：2〜4分（URL1件あたり）">
-                            <input type="checkbox" id="batchExtOpt" class="scan-option-checkbox">
+                            <input type="checkbox" id="batchExtOpt" class="scan-option-checkbox" checked>
                             <span class="scan-option-text scan-option-text-ext">EXT</span>
                         </label>
                         <span class="batch-count" id="batchCount">0 / 10</span>
@@ -623,13 +623,14 @@
         }
 
         // SC単位で集計したスコアテーブルと一致するstatsを生成
-        function buildStats(basic, deep, multi, play, ext) {
+        function buildStats(basic, deep, multi, play, ext, navConsistency = null) {
             const ts = computeTotalScore(
                 basic || null,
                 deep || null,
                 Object.keys(multi || {}).length > 0 ? multi : null,
                 play || null,
-                ext || null
+                ext || null,
+                navConsistency
             );
             return {
                 total: getTargetScList().length,
@@ -1215,7 +1216,7 @@
 
             // PC シート
             const pcRows = buildReportRows(lastResults, lastResults.url, aiResults, lastEnhancedResults, batchNavConsistency, lastPlayResults, lastExtResults, lastImprovementPlan, 'PC VIEW');
-            const pcStats = buildStats(lastResults, lastEnhancedResults, aiResults, lastPlayResults, lastExtResults);
+            const pcStats = buildStats(lastResults, lastEnhancedResults, aiResults, lastPlayResults, lastExtResults, batchNavConsistency);
             const pcMeta = [
                 ['URL', lastResults.url],
                 ['検査日時', new Date().toLocaleString('ja-JP')],
@@ -1682,6 +1683,7 @@
             batchMobileImprovementPlans = {};
             batchMobilePlayResults = {};
             batchMobileExtResults = {};
+            batchMobileNavConsistency = null;
             batchViewportMode = 'desktop';
             lastMobileScanSnapshot = null;
             timeoutRetryQueue = [];
@@ -1743,7 +1745,7 @@
             });
             ['playScanOpt','batchPlayOpt','extScanOpt','batchExtOpt'].forEach(id => {
                 const el = $(id);
-                if (el) { el.disabled = false; }
+                if (el) { el.disabled = false; el.checked = true; }
             });
             checkSheetsStatusFn(); // Gemini/Sheets状態を再チェックしてMULTI等を適切に有効化
             setMode(currentMode);
@@ -1773,6 +1775,7 @@
         let batchMobileImprovementPlans = {};     // url → SP improvement plan
         let batchMobilePlayResults = {};          // url → SP play results
         let batchMobileExtResults = {};           // url → SP ext results
+        let batchMobileNavConsistency = null;      // SP用ナビ一貫性（PC+SP時のみ）
         let batchViewportMode = 'desktop';        // 実行時のviewportMode
 
         function renderNavConsistency() {
@@ -1820,7 +1823,8 @@
                     deep,
                     hasMulti && !isBlockingMultiIssue(multiIssue) ? (multi || {}) : null,
                     play,
-                    ext
+                    ext,
+                    batchNavConsistency
                 ));
                 const scoreClass = sc.score >= 80 ? 'is-high' : sc.score >= 50 ? 'is-mid' : 'is-low';
                 const d = (n, tone) => n > 0
@@ -1933,6 +1937,7 @@
                     scoreBodyId: 'scanScoreBody', scoreTableId: 'scanScoreTable', scoreBlockId: 'scoreBlockDesktop',
                     playEnabled: playEnabledBatch, playScore: playEnabledBatch ? computePlayScore(lastPlayResults) : null,
                     extEnabled: extEnabledBatch, extScore: extEnabledBatch ? computeExtScore(lastExtResults) : null,
+                    state: { navConsistency: batchNavConsistency },
                     multiTokenLimited: lastMultiTokenLimited,
                     multiIssue: lastMultiIssue
                 }
@@ -1972,13 +1977,14 @@
                             deepResults: mobileEnhanced,
                             multiAiData: mobileAI,
                             playResults: mobilePlay,
-                            extResults: mobileExt
+                            extResults: mobileExt,
+                            navConsistency: batchMobileNavConsistency
                         },
                         multiTokenLimited: mobileTokenLimited,
                         multiIssue: mobileIssue
                     }
                 );
-                renderAllTabs('sp', mobileR.results, mobileEnhanced, mobileAI, mobilePlay, mobileExt);
+                renderAllTabs('sp', mobileR.results, mobileEnhanced, mobileAI, mobilePlay, mobileExt, batchMobileNavConsistency);
             } else {
                 const mb = $('scoreBlockMobile');
                 if (mb) mb.style.display = 'none';
@@ -2036,6 +2042,7 @@
             const phasesPerView = 1 + (doEnhanced ? 1 : 0) + (doAI ? 1 : 0) + (doPlayBatch ? 1 : 0) + (doExtBatch ? 1 : 0);
             const totalPhases = phasesPerView * viewCount;
             batchViewportMode = viewportMode;
+            batchMobileNavConsistency = null;
 
             // フェーズチップを描画
             function buildPhaseLabels() {
@@ -2409,6 +2416,7 @@
                         batchMobileImprovementPlans      = sp.improvementPlanMap;
                         batchMobilePlayResults          = sp.playResultsMap;
                         batchMobileExtResults           = sp.extResultsMap;
+                        batchMobileNavConsistency       = sp.navConsistency;
                     } else {
                         // SPのみ: メイン変数として扱う
                         batchResultsData         = sp.resultsData;
@@ -2420,6 +2428,7 @@
                         batchImprovementPlans    = sp.improvementPlanMap;
                         batchPlayResults         = sp.playResultsMap;
                         batchExtResults          = sp.extResultsMap;
+                        batchMobileNavConsistency = null;
                         renderBatchSummary();
                         renderBatchNav(0);
                         $('batchResults').style.display = 'block';
@@ -2977,7 +2986,8 @@
                 const unverified = Math.max(0, fixedTotal - covered);
                 return {
                     ...score,
-                    total: fixedTotal,
+                    total: covered,
+                    targetTotal: fixedTotal,
                     critical,
                     serious,
                     moderate,
@@ -2992,6 +3002,7 @@
                 const ownTotal = Math.max(score.total ?? covered, covered);
                 return {
                     ...score,
+                    targetTotal: ownTotal,
                     total: ownTotal,
                     critical,
                     serious,
@@ -3005,6 +3016,7 @@
             }
             return {
                 ...score,
+                targetTotal: fixedTotal,
                 total: fixedTotal,
                 critical,
                 serious,
@@ -3196,7 +3208,21 @@
                      score: calculateScanAchievementRate(pass, total, unverified) };
         }
 
-        function buildTotalScMap(basicResults, deepResults, multiAiData, playResults, extResults) {
+        function getNavConsistencyTargets(navConsistency) {
+            const nc = navConsistency || null;
+            if (!nc) return null;
+            const scs = splitCompositeSc(nc.sc || '3.2.3 / 3.2.4');
+            const rawStatus = nc.result === 'pass' ? 'pass'
+                : nc.result === 'not_applicable' ? 'na'
+                : nc.result === 'manual_required' ? 'unverified' : 'fail';
+            return {
+                scs: scs.length ? scs : ['3.2.3', '3.2.4'],
+                rawStatus,
+                impact: rawStatus === 'fail' ? 'serious' : null
+            };
+        }
+
+        function buildTotalScMap(basicResults, deepResults, multiAiData, playResults, extResults, navConsistency = null) {
             const rank = { fail: 0, pass: 1, unverified: 2, na: 3 };
             const scMap = {}; // sc → { result, impact, source }
             const lo = { 'A': 1, 'AA': 2, 'AAA': 3 };
@@ -3208,6 +3234,7 @@
                 '2.1.1':'PLAY','2.1.2':'PLAY','2.1.4':'PLAY',
                 '2.4.3':'PLAY','2.4.7':'PLAY','2.4.11':'PLAY','2.4.12':'PLAY',
                 '4.1.2':'EXT','4.1.3':'EXT','1.3.1':'EXT','1.3.5':'EXT',
+                '3.2.3':'BATCH','3.2.4':'BATCH'
             };
 
             function merge(sc, result, impact, source, dkey) {
@@ -3285,11 +3312,16 @@
                     merge(item.ref, d.status, d.impact, 'MULTI', `MULTI:${i}`);
                 });
             }
+            const navTargets = getNavConsistencyTargets(navConsistency);
+            if (navTargets) {
+                const d = applyDecisionToStatus('BATCH:NAV_CONSISTENCY', navTargets.rawStatus, navTargets.impact);
+                navTargets.scs.forEach(sc => merge(sc, d.status, d.impact, 'BATCH', 'BATCH:NAV_CONSISTENCY'));
+            }
             return scMap;
         }
 
-        function computeTotalScore(basicResults, deepResults, multiAiData, playResults, extResults) {
-            const scMap = buildTotalScMap(basicResults, deepResults, multiAiData, playResults, extResults);
+        function computeTotalScore(basicResults, deepResults, multiAiData, playResults, extResults, navConsistency = null) {
+            const scMap = buildTotalScMap(basicResults, deepResults, multiAiData, playResults, extResults, navConsistency);
             const imp = { critical: 0, serious: 0, moderate: 0, minor: 0 };
             let pass = 0, na = 0, unverified = 0, fail = 0;
             Object.values(scMap).forEach(({ result, impact }) => {
@@ -3357,12 +3389,13 @@
             return '';
         }
 
-        function buildScUnifiedMap(basic, multi, deep, play, ext, scSet, lim, lo) {
+        function buildScUnifiedMap(basic, multi, deep, play, ext, scSet, lim, lo, navConsistency = null) {
             const STATUS_RANK = { fail: 0, pass: 1, unverified: 2, na: 3 };
             const SC_AUTHORITY = {
                 '2.1.1':'PLAY','2.1.2':'PLAY','2.1.4':'PLAY',
                 '2.4.3':'PLAY','2.4.7':'PLAY','2.4.11':'PLAY','2.4.12':'PLAY',
                 '4.1.2':'EXT','4.1.3':'EXT','1.3.1':'EXT','1.3.5':'EXT',
+                '3.2.3':'BATCH','3.2.4':'BATCH'
             };
             const map = new Map(); // SC → { consolidatedStatus, impact, primaryDkey, sources[] }
 
@@ -3466,6 +3499,13 @@
                 const st = r.status === 'fail' ? 'fail' : r.status === 'pass' ? 'pass' : r.status === 'not_applicable' ? 'na' : 'unverified';
                 addSource(r.sc, st, st === 'fail' ? 'serious' : null, { src: 'EXT', type: 'ext', data: r, dkey: `EXT:${r.sc}` });
             });
+            const navTargets = getNavConsistencyTargets(navConsistency);
+            if (navTargets) {
+                const d = applyDecisionToStatus('BATCH:NAV_CONSISTENCY', navTargets.rawStatus, navTargets.impact);
+                navTargets.scs.forEach(sc => {
+                    addSource(sc, d.status, d.impact, { src: 'BATCH', type: 'nav', data: navConsistency, dkey: 'BATCH:NAV_CONSISTENCY' });
+                });
+            }
 
             map.forEach(finalizeEntry);
             return map;
@@ -3492,15 +3532,23 @@
                 <button class="decision-btn${dec==='hold'?' active-hold':''}" onclick="setDecision('${escapeHtml(dk)}','hold',this)">保留</button>
             </div>`;
 
-            // ソース別エビデンスセクション（課題2: 検出ツール・内容・箇所を明記）
-            const evidenceSections = sources.map(({ src, type, data, status }) => {
+            const uniq = (items) => [...new Set((items || []).map(v => String(v || '').trim()).filter(Boolean))];
+            const normalizeEvidenceKey = (value) => String(value || '')
+                .replace(/\s+/g, ' ')
+                .replace(/^(セレクタ|根拠|対象URL|比較URL):\s*/i, '')
+                .trim()
+                .toLowerCase();
+
+            function buildEvidenceRecord({ src, type, data, status }) {
                 let summary = '';
                 let countText = '';
                 let locs = [];
+                let suggestions = [];
                 let toolLabel = src === 'BASIC' ? 'axe-core'
                     : src === 'MULTI' ? 'AI検査'
                     : src === 'DEEP' ? 'Puppeteer検査'
-                    : src === 'PLAY' ? 'Playwright検査' : 'EXT検査';
+                    : src === 'PLAY' ? 'Playwright検査'
+                    : src === 'BATCH' ? '一括ページ比較' : 'EXT検査';
                 const statusLabel = status === 'fail' ? '不合格'
                     : status === 'pass' ? '合格'
                     : status === 'na' ? '該当なし' : '未検証';
@@ -3521,9 +3569,9 @@
                     countText = `${statusLabel}${confidence}`;
                     locs = [
                         r.selector ? `セレクタ: ${r.selector}` : '',
-                        r.evidence ? `根拠: ${r.evidence}` : '',
-                        r.suggestion ? `改善案: ${r.suggestion}` : ''
+                        r.evidence ? `根拠: ${r.evidence}` : ''
                     ].filter(Boolean);
+                    suggestions = r.suggestion ? [r.suggestion] : [];
                 } else if (type === 'deep') {
                     summary = data.message || '';
                     locs = (data.violations || []).slice(0, 8).map(v => String(v));
@@ -3539,16 +3587,80 @@
                     toolLabel = data.source === 'IBM_ACE' ? 'IBM Equal Access'
                         : data.source === 'EXT_NATIVE' ? 'ネイティブDOM検査'
                         : data.source === 'EXT_CDP' ? 'CDP検査' : 'EXT検査';
+                } else if (type === 'nav') {
+                    const compared = data.comparedUrls || [];
+                    const issues = data.issues || [];
+                    summary = status === 'pass'
+                        ? '全ページでナビゲーション構造が一致しています'
+                        : (issues[0]?.message || data.message || 'ナビゲーション構造に差分があります');
+                    countText = compared.length ? `比較URL：${compared.length}件` : '';
+                    const issueRows = issues.flatMap(iss => [
+                        iss.message || '',
+                        iss.urls?.length ? `対象URL: ${iss.urls.join(' ↔ ')}` : '',
+                        iss.missing?.length ? `消えたリンク: ${iss.missing.join(', ')}` : '',
+                        iss.added?.length ? `追加リンク: ${iss.added.join(', ')}` : ''
+                    ]).filter(Boolean);
+                    locs = (issueRows.length ? issueRows : compared.map(u => `比較URL: ${u}`)).slice(0, 8);
                 }
-                const srcBadge = `<span class="badge ${srcBadgeClasses[src] || ''}">${src}</span>`;
-                const locHtml = locs.length
-                    ? `<div class="item-locations"><div class="item-locations-title">検出箇所</div>${locs.map(l => `<div class="location-row">${escapeHtml(String(l))}</div>`).join('')}</div>`
+                return {
+                    srcLabels: [src],
+                    toolLabels: [toolLabel],
+                    statusLabels: [statusLabel],
+                    summaries: summary ? [summary] : [],
+                    countTexts: countText ? [countText] : [],
+                    locs: uniq(locs).slice(0, 8),
+                    suggestions: uniq(suggestions).slice(0, 4),
+                    normLocs: new Set(uniq(locs).map(normalizeEvidenceKey).filter(Boolean)),
+                    normSummaries: new Set(summary ? [normalizeEvidenceKey(summary)].filter(Boolean) : [])
+                };
+            }
+
+            function mergeEvidenceRecords(records) {
+                const groups = [];
+                records.forEach(record => {
+                    const existing = groups.find(group => {
+                        const sameSummary = [...record.normSummaries].some(s => group.normSummaries.has(s));
+                        const sameLocation = [...record.normLocs].some(l => group.normLocs.has(l));
+                        return sameSummary || sameLocation;
+                    });
+                    const target = existing || {
+                        srcLabels: [], toolLabels: [], statusLabels: [], summaries: [],
+                        countTexts: [], locs: [], suggestions: [],
+                        normLocs: new Set(), normSummaries: new Set()
+                    };
+                    target.srcLabels = uniq([...target.srcLabels, ...record.srcLabels]);
+                    target.toolLabels = uniq([...target.toolLabels, ...record.toolLabels]);
+                    target.statusLabels = uniq([...target.statusLabels, ...record.statusLabels]);
+                    target.summaries = uniq([...target.summaries, ...record.summaries]).slice(0, 4);
+                    target.countTexts = uniq([...target.countTexts, ...record.countTexts]).slice(0, 4);
+                    target.locs = uniq([...target.locs, ...record.locs]).slice(0, 8);
+                    target.suggestions = uniq([...target.suggestions, ...record.suggestions]).slice(0, 4);
+                    record.normLocs.forEach(v => target.normLocs.add(v));
+                    record.normSummaries.forEach(v => target.normSummaries.add(v));
+                    if (!existing) groups.push(target);
+                });
+                return groups;
+            }
+
+            // ソース別エビデンスは同一メッセージ/同一箇所を名寄せして表示する。
+            const evidenceSections = mergeEvidenceRecords(sources.map(buildEvidenceRecord)).map(record => {
+                const srcBadges = record.srcLabels.map(src => `<span class="badge ${srcBadgeClasses[src] || ''}">${src}</span>`).join('');
+                const toolText = uniq(record.toolLabels).join(' / ');
+                const statusText = uniq(record.statusLabels).join(' / ');
+                const summaryText = record.summaries.join(' / ');
+                const countText = record.countTexts.join(' / ');
+                const locHtml = record.locs.length
+                    ? `<div class="item-locations"><div class="item-locations-title">検出箇所</div>${record.locs.map(l => `<div class="location-row">${escapeHtml(String(l))}</div>`).join('')}</div>`
+                    : '';
+                const adviceHtml = record.suggestions.length
+                    ? `<div class="item-advice"><div class="item-advice-title">AI改善案</div>${record.suggestions.map(s => `<div class="item-advice-text">${escapeHtml(s)}</div>`).join('')}</div>`
                     : '';
                 return `<div class="item-source-section">
-                    <div class="item-source-header">${srcBadge}<span class="item-source-tool">${escapeHtml(toolLabel)}</span><span class="item-source-tool">${escapeHtml(statusLabel)}</span></div>
-                    ${summary ? `<div class="item-summary">${escapeHtml(summary)}</div>` : ''}
+                    <div class="item-source-header">${srcBadges}<span class="item-source-tool">${escapeHtml(toolText)}</span><span class="item-source-tool">${escapeHtml(statusText)}</span></div>
+                    ${summaryText ? `<div class="item-summary">${escapeHtml(summaryText)}</div>` : ''}
                     ${countText ? `<div class="item-count">${escapeHtml(countText)}</div>` : ''}
                     ${locHtml}
+                    ${adviceHtml}
                 </div>`;
             }).join('');
 
@@ -3567,9 +3679,12 @@
         // ============================================================
         // 全タブ再描画（BASIC + DEEP + MULTI の結果をマージ）
         // ============================================================
-        function renderAllTabs(suffix = 'pc', basic = lastResults, deep = lastEnhancedResults, multi = aiResults, play = lastPlayResults, ext = lastExtResults) {
+        function renderAllTabs(suffix = 'pc', basic = lastResults, deep = lastEnhancedResults, multi = aiResults, play = lastPlayResults, ext = lastExtResults, navConsistency = undefined) {
             const lo    = { 'A': 1, 'AA': 2, 'AAA': 3 };
             const lim   = lo[targetLevel] || 2;
+            const effectiveNavConsistency = navConsistency === undefined
+                ? (currentMode === 'batch' ? batchNavConsistency : null)
+                : navConsistency;
 
             // decisionを適用してバケットを決定するヘルパー
             // defaultBucket: 元の振り分け先('critical'/'serious'/'moderate'/'minor'/'pass'/'na'/'unverified')
@@ -3585,10 +3700,10 @@
             const buckets = { critical: [], serious: [], moderate: [], minor: [], pass: [], na: [], unverified: [] };
             const scSet = new Set(getTargetScList());
             const hasMultiResults = Object.keys(multi || {}).length > 0;
-            const totalScMap = buildTotalScMap(basic, deep || null, hasMultiResults ? multi : null, play || null, ext || null);
+            const totalScMap = buildTotalScMap(basic, deep || null, hasMultiResults ? multi : null, play || null, ext || null, effectiveNavConsistency);
 
             // BASIC/MULTI/DEEP/PLAY/EXT → SC単位統合
-            const scUnifiedMap = buildScUnifiedMap(basic, hasMultiResults ? multi : null, deep, play, ext, scSet, lim, lo);
+            const scUnifiedMap = buildScUnifiedMap(basic, hasMultiResults ? multi : null, deep, play, ext, scSet, lim, lo, effectiveNavConsistency);
             getTargetScList().forEach(sc => {
                 const totalEntry = totalScMap[sc];
                 const fallback = totalEntry || applyDecisionToStatus(`UNCOVERED:${sc}`, 'unverified', null);
@@ -3613,10 +3728,8 @@
                 }
             });
 
-            // SC 3.2.3/3.2.4 ナビゲーション一貫性はカード表示せず情報バーで表示
-
             // 各タブを描画（バッジ数はSC単位のTOTALスコアに合わせる）
-            const ts = normalizeScoreToTarget(computeTotalScore(basic, deep || null, hasMultiResults ? multi : null, play || null, ext || null));
+            const ts = normalizeScoreToTarget(computeTotalScore(basic, deep || null, hasMultiResults ? multi : null, play || null, ext || null, effectiveNavConsistency));
             const badgeMap = {
                 critical:   ts.critical   || 0,
                 serious:    ts.serious    || 0,
@@ -3806,6 +3919,9 @@
             const multiAiData = state.multiAiData !== undefined ? state.multiAiData : (multiEnabled && Object.keys(aiResults).length > 0 ? aiResults : null);
             const playData    = state.playResults  !== undefined ? state.playResults  : (playEnabled ? lastPlayResults : null);
             const extData     = state.extResults   !== undefined ? state.extResults   : (extEnabled ? lastExtResults : null);
+            const navConsistency = state.navConsistency !== undefined
+                ? state.navConsistency
+                : (currentMode === 'batch' ? batchNavConsistency : null);
             const multiBlockingIssue = isBlockingMultiIssue(multiIssue) ? multiIssue : null;
 
             const totalScore = computeTotalScore(
@@ -3813,7 +3929,8 @@
                 deepEnabled ? deepResults : null,
                 multiEnabled && !multiBlockingIssue ? multiAiData : null,
                 playEnabled ? playData : null,
-                extEnabled ? extData : null
+                extEnabled ? extData : null,
+                navConsistency
             );
 
             const nb = normalizeScoreToTarget(basicScore, { mode: 'scan' });
@@ -3832,6 +3949,10 @@
                 if (n > 0) return `<span class="score-num is-pos tone-${tone}">${n}</span>`;
                 return `<span class="score-num is-zero">${n}</span>`;
             }
+            function totalText(data) {
+                const targetTotal = data.targetTotal || getTargetScList().length;
+                return `${data.total} / ${targetTotal}`;
+            }
             function row(labelHtml, labelClass, data, enabled, isTotal) {
                 const rowClass = `score-row${isTotal ? ' is-total' : ''}`;
                 if (!enabled || !data) {
@@ -3849,7 +3970,7 @@
                 return `<tr class="${rowClass}">
                     <td class="score-cell score-label ${labelClass}">${labelHtml}</td>
                     <td class="score-cell score-main">
-                        <div class="score-total">${data.total}</div>
+                        <div class="score-total">${totalText(data)}</div>
                         <div>${scoreChip(data.score)}</div>
                     </td>
                     <td class="score-cell">${num(data.critical, 'critical')}</td>
@@ -4117,12 +4238,18 @@
             // --- SC 3.2.3/3.2.4 ナビゲーション一貫性（一括検査のみ）---
             if (navConsistency) {
                 const nc = navConsistency;
+                const issueDetails = (nc.issues || []).map(iss => [
+                    iss.message || '',
+                    iss.urls?.length ? `対象URL: ${iss.urls.join(' ↔ ')}` : '',
+                    iss.missing?.length ? `消えたリンク: ${iss.missing.join(', ')}` : '',
+                    iss.added?.length ? `追加リンク: ${iss.added.join(', ')}` : ''
+                ].filter(Boolean).join('\n')).filter(Boolean).join('\n\n');
                 rows.push([
                     String(itemNo++), '一括', nc.sc, nc.title, 'AA',
                     nc.result === 'pass' ? '合格' : nc.result === 'not_applicable' ? '対象外' : '不合格',
                     (nc.comparedUrls || []).join('\n'),
                     String((nc.issues || []).length) || '', '',
-                    (nc.issues || []).join('\n') || (nc.result === 'pass' ? 'ナビゲーション構造は一貫しています' : ''),
+                    issueDetails || (nc.result === 'pass' ? 'ナビゲーション構造は一貫しています' : ''),
                     ''
                 ]);
             }
@@ -4220,7 +4347,7 @@
                     const mobileR = hasMobile ? batchMobileResultsData[i] : null;
                     let mergedRows;
                     if (mobileR?.success) {
-                        const spRows = buildReportRows(mobileR.results, mobileR.url, batchMobileAIResults[mobileR.url] || {}, batchMobileEnhancedResults[mobileR.url] || null, null, batchMobilePlayResults[mobileR.url] || null, batchMobileExtResults[mobileR.url] || null, batchMobileImprovementPlans[mobileR.url] || null, 'SP VIEW');
+                        const spRows = buildReportRows(mobileR.results, mobileR.url, batchMobileAIResults[mobileR.url] || {}, batchMobileEnhancedResults[mobileR.url] || null, batchMobileNavConsistency, batchMobilePlayResults[mobileR.url] || null, batchMobileExtResults[mobileR.url] || null, batchMobileImprovementPlans[mobileR.url] || null, 'SP VIEW');
                         const sep = Array(11).fill('');
                         mergedRows = [
                             Object.assign([...sep], { 0: '＜PC VIEW＞' }),

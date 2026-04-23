@@ -734,6 +734,7 @@ h1 {
 .score-num,
 .score-dash {
   font-family: var(--font-latin);
+  font-size: 24px;
 }
 
 .tabs {
@@ -885,6 +886,9 @@ h1 {
 }
 .badge-ext{
   background: var(--color-ext);
+}
+.badge-batch{
+  background: var(--navy-700);
 }
 
 .badge.critical {
@@ -1122,6 +1126,23 @@ h1 {
 }
 .item-card.expanded .item-source-section .item-locations {
   display: block;
+}
+.item-advice {
+  margin-top: var(--space-s);
+  padding: var(--space-s);
+  background: #f8fafc;
+  border-left: 3px solid var(--color-multi);
+}
+.item-advice-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-multi);
+  margin-bottom: 2px;
+}
+.item-advice-text {
+  font-size: 14px;
+  color: var(--navy-700);
+  line-height: 1.6;
 }
 .item-card.expanded .expand-icon {
   transform: rotate(180deg);

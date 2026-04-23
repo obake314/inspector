@@ -226,10 +226,13 @@
 - `playScanLabel` / `batchPlayLabel`: `title` 属性にPLAYWRIGHTの検査内容・所要時間を記載
 - `extScanLabel` / `batchExtLabel`: `title` 属性にEXT SCANの検査内容・所要時間を記載
 - チェックON時の背景色: DEEP `#304C89` / MULTI `#0D7A5F` / PLAY `#7B4DC8` / EXT `#D97706`
+- **初期状態**: DEEP / PLAY / EXT は初期 `checked`。MULTI は AI API キー設定済みの場合のみ `checked`
+- `clearScan()` 実行後も DEEP / PLAY / EXT は `checked` 状態へリセットする（MULTI は `checkSheetsStatusFn()` で再判定）
 
 ### 列
 
 - `全項目数` / `緊急` / `重大` / `中程度` / `軽微` / `合格` / `該当なし` / `未検証`
+- **`全項目数` セルの表示形式**: 個別スキャン行は `判定済み項目数 / 対象全項目数`（例: `38 / 55`）で表示。TOTAL行は `55 / 55` 固定。`totalText(data)` 関数が `data.total`（判定済み）と `data.targetTotal`（対象全項目数）を使用する
 
 ### 全項目数（固定）
 
@@ -338,11 +341,13 @@ TOTAL:
 - 代表 `dkey` は最優先ソースの dkey を使用（OK/NG/保留判定の継承元）
 - `renderAllTabs()` のカード生成では `sc` / `level` / `entry` を item から受け取り、UNIFIEDカードに渡す
 - カード展開時に、ソース別エビデンスセクション（`.item-source-section`）を表示:
+  - `buildEvidenceRecord()` で各ソースを { srcLabels, summaries, locs, suggestions } に正規化し、`mergeEvidenceRecords()` で同一サマリーまたは同一検出箇所のレコードを名寄せして1つのセクションに統合する
   - BASIC → 検出ツール: "axe-core"
-  - MULTI → 検出ツール: "AI検査"。AIレスポンスの `selector` / `evidence` / `reason` / `suggestion` を表示する
+  - MULTI → 検出ツール: "AI検査"。AIレスポンスの `reason` / `evidence` / `selector` を表示し、`suggestion` がある場合は `.item-advice`（`AI改善案`）として表示する
   - DEEP → 検出ツール: "Puppeteer検査"
   - PLAY → 検出ツール: "Playwright検査"
   - EXT → `data.source` に応じて "IBM Equal Access" / "ネイティブDOM検査" / "CDP検査"
+  - BATCH → 検出ツール: "一括ページ比較"。`comparedUrls` / `issues` の差分詳細を表示する
 - カード内 `[No.n]` 要素は表示しない
 - 詳細カードの開閉は `.item-header` のクリックのみで行う。展開後の `.item-source-section` / `.item-locations` 内クリックではカードを閉じない
 - バッジ色: BASIC `#3581B8` / DEEP `#304C89` / MULTI `#0D7A5F` / PLAY `#7B4DC8` / EXT `#D97706` / BATCH `#334155`
@@ -450,10 +455,11 @@ TOTAL:
 
 - **OpenAI系は `response_format: { type: "json_object" }` を使用**。systemメッセージで `{"results":[...]}` ラッパー形式を指定し、プロンプトとの不整合を回避。
 - OpenAI 呼び出し時は `X-Client-Request-Id` を付与し、APIエラー時に OpenAI の `x-request-id` と合わせて返す
-- **JSONパース**: `extractJsonArray()` によるブラケットカウント方式。正規表現は文字列内の `]` や `}` に誤反応するため不使用
-  - ① マークダウンコードブロック除去 → ② `JSON.parse`（配列/オブジェクトラップ対応） → ③ ブラケットカウントで `[...]` を特定
+- **JSONパース**: ブラケットカウント方式（正規表現は文字列内の `]`/`}` に誤反応するため不使用）
+  - `extractJsonObject(text)`: `{...}` オブジェクトを抽出 — ① マークダウンコードブロック除去 → ② `JSON.parse` 試行 → ③ ブラケットカウントで `{...}` を特定。AI応答のトップレベルオブジェクト（`results` + `improvementPlan`）の取得に使用
+  - `extractJsonArray(text)`: `[...]` 配列を抽出 — 同様の手順で `[...]` を特定。`results` がオブジェクト内に見つからない場合のフォールバックに使用
+  - パース手順: `extractJsonObject()` → `results` 配列と `improvementPlan` オブジェクトを分離 → `results` が配列でなければ `extractJsonArray()` でフォールバック
   - トークン上限で不完全なJSONの場合: `extractPartialItems()` で完結した `{...}` オブジェクトを個別救出
-- オブジェクトラップ形式（例: `{"results":[...]}`）は `Object.values().find(Array.isArray)` で内部配列を取り出す
 
 ### トークン上限検出
 
