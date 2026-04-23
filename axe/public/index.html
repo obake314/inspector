@@ -866,7 +866,7 @@
         const $ = id => document.getElementById(id);
         // The UI may be served from /axe/, but API routes are usually rooted at /api.
         const appBasePath = /^\/axe(\/|$)/.test(window.location.pathname) ? '/axe' : '';
-        const apiUrl = (path) => path;
+        const apiUrl = (path) => appBasePath + path;
         async function parseApiJson(response, apiName) {
             const text = await response.text();
             if (!text) return {};

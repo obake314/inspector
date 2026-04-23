@@ -407,14 +407,13 @@ async function getBrowser() {
   }
 
   const options = {
-    headless: 'new',
+    headless: true,
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
       '--disable-gpu',
       '--disable-software-rasterizer',
-      '--single-process'
     ],
   };
 
@@ -5219,6 +5218,14 @@ app.use((req, res, next) => {
 app.use((err, req, res, next) => {
   console.error(err.stack);
   if (!res.headersSent) res.status(500).json({ error: 'Internal Server Error', message: err.message });
+});
+
+// Puppeteer/Chrome クラッシュ等で未処理の例外が発生してもサーバーを落とさない
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException] サーバーは継続します:', err.message);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection] サーバーは継続します:', reason);
 });
 
 // サーバー起動（最後に1回だけ記述）
