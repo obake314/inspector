@@ -860,6 +860,8 @@
             }
         }
         let scoreRescanInProgress = false;
+        let scoreRescanProgressState = null;
+        let scoreRescanProgressTimer = null;
         let targetLevel = 'AA';
         const $ = id => document.getElementById(id);
         // Production is served from /axe/, local dev from /.
@@ -872,16 +874,53 @@
                 return JSON.parse(text);
             } catch (e) {
                 const preview = text.trim().slice(0, 120).replace(/\s+/g, ' ');
+                const contentType = response.headers.get('content-type') || '';
                 if (preview.startsWith('<')) {
-                    throw new Error(`${apiName} がJSONではなくHTMLを返しました。ルーティング設定を確認してください。`);
+                    const error = new Error(`${apiName} がJSONではなくHTMLを返しました。ルーティング設定を確認してください。`);
+                    error.apiHtmlResponse = true;
+                    error.status = response.status;
+                    error.contentType = contentType;
+                    error.preview = preview;
+                    throw error;
                 }
-                throw new Error(`${apiName} のJSON解析に失敗しました。`);
+                const error = new Error(`${apiName} のJSON解析に失敗しました。`);
+                error.status = response.status;
+                error.contentType = contentType;
+                error.preview = preview;
+                throw error;
+            }
+        }
+        function getRootApiFallbackUrl(url) {
+            if (!appBasePath) return null;
+            const prefix = `${appBasePath}/api/`;
+            if (typeof url === 'string' && url.startsWith(prefix)) {
+                return url.slice(appBasePath.length);
+            }
+            try {
+                const parsed = new URL(url, window.location.href);
+                if (parsed.origin !== window.location.origin || !parsed.pathname.startsWith(prefix)) return null;
+                return `${parsed.pathname.slice(appBasePath.length)}${parsed.search}`;
+            } catch (e) {
+                return null;
             }
         }
         async function fetchApiJson(url, options, apiName) {
             const response = await fetch(url, options);
-            const data = await parseApiJson(response, apiName);
-            return { response, data };
+            try {
+                const data = await parseApiJson(response, apiName);
+                return { response, data };
+            } catch (error) {
+                const fallbackUrl = error.apiHtmlResponse ? getRootApiFallbackUrl(url) : null;
+                if (!fallbackUrl) throw error;
+                console.warn(`${apiName} がHTMLを返したため ${fallbackUrl} へ再試行します`, {
+                    status: error.status,
+                    contentType: error.contentType,
+                    preview: error.preview
+                });
+                const fallbackResponse = await fetch(fallbackUrl, options);
+                const fallbackData = await parseApiJson(fallbackResponse, apiName);
+                return { response: fallbackResponse, data: fallbackData };
+            }
         }
         function cloneData(obj) {
             if (obj === null || obj === undefined) return obj;
@@ -4308,6 +4347,23 @@
             function labelCell(scanType, labelHtml, isTotal) {
                 if (isTotal) return labelHtml;
                 const disabled = (scanInProgress || scoreRescanInProgress) ? ' disabled' : '';
+                const progressActive = scoreRescanProgressState
+                    && scoreRescanProgressState.scanType === scanType
+                    && scoreRescanProgressState.view === viewScope;
+                const progress = progressActive ? Math.round(scoreRescanProgressState.progress || 0) : 0;
+                const progressLabel = progressActive ? (scoreRescanProgressState.label || '再スキャン中') : '';
+                const progressKey = `${viewScope}:${scanType}`;
+                const progressHtml = progressActive ? `<div class="score-rescan-progress"
+                        data-score-rescan-indicator="${progressKey}"
+                        role="progressbar"
+                        aria-valuemin="0"
+                        aria-valuemax="100"
+                        aria-valuenow="${progress}">
+                        <div class="score-rescan-progress-track">
+                            <div class="score-rescan-progress-fill" style="width:${progress}%"></div>
+                        </div>
+                        <div class="score-rescan-progress-label">${escapeHtml(progressLabel)} ${progress}%</div>
+                    </div>` : '';
                 return `<div class="score-label-content">
                     <div class="score-label-title">${labelHtml}</div>
                     <button type="button"
@@ -4315,6 +4371,7 @@
                         onclick="event.stopPropagation(); rescanFromScoreTable('${scanType}', '${viewScope}', this)"
                         aria-label="${scanType}を個別再スキャン"
                         title="${scanType}だけを現在のURLで再スキャン"${disabled}>再SCAN</button>
+                    ${progressHtml}
                 </div>`;
             }
             function row(scanType, labelHtml, labelClass, data, enabled, isTotal) {
@@ -4652,6 +4709,57 @@
             }
         }
 
+        function updateScoreRescanProgress(progress, label = null) {
+            if (!scoreRescanProgressState) return;
+            const nextProgress = Math.max(0, Math.min(100, Math.round(progress)));
+            scoreRescanProgressState.progress = nextProgress;
+            if (label) scoreRescanProgressState.label = label;
+            const key = `${scoreRescanProgressState.view}:${scoreRescanProgressState.scanType}`;
+            document.querySelectorAll(`[data-score-rescan-indicator="${key}"]`).forEach(indicator => {
+                indicator.setAttribute('aria-valuenow', String(nextProgress));
+                const fill = indicator.querySelector('.score-rescan-progress-fill');
+                if (fill) fill.style.width = `${nextProgress}%`;
+                const labelEl = indicator.querySelector('.score-rescan-progress-label');
+                if (labelEl) labelEl.textContent = `${scoreRescanProgressState.label} ${nextProgress}%`;
+            });
+        }
+
+        function startScoreRescanProgress(scanType, view) {
+            clearInterval(scoreRescanProgressTimer);
+            const estimates = {
+                BASIC: 6 * 60 * 1000,
+                DEEP: 9 * 60 * 1000,
+                MULTI: 10 * 60 * 1000,
+                PLAY: 6 * 60 * 1000,
+                EXT: 7 * 60 * 1000
+            };
+            const startedAt = Date.now();
+            const estimateMs = estimates[scanType] || 6 * 60 * 1000;
+            scoreRescanProgressState = {
+                scanType,
+                view: view === 'sp' ? 'sp' : 'pc',
+                progress: 3,
+                label: '準備中'
+            };
+            refreshScoreTable();
+            updateScoreRescanProgress(3, '準備中');
+            scoreRescanProgressTimer = setInterval(() => {
+                const elapsed = Date.now() - startedAt;
+                const pct = Math.min(92, 6 + (elapsed / estimateMs) * 86);
+                updateScoreRescanProgress(pct, '再スキャン中');
+            }, 500);
+        }
+
+        function finishScoreRescanProgress(label = '完了') {
+            clearInterval(scoreRescanProgressTimer);
+            scoreRescanProgressTimer = null;
+            updateScoreRescanProgress(100, label);
+            setTimeout(() => {
+                scoreRescanProgressState = null;
+                refreshScoreTable();
+            }, 900);
+        }
+
         window.rescanFromScoreTable = async function(scanType, view, btn) {
             const normalizedScanType = String(scanType || '').toUpperCase();
             if (!['BASIC', 'DEEP', 'MULTI', 'PLAY', 'EXT'].includes(normalizedScanType)) return;
@@ -4664,9 +4772,13 @@
 
             scoreRescanInProgress = true;
             setScoreRescanBusy(btn, true);
+            startScoreRescanProgress(normalizedScanType, view);
             try {
+                updateScoreRescanProgress(8, '送信中');
                 const result = await fetchScoreRescanResult(normalizedScanType, ctx);
+                updateScoreRescanProgress(96, '反映中');
                 applyScoreRescanResult(ctx, result);
+                finishScoreRescanProgress('完了');
             } catch (error) {
                 const msg = error.name === 'AbortError'
                     ? `${normalizedScanType} SCANがタイムアウトしました`
@@ -4682,6 +4794,7 @@
                 }
                 alert(`${normalizedScanType}再スキャンエラー: ${msg}`);
                 console.error(`[SCORE-RESCAN] ${normalizedScanType}`, error);
+                finishScoreRescanProgress('エラー');
             } finally {
                 scoreRescanInProgress = false;
                 setScoreRescanBusy(btn, false);
@@ -4776,6 +4889,13 @@
                     .map(sc => getManualDecision(`${rawKey}:SC:${sc}`, reportScope))
                     .find(Boolean) || null;
             };
+            const NOT_APPLICABLE_REMARK = '該当箇所なし';
+            const withNotApplicableRemark = (detail, shouldMark) => {
+                const text = String(detail || '');
+                if (!shouldMark) return text;
+                if (text.includes(NOT_APPLICABLE_REMARK)) return text;
+                return text ? `${text}\n${NOT_APPLICABLE_REMARK}` : NOT_APPLICABLE_REMARK;
+            };
 
             // --- 自動検査: violations → 不合格 ---
             (results.violations || []).forEach(v => {
@@ -4841,6 +4961,7 @@
                 // 手動決定（OK/NG/保留）があれば上書き
                 const dec = reportDecision(`MULTI:${i}`);
                 if (dec) result = dec === 'ok' ? '合格' : dec === 'ng' ? '不合格' : '未検証';
+                detail = withNotApplicableRemark(detail, result === '合格' && ai?.status === 'not_applicable');
                 rows.push([
                     String(itemNo++), ai ? 'AI' : '手動', item.ref,
                     item.text, item.level, result,
@@ -4864,12 +4985,13 @@
                     const decD = reportDecision(`DEEP:${r.sc}`, r.sc);
                     const resultD = decD ? (decD === 'ok' ? '合格' : decD === 'ng' ? '不合格' : enhancedStatusMap[r.status] || r.status)
                                         : enhancedStatusMap[r.status] || r.status;
+                    const detailD = withNotApplicableRemark(r.message || '', resultD === '合格' && r.status === 'not_applicable');
                     rows.push([
                         String(itemNo++), '高精度', r.sc, r.name, level,
                         resultD,
                         violations.slice(0, 3).join('\n'),
                         violations.length > 0 ? String(violations.length) : '',
-                        '', r.message || '', ''
+                        '', detailD, ''
                     ]);
                 });
             }
@@ -4889,12 +5011,13 @@
                     const decP = reportDecision(`PLAY:${r.sc}`, r.sc);
                     const resultP = decP ? (decP === 'ok' ? '合格' : decP === 'ng' ? '不合格' : playStatusMap[r.status] || r.status)
                                         : playStatusMap[r.status] || r.status;
+                    const detailP = withNotApplicableRemark(r.message || '', resultP === '合格' && r.status === 'not_applicable');
                     rows.push([
                         String(itemNo++), 'PLAY', r.sc, r.name || `SC ${r.sc}`, level,
                         resultP,
                         violations.slice(0, 3).join('\n'),
                         violations.length > 0 ? String(violations.length) : '',
-                        '', r.message || '', ''
+                        '', detailP, ''
                     ]);
                 });
             }
@@ -4915,12 +5038,13 @@
                     const decE = reportDecision(`EXT:${r.sc}`, r.sc);
                     const resultE = decE ? (decE === 'ok' ? '合格' : decE === 'ng' ? '不合格' : extStatusMap[r.status] || r.status)
                                         : extStatusMap[r.status] || r.status;
+                    const detailE = withNotApplicableRemark(r.message || '', resultE === '合格' && r.status === 'not_applicable');
                     rows.push([
                         String(itemNo++), 'EXT', r.sc, r.name || `SC ${r.sc}`, level,
                         resultE,
                         violations.slice(0, 3).join('\n'),
                         violations.length > 0 ? String(violations.length) : '',
-                        '', r.message || '', ''
+                        '', detailE, ''
                     ]);
                 });
             }

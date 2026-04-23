@@ -568,6 +568,12 @@ async function callAI(prompt, imageBase64 = null) {
 }
 
 app.use(express.json({ limit: '50mb' }));
+app.use((req, res, next) => {
+  if (req.url.startsWith('/axe/api/')) {
+    req.url = req.url.slice('/axe'.length);
+  }
+  next();
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 // 直近のAIレスポンス（デバッグ用）
@@ -5203,9 +5209,16 @@ app.post('/api/playwright-check', async (req, res) => {
 });
 
 // エラーハンドリング
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/') || req.path.startsWith('/axe/api/')) {
+    return res.status(404).json({ error: `API endpoint not found: ${req.method} ${req.originalUrl}` });
+  }
+  next();
+});
+
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ error: 'Internal Server Error', message: err.message });
+  if (!res.headersSent) res.status(500).json({ error: 'Internal Server Error', message: err.message });
 });
 
 // サーバー起動（最後に1回だけ記述）
