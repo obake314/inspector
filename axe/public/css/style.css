@@ -1765,9 +1765,10 @@ footer small {
 }
 .login-box h2 {
   font-family: var(--font-latin);
-  font-size: var(--font-size-m);
+  font-size: 26px;
   font-weight: 600;
   margin-bottom: var(--space-s);
+  line-height: 1;
 }
 .login-box p {
   font-size: var(--font-size-m);

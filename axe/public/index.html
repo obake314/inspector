@@ -864,9 +864,9 @@
         let scoreRescanProgressTimer = null;
         let targetLevel = 'AA';
         const $ = id => document.getElementById(id);
-        // Production is served from /axe/, local dev from /.
-        const appBasePath = window.location.pathname.startsWith('/axe') ? '/axe' : '';
-        const apiUrl = (path) => `${appBasePath}${path}`;
+        // The UI may be served from /axe/, but API routes are usually rooted at /api.
+        const appBasePath = /^\/axe(\/|$)/.test(window.location.pathname) ? '/axe' : '';
+        const apiUrl = (path) => path;
         async function parseApiJson(response, apiName) {
             const text = await response.text();
             if (!text) return {};
@@ -876,7 +876,7 @@
                 const preview = text.trim().slice(0, 120).replace(/\s+/g, ' ');
                 const contentType = response.headers.get('content-type') || '';
                 if (preview.startsWith('<')) {
-                    const error = new Error(`${apiName} がJSONではなくHTMLを返しました。ルーティング設定を確認してください。`);
+                    const error = new Error(`${apiName} がJSONではなくHTMLを返しました。APIの公開パスが一致していない可能性があります。`);
                     error.apiHtmlResponse = true;
                     error.status = response.status;
                     error.contentType = contentType;
@@ -890,27 +890,47 @@
                 throw error;
             }
         }
-        function getRootApiFallbackUrl(url) {
+        function getAlternateApiUrl(url) {
             if (!appBasePath) return null;
-            const prefix = `${appBasePath}/api/`;
-            if (typeof url === 'string' && url.startsWith(prefix)) {
-                return url.slice(appBasePath.length);
+            const appApiPrefix = `${appBasePath}/api/`;
+            if (typeof url === 'string') {
+                if (url.startsWith('/api/')) return `${appBasePath}${url}`;
+                if (url.startsWith(appApiPrefix)) return url.slice(appBasePath.length);
             }
             try {
                 const parsed = new URL(url, window.location.href);
-                if (parsed.origin !== window.location.origin || !parsed.pathname.startsWith(prefix)) return null;
-                return `${parsed.pathname.slice(appBasePath.length)}${parsed.search}`;
+                if (parsed.origin !== window.location.origin) return null;
+                if (parsed.pathname.startsWith('/api/')) return `${appBasePath}${parsed.pathname}${parsed.search}`;
+                if (parsed.pathname.startsWith(appApiPrefix)) return `${parsed.pathname.slice(appBasePath.length)}${parsed.search}`;
             } catch (e) {
                 return null;
             }
+            return null;
+        }
+        function isApiRouteMiss(response, data) {
+            if (!response || response.status !== 404) return false;
+            const message = `${data?.error || ''} ${data?.message || ''}`;
+            const compactMessage = message.trim();
+            return /API endpoint not found|Cannot\s+(GET|POST|PUT|PATCH|DELETE)\s+\//i.test(message)
+                || /^(not found|route not found|endpoint not found)$/i.test(compactMessage);
         }
         async function fetchApiJson(url, options, apiName) {
             const response = await fetch(url, options);
             try {
                 const data = await parseApiJson(response, apiName);
+                const fallbackUrl = isApiRouteMiss(response, data) ? getAlternateApiUrl(url) : null;
+                if (fallbackUrl) {
+                    console.warn(`${apiName} のAPI経路が見つからないため ${fallbackUrl} へ再試行します`, {
+                        status: response.status,
+                        error: data?.error || data?.message || ''
+                    });
+                    const fallbackResponse = await fetch(fallbackUrl, options);
+                    const fallbackData = await parseApiJson(fallbackResponse, apiName);
+                    return { response: fallbackResponse, data: fallbackData };
+                }
                 return { response, data };
             } catch (error) {
-                const fallbackUrl = error.apiHtmlResponse ? getRootApiFallbackUrl(url) : null;
+                const fallbackUrl = error.apiHtmlResponse ? getAlternateApiUrl(url) : null;
                 if (!fallbackUrl) throw error;
                 console.warn(`${apiName} がHTMLを返したため ${fallbackUrl} へ再試行します`, {
                     status: error.status,
@@ -918,8 +938,20 @@
                     preview: error.preview
                 });
                 const fallbackResponse = await fetch(fallbackUrl, options);
-                const fallbackData = await parseApiJson(fallbackResponse, apiName);
-                return { response: fallbackResponse, data: fallbackData };
+                try {
+                    const fallbackData = await parseApiJson(fallbackResponse, apiName);
+                    return { response: fallbackResponse, data: fallbackData };
+                } catch (fallbackError) {
+                    if (!fallbackError.apiHtmlResponse) throw fallbackError;
+                    const triedUrls = [url, fallbackUrl].join(' / ');
+                    const combined = new Error(`${apiName} がJSONではなくHTMLを返しました。試行URL: ${triedUrls}`);
+                    combined.apiHtmlResponse = true;
+                    combined.status = fallbackError.status;
+                    combined.contentType = fallbackError.contentType;
+                    combined.preview = fallbackError.preview || error.preview;
+                    combined.triedUrls = [url, fallbackUrl];
+                    throw combined;
+                }
             }
         }
         function cloneData(obj) {

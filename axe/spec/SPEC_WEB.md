@@ -309,8 +309,9 @@ TOTAL:
 - `POST /api/ext-check`
 - `GET /api/sheets-status`
 - `POST /api/export-report`
-- `/axe/` 配下でUIを配信する環境では、サーバー側で `/axe/api/...` を `/api/...` に正規化する。API未定義時もHTMLではなくJSON 404を返す。
-- クライアントはAPI応答がHTMLだった場合、`/axe/api/...` からroot `/api/...` へ一度だけ再試行する。
+- `/axe/` 配下でUIを配信する環境でも、クライアントはroot `/api/...` を優先して呼び出す。
+- API応答がHTML、またはAPI経路のJSON 404だった場合、クライアントは `/api/...` と `/axe/api/...` の反対側候補へ一度だけ再試行する。
+- サーバー側でも `/axe/api/...` を `/api/...` に正規化し、API未定義時はHTMLではなくJSON 404を返す。
 
 ## テストコマンド
 
