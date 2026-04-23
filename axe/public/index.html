@@ -415,6 +415,7 @@
                     <div class="tab-content" id="tab-unverified-sp"><div class="section"><div class="violation-list" id="list-unverified-sp"></div></div></div>
                 </div>
             </div>
+            <div class="improvement-plan-panel" id="improvementPlanPanel" style="display:none" aria-live="polite"></div>
             <!-- エクスポートエリア -->
             <div id="exportArea">
                 Export to
@@ -600,6 +601,11 @@
             return applicable > 0 ? Math.round((pass || 0) / applicable * 100) : null;
         }
 
+        function calculateScanAchievementRate(pass, total, unverified) {
+            const verified = Math.max(0, (total || 0) - (unverified || 0));
+            return verified > 0 ? Math.round((pass || 0) / verified * 100) : null;
+        }
+
         // 行データからスコア集計（F列=index5が結果）
         function computeStats(rows) {
             const s = { pass: 0, fail: 0, incomplete: 0, na: 0, unverified: 0 };
@@ -617,8 +623,14 @@
         }
 
         // SC単位で集計したスコアテーブルと一致するstatsを生成
-        function buildStats(basic, deep, multi) {
-            const ts = computeTotalScore(basic || null, deep || null, Object.keys(multi || {}).length > 0 ? multi : null);
+        function buildStats(basic, deep, multi, play, ext) {
+            const ts = computeTotalScore(
+                basic || null,
+                deep || null,
+                Object.keys(multi || {}).length > 0 ? multi : null,
+                play || null,
+                ext || null
+            );
             return {
                 total: getTargetScList().length,
                 critical: ts.critical,
@@ -785,7 +797,7 @@
             if (lastMobileScanSnapshot) {
                 const sp = lastMobileScanSnapshot;
                 const spDeep  = !!sp.deep;
-                const spMulti = sp.multi && Object.keys(sp.multi).length > 0;
+                const spMulti = (sp.multi && Object.keys(sp.multi).length > 0) || isBlockingMultiIssue(sp.multiIssue);
                 const spPlay  = !!sp.play;
                 const spExt   = !!sp.ext;
                 renderScanScoreTable(
@@ -1202,8 +1214,8 @@
             const wb = XLSX.utils.book_new();
 
             // PC シート
-            const pcRows = buildReportRows(lastResults, lastResults.url, aiResults, lastEnhancedResults, batchNavConsistency, lastPlayResults, lastExtResults);
-            const pcStats = buildStats(lastResults, lastEnhancedResults, aiResults);
+            const pcRows = buildReportRows(lastResults, lastResults.url, aiResults, lastEnhancedResults, batchNavConsistency, lastPlayResults, lastExtResults, lastImprovementPlan, 'PC VIEW');
+            const pcStats = buildStats(lastResults, lastEnhancedResults, aiResults, lastPlayResults, lastExtResults);
             const pcMeta = [
                 ['URL', lastResults.url],
                 ['検査日時', new Date().toLocaleString('ja-JP')],
@@ -1220,8 +1232,8 @@
             // SP シート（存在する場合）
             if (lastMobileScanSnapshot) {
                 const sp = lastMobileScanSnapshot;
-                const spRows = buildReportRows(sp.basic, lastResults.url, sp.multi || {}, sp.deep || null, null, sp.play || null, sp.ext || null);
-                const spStats = buildStats(sp.basic, sp.deep || null, sp.multi || {});
+                const spRows = buildReportRows(sp.basic, lastResults.url, sp.multi || {}, sp.deep || null, null, sp.play || null, sp.ext || null, sp.improvementPlan || null, 'SP VIEW');
+                const spStats = buildStats(sp.basic, sp.deep || null, sp.multi || {}, sp.play || null, sp.ext || null);
                 const spMeta = [
                     ['URL', lastResults.url],
                     ['検査日時', new Date().toLocaleString('ja-JP')],
@@ -1245,6 +1257,7 @@
         let aiResults = {};
         let lastMultiTokenLimited = false;
         let lastMultiIssue = null;
+        let lastImprovementPlan = null;
         // 高精度検査結果を保存（単一ページ）
         let lastEnhancedResults = null;
         let lastPlayResults = null;
@@ -1281,6 +1294,135 @@
                     : 'MULTI SCANは完了しましたが、スコアテーブルに反映できる結果がありませんでした',
                 scoreTableError: true
             };
+        }
+
+        function normalizeImprovementPlanClient(plan) {
+            if (!plan || typeof plan !== 'object') return null;
+            const toText = (value, max = 600) => {
+                if (value === null || value === undefined) return '';
+                let text = typeof value === 'string' ? value : '';
+                if (!text) {
+                    try { text = JSON.stringify(value); } catch (e) { text = String(value); }
+                }
+                return text.replace(/\s+/g, ' ').trim().slice(0, max);
+            };
+            const toList = (value, maxItems = 6, maxText = 240) => (
+                Array.isArray(value) ? value : []
+            ).map(item => toText(item, maxText)).filter(Boolean).slice(0, maxItems);
+            const priorityActions = (Array.isArray(plan.priorityActions) ? plan.priorityActions : [])
+                .filter(action => action && typeof action === 'object')
+                .slice(0, 6)
+                .map(action => ({
+                    priority: ['high', 'medium', 'low'].includes(action.priority) ? action.priority : 'medium',
+                    title: toText(action.title, 160),
+                    reason: toText(action.reason, 420),
+                    steps: toList(action.steps, 5, 260),
+                    relatedSc: toList(action.relatedSc, 6, 40),
+                    sources: toList(action.sources, 6, 40)
+                }))
+                .filter(action => action.title || action.reason || action.steps.length);
+            const normalized = {
+                summary: toText(plan.summary, 700),
+                priorityActions,
+                manualChecks: toList(plan.manualChecks, 6, 280),
+                quickWins: toList(plan.quickWins, 6, 240)
+            };
+            return normalized.summary || normalized.priorityActions.length || normalized.manualChecks.length || normalized.quickWins.length
+                ? normalized
+                : null;
+        }
+
+        function priorityJa(priority) {
+            return priority === 'high' ? '高' : priority === 'low' ? '低' : '中';
+        }
+
+        function renderImprovementPlanPanel(options = {}) {
+            const panel = $('improvementPlanPanel');
+            if (!panel) return;
+            const pcPlan = normalizeImprovementPlanClient(
+                Object.prototype.hasOwnProperty.call(options, 'pcPlan') ? options.pcPlan : lastImprovementPlan
+            );
+            const spPlan = normalizeImprovementPlanClient(
+                Object.prototype.hasOwnProperty.call(options, 'spPlan') ? options.spPlan : lastMobileScanSnapshot?.improvementPlan
+            );
+            const pcIssue = Object.prototype.hasOwnProperty.call(options, 'pcIssue') ? options.pcIssue : lastMultiIssue;
+            const spIssue = Object.prototype.hasOwnProperty.call(options, 'spIssue') ? options.spIssue : lastMobileScanSnapshot?.multiIssue;
+            const pcAttempted = Object.prototype.hasOwnProperty.call(options, 'pcAttempted')
+                ? options.pcAttempted
+                : !!(pcPlan || pcIssue || Object.keys(aiResults || {}).length > 0);
+            const spAttempted = Object.prototype.hasOwnProperty.call(options, 'spAttempted')
+                ? options.spAttempted
+                : !!(spPlan || spIssue || (lastMobileScanSnapshot?.multi && Object.keys(lastMobileScanSnapshot.multi || {}).length > 0));
+
+            function renderList(title, items, className) {
+                if (!items || items.length === 0) return '';
+                return `<div class="improvement-plan-list ${className}">
+                    <h4>${escapeHtml(title)}</h4>
+                    <ul>${items.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
+                </div>`;
+            }
+
+            function renderView(plan, label, issue, attempted) {
+                if (!plan && !attempted && !issue) return '';
+                if (!plan) {
+                    const message = issue?.message || 'MULTI SCANは完了しましたが、改善計画がAI応答に含まれていませんでした。';
+                    const issueLabel = issue?.label || '改善計画未生成';
+                    return `<section class="improvement-plan-view is-issue">
+                        <div class="improvement-plan-view-head">
+                            <h3>${escapeHtml(label)} 改善計画</h3>
+                            <span class="improvement-plan-status">未生成</span>
+                        </div>
+                        <div class="improvement-plan-issue">${escapeHtml(issueLabel)}: ${escapeHtml(message)}</div>
+                    </section>`;
+                }
+                const actions = plan.priorityActions.map(action => {
+                    const meta = [
+                        action.relatedSc.length ? `SC ${action.relatedSc.map(escapeHtml).join(', ')}` : '',
+                        action.sources.length ? action.sources.map(escapeHtml).join(' / ') : ''
+                    ].filter(Boolean).join('　');
+                    const steps = action.steps.length
+                        ? `<ol>${action.steps.map(step => `<li>${escapeHtml(step)}</li>`).join('')}</ol>`
+                        : '';
+                    return `<article class="improvement-action priority-${escapeHtml(action.priority)}">
+                        <div class="improvement-action-head">
+                            <span class="improvement-priority">${escapeHtml(priorityJa(action.priority))}</span>
+                            <h4>${escapeHtml(action.title || '改善タスク')}</h4>
+                        </div>
+                        ${meta ? `<div class="improvement-action-meta">${meta}</div>` : ''}
+                        ${action.reason ? `<p>${escapeHtml(action.reason)}</p>` : ''}
+                        ${steps}
+                    </article>`;
+                }).join('');
+                return `<section class="improvement-plan-view">
+                    <div class="improvement-plan-view-head">
+                        <h3>${escapeHtml(label)} 改善計画</h3>
+                        <span class="improvement-plan-status">MULTI</span>
+                    </div>
+                    ${plan.summary ? `<p class="improvement-plan-summary">${escapeHtml(plan.summary)}</p>` : ''}
+                    ${actions ? `<div class="improvement-actions">${actions}</div>` : ''}
+                    <div class="improvement-plan-lists">
+                        ${renderList('短期改善', plan.quickWins, 'is-quick')}
+                        ${renderList('手動確認', plan.manualChecks, 'is-manual')}
+                    </div>
+                </section>`;
+            }
+
+            const sections = [
+                renderView(pcPlan, 'PC VIEW', pcIssue, pcAttempted),
+                renderView(spPlan, 'SP VIEW', spIssue, spAttempted)
+            ].filter(Boolean);
+            if (sections.length === 0) {
+                panel.style.display = 'none';
+                panel.innerHTML = '';
+                return;
+            }
+            panel.style.display = 'block';
+            panel.innerHTML = `<div class="improvement-plan-head">
+                <div>
+                    <div class="improvement-plan-kicker">MULTI SCAN</div>
+                    <h2>改善計画</h2>
+                </div>
+            </div>${sections.join('')}`;
         }
 
         function makeClientFallbackAiResults(filteredItems, reason) {
@@ -1394,6 +1536,7 @@
                 // 結果を適用
                 const rawMultiResults = Array.isArray(data.results) ? data.results : [];
                 aiResults = mapAiResultsByOriginalIndex(rawMultiResults, filteredItems);
+                lastImprovementPlan = normalizeImprovementPlanClient(data.improvementPlan);
                 const multiIssue = buildMultiIssue(data);
                 lastMultiIssue = Object.keys(aiResults).length === 0
                     ? buildMultiScoreReflectionIssue(rawMultiResults.length)
@@ -1416,6 +1559,7 @@
                 // スコアテーブルとタブをMULTI結果で再描画
                 refreshScoreTable();
                 renderAllTabs('pc');
+                renderImprovementPlanPanel();
             } catch (error) {
                 const msg = error.name === 'AbortError' ? 'MULTI SCANがタイムアウトしました（10分超過）' : error.message;
                 if (isTimeoutLike(error, msg)) {
@@ -1427,6 +1571,16 @@
                         message: msg
                     });
                 }
+                aiResults = {};
+                lastImprovementPlan = null;
+                lastMultiTokenLimited = false;
+                lastMultiIssue = {
+                    label: error.name === 'AbortError' ? 'タイムアウト' : 'APIエラー',
+                    message: msg,
+                    scoreTableError: true
+                };
+                refreshScoreTable();
+                renderImprovementPlanPanel();
                 if (!silent) status.textContent = `エラー: ${msg}`;
                 console.error('AI評価エラー:', error);
                 throw error;
@@ -1508,6 +1662,7 @@
             aiResults = {};
             lastMultiTokenLimited = false;
             lastMultiIssue = null;
+            lastImprovementPlan = null;
             manualDecisions.clear();
             manualImpacts.clear();
             batchResultsData = [];
@@ -1516,6 +1671,7 @@
             batchAIResults = {};
             batchAITokenLimitedMap = {};
             batchAIIssueMap = {};
+            batchImprovementPlans = {};
             batchPlayResults = {};
             batchExtResults = {};
             batchMobileResultsData = [];
@@ -1523,6 +1679,7 @@
             batchMobileAIResults = {};
             batchMobileAITokenLimitedMap = {};
             batchMobileAIIssueMap = {};
+            batchMobileImprovementPlans = {};
             batchMobilePlayResults = {};
             batchMobileExtResults = {};
             batchViewportMode = 'desktop';
@@ -1533,6 +1690,7 @@
             // --- UI非表示 ---
             $('results').classList.remove('visible');
             $('exportArea').classList.remove('visible');
+            renderImprovementPlanPanel({ pcPlan: null, spPlan: null, pcIssue: null, spIssue: null, pcAttempted: false, spAttempted: false });
             $('batchResults').style.display = 'none';
             $('errorMessage').classList.remove('visible');
             renderTimeoutRetryPanel();
@@ -1604,6 +1762,7 @@
         let batchAIResults = {};       // url → processed aiResults object
         let batchAITokenLimitedMap = {};  // url → bool (token limit flag)
         let batchAIIssueMap = {};      // url → MULTI issue metadata
+        let batchImprovementPlans = {}; // url → MULTI improvement plan
         let batchPlayResults = {};     // url → play results array
         let batchExtResults = {};      // url → ext results array
         let batchMobileResultsData = [];          // SP用（PC+SP時のみ使用）
@@ -1611,6 +1770,7 @@
         let batchMobileAIResults = {};            // url → SP AI results
         let batchMobileAITokenLimitedMap = {};    // url → bool (SP token limit flag)
         let batchMobileAIIssueMap = {};           // url → SP MULTI issue metadata
+        let batchMobileImprovementPlans = {};     // url → SP improvement plan
         let batchMobilePlayResults = {};          // url → SP play results
         let batchMobileExtResults = {};           // url → SP ext results
         let batchViewportMode = 'desktop';        // 実行時のviewportMode
@@ -1742,6 +1902,7 @@
             const r = batchResultsData[idx];
             if (!r.success) {
                 $('batchDetailArea').innerHTML = `<div class="error-message visible"><h4>エラー</h4><p>${r.url}: ${r.error}</p></div>`;
+                renderImprovementPlanPanel({ pcPlan: null, spPlan: null, pcIssue: null, spIssue: null, pcAttempted: false, spAttempted: false });
                 // SP ブロックを隠す
                 const mb = $('scoreBlockMobile');
                 if (mb) mb.style.display = 'none';
@@ -1753,6 +1914,7 @@
             aiResults = batchAIResults[r.url] || {};
             lastMultiTokenLimited = !!batchAITokenLimitedMap[r.url];
             lastMultiIssue = batchAIIssueMap[r.url] || null;
+            lastImprovementPlan = batchImprovementPlans[r.url] || null;
             lastPlayResults = batchPlayResults[r.url] || null;
             lastExtResults = batchExtResults[r.url] || null;
             displayResults(r.results, r.url, { renderTabs: false });
@@ -1761,6 +1923,7 @@
             const multiEnabled = Object.prototype.hasOwnProperty.call(batchAIResults, r.url) || Object.keys(aiResults).length > 0;
             const playEnabledBatch = !!lastPlayResults;
             const extEnabledBatch  = !!lastExtResults;
+            const pcMultiAttempted = Object.prototype.hasOwnProperty.call(batchAIResults, r.url) || !!lastMultiIssue || !!lastImprovementPlan;
             renderScanScoreTable(
                 computeBasicScore(lastResults),
                 deepEnabled  ? computeDeepScore(lastEnhancedResults) : null,
@@ -1778,15 +1941,21 @@
 
             // --- SP（PC+SP モード時のみ） ---
             const mobileR = batchMobileResultsData[idx];
+            let mobilePlan = null;
+            let mobileIssueForPanel = null;
+            let mobileAttempted = false;
             if (mobileR?.success) {
                 const mobileEnhanced = batchMobileEnhancedResults[mobileR.url] || null;
                 const mobileAI       = batchMobileAIResults[mobileR.url] || {};
                 const mobileTokenLimited = !!batchMobileAITokenLimitedMap[mobileR.url];
                 const mobileIssue    = batchMobileAIIssueMap[mobileR.url] || null;
+                mobilePlan           = batchMobileImprovementPlans[mobileR.url] || null;
+                mobileIssueForPanel  = mobileIssue;
                 const mobilePlay     = batchMobilePlayResults[mobileR.url] || null;
                 const mobileExt      = batchMobileExtResults[mobileR.url] || null;
                 const mDeepEnabled   = !!mobileEnhanced;
                 const mMultiEnabled  = Object.prototype.hasOwnProperty.call(batchMobileAIResults, mobileR.url) || Object.keys(mobileAI).length > 0;
+                mobileAttempted      = mMultiEnabled || !!mobileIssue || !!mobilePlan;
                 const mPlayEnabled   = !!mobilePlay;
                 const mExtEnabled    = !!mobileExt;
                 renderScanScoreTable(
@@ -1798,7 +1967,13 @@
                         scoreBodyId: 'scanScoreBodyMobile', scoreTableId: 'scanScoreTableMobile', scoreBlockId: 'scoreBlockMobile',
                         playEnabled: mPlayEnabled, playScore: mPlayEnabled ? computePlayScore(mobilePlay) : null,
                         extEnabled: mExtEnabled, extScore: mExtEnabled ? computeExtScore(mobileExt) : null,
-                        state: { playResults: mobilePlay, extResults: mobileExt },
+                        state: {
+                            basicResults: mobileR.results,
+                            deepResults: mobileEnhanced,
+                            multiAiData: mobileAI,
+                            playResults: mobilePlay,
+                            extResults: mobileExt
+                        },
                         multiTokenLimited: mobileTokenLimited,
                         multiIssue: mobileIssue
                     }
@@ -1814,6 +1989,14 @@
             }
 
             renderNavBar();
+            renderImprovementPlanPanel({
+                pcPlan: lastImprovementPlan,
+                pcIssue: lastMultiIssue,
+                pcAttempted: pcMultiAttempted,
+                spPlan: mobilePlan,
+                spIssue: mobileIssueForPanel,
+                spAttempted: mobileAttempted
+            });
             const st = $('scanScoreTable');
             if (st) st.scrollIntoView({ behavior: 'smooth', block: 'start' });
         };
@@ -1970,6 +2153,7 @@
                     const aiResultsMap = {};
                     const aiTokenLimitedMap = {};
                     const aiIssueMap = {};
+                    const improvementPlanMap = {};
                     const playResultsMap = {};
                     const extResultsMap = {};
                     let localPhase = phaseOffset + 1;
@@ -2018,6 +2202,7 @@
                             }
                             setPhaseProgress(localPhase, (i + 1) / successUrls.length);
                         }
+                        localPhase++;
                     }
 
                     // DEEP
@@ -2153,6 +2338,7 @@
                                     aiResultsMap[successUrls[i]] = processed;
                                     aiTokenLimitedMap[successUrls[i]] = !!(ad.tokenLimited || ad.partialResults);
                                     aiIssueMap[successUrls[i]] = issue;
+                                    improvementPlanMap[successUrls[i]] = normalizeImprovementPlanClient(ad.improvementPlan);
                                     console.log(`[BATCH-MULTI] ${successUrls[i]}: ${(ad.results || []).length} 結果${ad.tokenLimited ? ' [トークン上限]' : ad.partialResults ? ' [部分応答]' : ''}`);
                                 } else {
                                     const errorMsg = ad?.error || 'MULTI SCAN失敗';
@@ -2160,6 +2346,7 @@
                                     aiResultsMap[successUrls[i]] = processed;
                                     aiTokenLimitedMap[successUrls[i]] = true;
                                     aiIssueMap[successUrls[i]] = buildMultiIssue(ad) || { label: 'APIエラー', message: errorMsg };
+                                    improvementPlanMap[successUrls[i]] = null;
                                     if (isTimeoutLike(null, errorMsg)) {
                                         recordTimeoutRetry({ url: successUrls[i], scanType: 'MULTI', mode: 'batch', viewportPreset, message: errorMsg });
                                     }
@@ -2172,6 +2359,15 @@
                                 if (isTimeoutLike(e, msg)) {
                                     recordTimeoutRetry({ url: successUrls[i], scanType: 'MULTI', mode: 'batch', viewportPreset, message: msg });
                                 }
+                                const processed = mapAiResultsByOriginalIndex(makeClientFallbackAiResults(filteredItems, msg), filteredItems);
+                                aiResultsMap[successUrls[i]] = processed;
+                                aiTokenLimitedMap[successUrls[i]] = true;
+                                aiIssueMap[successUrls[i]] = {
+                                    label: e.name === 'AbortError' ? 'タイムアウト' : 'APIエラー',
+                                    message: msg,
+                                    scoreTableError: true
+                                };
+                                improvementPlanMap[successUrls[i]] = null;
                                 console.error(`[BATCH-MULTI] ${successUrls[i]}: ${msg}`);
                             }
                             setPhaseProgress(localPhase, (i + 1) / successUrls.length);
@@ -2179,7 +2375,7 @@
                         localPhase++;
                     }
 
-                    return { resultsData, navConsistency, enhancedResults, aiResultsMap, aiTokenLimitedMap, aiIssueMap, playResultsMap, extResultsMap, succeededCount };
+                    return { resultsData, navConsistency, enhancedResults, aiResultsMap, aiTokenLimitedMap, aiIssueMap, improvementPlanMap, playResultsMap, extResultsMap, succeededCount };
                 }
 
                 // --- PC（デスクトップ） ---
@@ -2191,6 +2387,7 @@
                     batchAIResults           = pc.aiResultsMap;
                     batchAITokenLimitedMap   = pc.aiTokenLimitedMap;
                     batchAIIssueMap          = pc.aiIssueMap;
+                    batchImprovementPlans    = pc.improvementPlanMap;
                     batchPlayResults         = pc.playResultsMap;
                     batchExtResults          = pc.extResultsMap;
                     renderBatchSummary();
@@ -2209,6 +2406,7 @@
                         batchMobileAIResults            = sp.aiResultsMap;
                         batchMobileAITokenLimitedMap    = sp.aiTokenLimitedMap;
                         batchMobileAIIssueMap           = sp.aiIssueMap;
+                        batchMobileImprovementPlans      = sp.improvementPlanMap;
                         batchMobilePlayResults          = sp.playResultsMap;
                         batchMobileExtResults           = sp.extResultsMap;
                     } else {
@@ -2219,6 +2417,7 @@
                         batchAIResults           = sp.aiResultsMap;
                         batchAITokenLimitedMap   = sp.aiTokenLimitedMap;
                         batchAIIssueMap          = sp.aiIssueMap;
+                        batchImprovementPlans    = sp.improvementPlanMap;
                         batchPlayResults         = sp.playResultsMap;
                         batchExtResults          = sp.extResultsMap;
                         renderBatchSummary();
@@ -2330,6 +2529,7 @@
                     basic: null,
                     deep: null,
                     multi: null,
+                    improvementPlan: null,
                     play: null,
                     ext: null
                 };
@@ -2469,6 +2669,7 @@
                         snapshot.multi = cloneData(aiResults);
                         snapshot.multiTokenLimited = lastMultiTokenLimited;
                         snapshot.multiIssue = cloneData(lastMultiIssue);
+                        snapshot.improvementPlan = cloneData(lastImprovementPlan);
                         renderScanScoreTable(
                             computeBasicScore(snapshot.basic),
                             doDeep ? computeDeepScore(snapshot.deep) : null,
@@ -2491,6 +2692,32 @@
                         clearInterval(tMulti);
                         const msg = e.name === 'AbortError' ? 'タイムアウト（10分超過）' : e.message;
                         if (isTimeoutLike(e, msg)) recordTimeoutRetry({ url, scanType: 'MULTI', mode: 'single', viewportPreset, message: msg });
+                        snapshot.multi = {};
+                        snapshot.multiTokenLimited = false;
+                        snapshot.multiIssue = cloneData(lastMultiIssue || {
+                            label: e.name === 'AbortError' ? 'タイムアウト' : 'APIエラー',
+                            message: msg,
+                            scoreTableError: true
+                        });
+                        snapshot.improvementPlan = null;
+                        renderScanScoreTable(
+                            computeBasicScore(snapshot.basic),
+                            doDeep ? computeDeepScore(snapshot.deep) : null,
+                            computeMultiScore(snapshot.multi), doDeep, true,
+                            {
+                                ...scoreTableIds,
+                                playEnabled: doPlay, playScore: snapshot.play ? computePlayScore(snapshot.play) : null,
+                                extEnabled: doExt, extScore: snapshot.ext ? computeExtScore(snapshot.ext) : null,
+                                multiTokenLimited: false, multiIssue: snapshot.multiIssue,
+                                state: {
+                                    basicResults: snapshot.basic,
+                                    deepResults: doDeep ? snapshot.deep : null,
+                                    multiAiData: snapshot.multi,
+                                    playResults: snapshot.play,
+                                    extResults: snapshot.ext
+                                }
+                            }
+                        );
                         progressLabel.textContent = `${labelPrefix}MULTI SCAN エラー: ${msg}`;
                     }
                     localPhaseIndex++;
@@ -2559,6 +2786,7 @@
                 aiResults = primarySnapshot?.multi ? cloneData(primarySnapshot.multi) : {};
                 lastMultiIssue = primarySnapshot?.multiIssue ? cloneData(primarySnapshot.multiIssue) : null;
                 lastMultiTokenLimited = !!primarySnapshot?.multiTokenLimited;
+                lastImprovementPlan = primarySnapshot?.improvementPlan ? cloneData(primarySnapshot.improvementPlan) : null;
                 lastPlayResults = primarySnapshot?.play ? cloneData(primarySnapshot.play) : null;
                 lastExtResults = primarySnapshot?.ext ? cloneData(primarySnapshot.ext) : null;
                 lastMobileScanSnapshot = runMobile ? cloneData(mobileSnapshot) : null;
@@ -2568,6 +2796,7 @@
                 if (runMobile && mobileSnapshot) {
                     renderAllTabs('sp', mobileSnapshot.basic, mobileSnapshot.deep || null, mobileSnapshot.multi || {}, mobileSnapshot.play || null, mobileSnapshot.ext || null);
                 }
+                renderImprovementPlanPanel();
                 $('results').classList.add('visible');
                 $('exportArea').classList.add('visible');
                 if (runDesktop && runMobile) progressLabel.textContent = 'PC/SP 検査完了';
@@ -2733,8 +2962,9 @@
             return { status: rawStatus, impact: rawImpact };
         }
 
-        function normalizeScoreToTarget(score) {
+        function normalizeScoreToTarget(score, options = {}) {
             if (!score) return score;
+            const mode = options.mode || 'total';
             const critical = score.critical ?? 0;
             const serious = score.serious ?? 0;
             const moderate = score.moderate ?? 0;
@@ -2742,6 +2972,22 @@
             const pass = score.pass ?? 0;
             const na = score.na ?? 0;
             const covered = critical + serious + moderate + minor + pass + na;
+            const fixedTotal = getTargetScList().length;
+            if (mode === 'scan') {
+                const unverified = Math.max(0, fixedTotal - covered);
+                return {
+                    ...score,
+                    total: fixedTotal,
+                    critical,
+                    serious,
+                    moderate,
+                    minor,
+                    pass,
+                    na,
+                    unverified,
+                    score: calculateScanAchievementRate(pass, fixedTotal, unverified)
+                };
+            }
             if (score.useOwnTotal) {
                 const ownTotal = Math.max(score.total ?? covered, covered);
                 return {
@@ -2757,7 +3003,6 @@
                     score: score.score ?? calculateAchievementRate(pass, ownTotal, na)
                 };
             }
-            const fixedTotal = getTargetScList().length;
             return {
                 ...score,
                 total: fixedTotal,
@@ -2819,9 +3064,10 @@
                 else serious++;
             });
 
-            return { total: critical+serious+moderate+minor+pass+unverified,
+            const total = critical + serious + moderate + minor + pass + unverified;
+            return { total,
                      critical, serious, moderate, minor, pass, na: 0, unverified,
-                     score: calculateAchievementRate(pass, getTargetScList().length, 0) };
+                     score: calculateScanAchievementRate(pass, total, unverified) };
         }
 
         function computeDeepScore(results) {
@@ -2853,10 +3099,11 @@
                 else unverified++;
             });
 
-            return { total: fail+pass+na+unverified,
+            const total = fail + pass + na + unverified;
+            return { total,
                      critical: imp.critical, serious: imp.serious, moderate: imp.moderate, minor: imp.minor,
                      pass, na, unverified,
-                     score: calculateAchievementRate(pass, getTargetScList().length, na) };
+                     score: calculateScanAchievementRate(pass, total, unverified) };
         }
 
         function computePlayScore(playData) {
@@ -2883,10 +3130,11 @@
                 else if (status === 'na') na++;
                 else unverified++;
             });
-            return { total: fail + pass + na + unverified,
+            const total = fail + pass + na + unverified;
+            return { total,
                      critical: 0, serious: fail, moderate: 0, minor: 0,
                      pass, na, unverified,
-                     score: calculateAchievementRate(pass, getTargetScList().length, na) };
+                     score: calculateScanAchievementRate(pass, total, unverified) };
         }
 
         function computeExtScore(extData) {
@@ -2913,10 +3161,11 @@
                 else if (status === 'na') na++;
                 else unverified++;
             });
-            return { total: fail + pass + na + unverified,
+            const total = fail + pass + na + unverified;
+            return { total,
                      critical: 0, serious: fail, moderate: 0, minor: 0,
                      pass, na, unverified,
-                     score: calculateAchievementRate(pass, getTargetScList().length, na) };
+                     score: calculateScanAchievementRate(pass, total, unverified) };
         }
 
         function computeMultiScore(aiData) {
@@ -2939,14 +3188,15 @@
                 else if (status === 'na') na++;
                 else unverified++;
             });
-            return { total: fail+pass+na+unverified,
+            const total = fail + pass + na + unverified;
+            return { total,
                      useOwnTotal: true,
                      critical: 0, serious: fail, moderate: 0, minor: 0,
                      pass, na, unverified,
-                     score: calculateAchievementRate(pass, targetItems.length, na) };
+                     score: calculateScanAchievementRate(pass, total, unverified) };
         }
 
-        function computeTotalScore(basicResults, deepResults, multiAiData, playResults, extResults) {
+        function buildTotalScMap(basicResults, deepResults, multiAiData, playResults, extResults) {
             const rank = { fail: 0, pass: 1, unverified: 2, na: 3 };
             const scMap = {}; // sc → { result, impact, source }
             const lo = { 'A': 1, 'AA': 2, 'AAA': 3 };
@@ -2960,41 +3210,41 @@
                 '4.1.2':'EXT','4.1.3':'EXT','1.3.1':'EXT','1.3.5':'EXT',
             };
 
-            function merge(sc, result, impact, source) {
+            function merge(sc, result, impact, source, dkey) {
                 if (!sc || !scSet.has(sc)) return;
                 const cur = scMap[sc];
                 // MULTIはunverifiedのSCのみ補完する（他スキャンの確定結果を上書きしない）
                 if (source === 'MULTI' && cur && cur.result !== 'unverified') return;
                 const authority = SC_AUTHORITY[sc];
                 if (!cur) {
-                    scMap[sc] = { result, impact: impact || null, source };
+                    scMap[sc] = { result, impact: impact || null, source, dkey };
                     return;
                 }
                 // 権威スキャンの結果は他のfail/passより優先
                 if (authority && source === authority) {
-                    scMap[sc] = { result, impact: impact || cur.impact || null, source };
+                    scMap[sc] = { result, impact: impact || cur.impact || null, source, dkey };
                     return;
                 }
                 // 現在の結果が権威スキャン由来なら上書き不可
                 if (authority && cur.source === authority) return;
                 // 通常のステータス優先度
                 if (rank[result] < rank[cur.result]) {
-                    scMap[sc] = { result, impact: impact || cur.impact || null, source };
+                    scMap[sc] = { result, impact: impact || cur.impact || null, source, dkey };
                 }
             }
 
             if (basicResults) {
                 (basicResults.violations || []).forEach(v => {
                     const d = applyDecisionToStatus(`BASIC:${v.id}`, 'fail', v.impact);
-                    merge(extractSCFromTags(v.tags), d.status, d.impact, 'BASIC');
+                    merge(extractSCFromTags(v.tags), d.status, d.impact, 'BASIC', `BASIC:${v.id}`);
                 });
                 (basicResults.passes    || []).forEach(v => {
                     const d = applyDecisionToStatus(`BASIC:pass:${v.id}`, 'pass', null);
-                    merge(extractSCFromTags(v.tags), d.status, d.impact, 'BASIC');
+                    merge(extractSCFromTags(v.tags), d.status, d.impact, 'BASIC', `BASIC:pass:${v.id}`);
                 });
                 (basicResults.incomplete|| []).forEach(v => {
                     const d = applyDecisionToStatus(`BASIC:${v.id}`, 'unverified', v.impact);
-                    merge(extractSCFromTags(v.tags), d.status, d.impact, 'BASIC');
+                    merge(extractSCFromTags(v.tags), d.status, d.impact, 'BASIC', `BASIC:${v.id}`);
                 });
             }
             if (extResults) {
@@ -3003,7 +3253,7 @@
                     const rawStatus = r.status === 'fail' ? 'fail' : r.status === 'pass' ? 'pass'
                                : r.status === 'not_applicable' ? 'na' : 'unverified';
                     const d = applyDecisionToStatus(`EXT:${r.sc}`, rawStatus, 'serious');
-                    splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, d.impact, 'EXT'));
+                    splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, d.impact, 'EXT', `EXT:${r.sc}`));
                 });
             }
             if (deepResults) {
@@ -3011,7 +3261,7 @@
                     const rawStatus = r.status === 'fail' ? 'fail' : r.status === 'pass' ? 'pass'
                                : r.status === 'not_applicable' ? 'na' : 'unverified';
                     const d = applyDecisionToStatus(`DEEP:${r.sc}`, rawStatus, 'serious');
-                    splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, d.impact, 'DEEP'));
+                    splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, d.impact, 'DEEP', `DEEP:${r.sc}`));
                 });
             }
             if (playResults) {
@@ -3019,7 +3269,7 @@
                     const rawStatus = r.status === 'fail' ? 'fail' : r.status === 'pass' ? 'pass'
                                : r.status === 'not_applicable' ? 'na' : 'unverified';
                     const d = applyDecisionToStatus(`PLAY:${r.sc}`, rawStatus, 'serious');
-                    splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, d.impact, 'PLAY'));
+                    splitCompositeSc(r.sc).forEach(sc => merge(sc, d.status, d.impact, 'PLAY', `PLAY:${r.sc}`));
                 });
             }
             if (multiAiData) {
@@ -3032,10 +3282,14 @@
                                : r.status === 'fail' ? 'fail'
                                : r.status === 'not_applicable' ? 'na' : 'unverified';
                     const d = applyDecisionToStatus(`MULTI:${i}`, rawStatus, 'serious');
-                    merge(item.ref, d.status, d.impact, 'MULTI');
+                    merge(item.ref, d.status, d.impact, 'MULTI', `MULTI:${i}`);
                 });
             }
+            return scMap;
+        }
 
+        function computeTotalScore(basicResults, deepResults, multiAiData, playResults, extResults) {
+            const scMap = buildTotalScMap(basicResults, deepResults, multiAiData, playResults, extResults);
             const imp = { critical: 0, serious: 0, moderate: 0, minor: 0 };
             let pass = 0, na = 0, unverified = 0, fail = 0;
             Object.values(scMap).forEach(({ result, impact }) => {
@@ -3093,28 +3347,108 @@
 
 
         // ============================================================
-        // DEEP/PLAY/EXT の結果を SC 単位に統合（課題1）
-        // 同一 SC に複数ソースがある場合、最優先ステータスを代表とする
+        // 全スキャンの結果を SC 単位に統合する。
+        // 同一 SC に複数ソースがある場合、TOTAL算出と同じ優先ルールを代表ステータスにする。
         // ============================================================
-        function buildScUnifiedMap(deep, play, ext, scSet) {
-            const STATUS_RANK = { fail: 0, unverified: 1, pass: 2, na: 3 };
+        function getScLevelFromList(sc) {
+            if ((WCAG_SC.A || []).includes(sc)) return 'A';
+            if ((WCAG_SC.AA || []).includes(sc)) return 'AA';
+            if ((WCAG_SC.AAA || []).includes(sc)) return 'AAA';
+            return '';
+        }
+
+        function buildScUnifiedMap(basic, multi, deep, play, ext, scSet, lim, lo) {
+            const STATUS_RANK = { fail: 0, pass: 1, unverified: 2, na: 3 };
+            const SC_AUTHORITY = {
+                '2.1.1':'PLAY','2.1.2':'PLAY','2.1.4':'PLAY',
+                '2.4.3':'PLAY','2.4.7':'PLAY','2.4.11':'PLAY','2.4.12':'PLAY',
+                '4.1.2':'EXT','4.1.3':'EXT','1.3.1':'EXT','1.3.5':'EXT',
+            };
             const map = new Map(); // SC → { consolidatedStatus, impact, primaryDkey, sources[] }
 
             function addSource(sc, status, impact, sourceEntry) {
                 const scs = sc ? splitCompositeSc(sc).filter(s => scSet.has(s)) : [];
                 if (!scs.length) return;
-                const primarySc = scs[0];
-                if (!map.has(primarySc)) {
-                    map.set(primarySc, { consolidatedStatus: status, impact: impact || 'serious', primaryDkey: sourceEntry.dkey, sources: [sourceEntry] });
-                } else {
-                    const entry = map.get(primarySc);
-                    if ((STATUS_RANK[status] ?? 9) < (STATUS_RANK[entry.consolidatedStatus] ?? 9)) {
-                        entry.consolidatedStatus = status;
-                        entry.impact = impact || 'serious';
-                        entry.primaryDkey = sourceEntry.dkey;
+                scs.forEach(targetSc => {
+                    if (!map.has(targetSc)) {
+                        map.set(targetSc, { sc: targetSc, consolidatedStatus: 'unverified', impact: null, primaryDkey: null, sources: [] });
                     }
-                    entry.sources.push(sourceEntry);
+                    map.get(targetSc).sources.push({ ...sourceEntry, status, impact: impact || null });
+                });
+            }
+
+            function finalizeEntry(entry) {
+                let selected = null;
+                const authority = SC_AUTHORITY[entry.sc];
+                entry.sources.forEach(sourceEntry => {
+                    if (sourceEntry.src === 'MULTI' && selected && selected.status !== 'unverified') return;
+                    if (!selected) {
+                        selected = sourceEntry;
+                        return;
+                    }
+                    if (authority && sourceEntry.src === authority) {
+                        selected = sourceEntry;
+                        return;
+                    }
+                    if (authority && selected.src === authority) return;
+                    if ((STATUS_RANK[sourceEntry.status] ?? 9) < (STATUS_RANK[selected.status] ?? 9)) {
+                        selected = sourceEntry;
+                    }
+                });
+                if (selected) {
+                    entry.consolidatedStatus = selected.status;
+                    entry.impact = selected.impact || (selected.status === 'fail' ? 'serious' : null);
+                    entry.primaryDkey = selected.dkey;
+                } else {
+                    entry.consolidatedStatus = 'unverified';
+                    entry.impact = null;
+                    entry.primaryDkey = `UNCOVERED:${entry.sc}`;
                 }
+            }
+
+            if (basic) {
+                const basicByRule = new Map();
+                function setBasicRule(result, type, status, rawImpact, priority, dkeyPrefix) {
+                    if ((lo[getWcagLevel(result.tags)] || 1) > lim) return;
+                    const sc = extractSCFromTags(result.tags);
+                    if (!sc || !scSet.has(sc)) return;
+                    const ruleId = result.id || sc || `${type}:${basicByRule.size}`;
+                    const current = basicByRule.get(ruleId);
+                    if (!current || priority < current.priority) {
+                        basicByRule.set(ruleId, {
+                            src: 'BASIC',
+                            type,
+                            sc,
+                            status,
+                            impact: rawImpact || null,
+                            data: result,
+                            dkey: `${dkeyPrefix}${ruleId}`,
+                            priority
+                        });
+                    }
+                }
+                (basic.violations || []).forEach(v => setBasicRule(v, 'violation', 'fail', v.impact || 'serious', 0, 'BASIC:'));
+                (basic.incomplete || []).forEach(i => setBasicRule(i, 'incomplete', 'unverified', 'serious', 1, 'BASIC:'));
+                (basic.passes || []).forEach(p => setBasicRule(p, 'pass', 'pass', null, 2, 'BASIC:pass:'));
+                basicByRule.forEach(sourceEntry => addSource(sourceEntry.sc, sourceEntry.status, sourceEntry.impact, sourceEntry));
+            }
+
+            if (multi && Object.keys(multi || {}).length > 0) {
+                manualCheckItems.forEach((item, i) => {
+                    if ((lo[item.level] || 2) > lim) return;
+                    if (!item.aiTarget) return;
+                    const r = multi[i];
+                    if (!r || !item.ref || !scSet.has(item.ref)) return;
+                    const st = r.status === 'fail' ? 'fail'
+                        : r.status === 'pass' ? 'pass'
+                        : r.status === 'not_applicable' ? 'na' : 'unverified';
+                    addSource(item.ref, st, st === 'fail' ? 'serious' : null, {
+                        src: 'MULTI',
+                        type: 'multi',
+                        data: { ...item, idx: i, aiResult: r },
+                        dkey: `MULTI:${i}`
+                    });
+                });
             }
 
             if (deep) deep.forEach(r => {
@@ -3133,6 +3467,7 @@
                 addSource(r.sc, st, st === 'fail' ? 'serious' : null, { src: 'EXT', type: 'ext', data: r, dkey: `EXT:${r.sc}` });
             });
 
+            map.forEach(finalizeEntry);
             return map;
         }
 
@@ -3147,7 +3482,7 @@
             const srcLabels = [...new Set(sources.map(s => s.src))];
             const srcBadges = srcLabels.map(src => `<span class="badge ${srcBadgeClasses[src] || ''}">${src}</span>`).join('');
             const scBadge  = sc ? `<span class="item-sc">${escapeHtml(sc)}</span>` : '';
-            const lvBadge  = level ? `<span class="item-level">${escapeHtml(level)}</span>` : '';
+            const lvBadge  = (level || getScLevelFromList(sc)) ? `<span class="item-level">${escapeHtml(level || getScLevelFromList(sc))}</span>` : '';
             const titleText = getScName(sc) || `SC ${sc}`;
 
             const dk = dkey || `tmp:unified:${sc}:${no}`;
@@ -3158,12 +3493,38 @@
             </div>`;
 
             // ソース別エビデンスセクション（課題2: 検出ツール・内容・箇所を明記）
-            const evidenceSections = sources.map(({ src, type, data }) => {
+            const evidenceSections = sources.map(({ src, type, data, status }) => {
                 let summary = '';
                 let countText = '';
                 let locs = [];
-                let toolLabel = src === 'DEEP' ? 'Puppeteer検査' : src === 'PLAY' ? 'Playwright検査' : 'EXT検査';
-                if (type === 'deep') {
+                let toolLabel = src === 'BASIC' ? 'axe-core'
+                    : src === 'MULTI' ? 'AI検査'
+                    : src === 'DEEP' ? 'Puppeteer検査'
+                    : src === 'PLAY' ? 'Playwright検査' : 'EXT検査';
+                const statusLabel = status === 'fail' ? '不合格'
+                    : status === 'pass' ? '合格'
+                    : status === 'na' ? '該当なし' : '未検証';
+                if (type === 'violation' || type === 'incomplete' || type === 'pass') {
+                    const title = getJaRuleName(data.id);
+                    const desc = getJaRuleDesc(data.id, data.description || data.help);
+                    summary = [title, desc].filter(Boolean).join('：');
+                    locs = (data.nodes || []).slice(0, 8).map(n => {
+                        const target = Array.isArray(n.target) ? n.target.join(' > ') : (n.target || '');
+                        const failure = n.failureSummary ? ` / ${translateFailureSummary(n.failureSummary)}` : '';
+                        return `${target}${failure}`;
+                    }).filter(Boolean);
+                    countText = data.nodes ? `${statusLabel}：${data.nodes.length}件` : statusLabel;
+                } else if (type === 'multi') {
+                    const r = data.aiResult || {};
+                    const confidence = typeof r.confidence === 'number' ? ` / 信頼度: ${Math.round(r.confidence * 100)}%` : '';
+                    summary = r.reason || data.text || '';
+                    countText = `${statusLabel}${confidence}`;
+                    locs = [
+                        r.selector ? `セレクタ: ${r.selector}` : '',
+                        r.evidence ? `根拠: ${r.evidence}` : '',
+                        r.suggestion ? `改善案: ${r.suggestion}` : ''
+                    ].filter(Boolean);
+                } else if (type === 'deep') {
                     summary = data.message || '';
                     locs = (data.violations || []).slice(0, 8).map(v => String(v));
                     countText = data.violations?.length ? `検出件数：${data.violations.length}件` : '';
@@ -3184,7 +3545,7 @@
                     ? `<div class="item-locations"><div class="item-locations-title">検出箇所</div>${locs.map(l => `<div class="location-row">${escapeHtml(String(l))}</div>`).join('')}</div>`
                     : '';
                 return `<div class="item-source-section">
-                    <div class="item-source-header">${srcBadge}<span class="item-source-tool">${escapeHtml(toolLabel)}</span></div>
+                    <div class="item-source-header">${srcBadge}<span class="item-source-tool">${escapeHtml(toolLabel)}</span><span class="item-source-tool">${escapeHtml(statusLabel)}</span></div>
                     ${summary ? `<div class="item-summary">${escapeHtml(summary)}</div>` : ''}
                     ${countText ? `<div class="item-count">${escapeHtml(countText)}</div>` : ''}
                     ${locHtml}
@@ -3223,93 +3584,36 @@
 
             const buckets = { critical: [], serious: [], moderate: [], minor: [], pass: [], na: [], unverified: [] };
             const scSet = new Set(getTargetScList());
-
-            // BASIC results: axeが同じルールIDを violations/incomplete/passes に分ける場合があるため、
-            // 詳細カードはルール単位で1件に正規化する（fail > unverified > pass）。
-            if (basic) {
-                const basicByRule = new Map();
-                function setBasicRule(result, type, rawBucket, rawImpact, priority, dkeyPrefix) {
-                    if ((lo[getWcagLevel(result.tags)] || 1) > lim) return;
-                    const ruleId = result.id || extractSCFromTags(result.tags) || `${type}:${basicByRule.size}`;
-                    const current = basicByRule.get(ruleId);
-                    if (!current || priority < current.priority) {
-                        basicByRule.set(ruleId, {
-                            src: 'BASIC',
-                            type,
-                            data: result,
-                            dkey: `${dkeyPrefix}${ruleId}`,
-                            rawBucket,
-                            rawImpact,
-                            priority
-                        });
-                    }
-                }
-                (basic.violations || []).forEach(v => {
-                    setBasicRule(v, 'violation', v.impact || 'serious', v.impact || 'serious', 0, 'BASIC:');
-                });
-                (basic.incomplete || []).forEach(i => {
-                    setBasicRule(i, 'incomplete', 'unverified', 'serious', 1, 'BASIC:');
-                });
-                (basic.passes || []).forEach(p => {
-                    setBasicRule(p, 'pass', 'pass', 'serious', 2, 'BASIC:pass:');
-                });
-                basicByRule.forEach(({ src, type, data, dkey, rawBucket, rawImpact }) => {
-                    const dest = applyDecision(dkey, rawBucket, rawImpact);
-                    (buckets[dest] || buckets.unverified).push({ src, type, data, dkey });
-                });
-            }
-
-            // MULTI results: 実行済みデータがある場合のみ表示する。
             const hasMultiResults = Object.keys(multi || {}).length > 0;
-            if (hasMultiResults) {
-                manualCheckItems.forEach((item, i) => {
-                    if ((lo[item.level] || 2) > lim) return;
-                    if (!item.aiTarget) return;
-                    const r = multi[i];
-                    const dkey = `MULTI:${i}`;
-                    const defaultBucket = !r ? 'unverified'
-                        : r.status === 'fail' ? 'serious'
-                        : r.status === 'pass' ? 'pass'
-                        : r.status === 'not_applicable' ? 'na' : 'unverified';
-                    const dest = applyDecision(dkey, defaultBucket, 'serious');
-                    (buckets[dest] || buckets.unverified).push({ src: 'MULTI', type: 'multi', data: { ...item, idx: i, aiResult: r }, dkey });
-                });
-            }
+            const totalScMap = buildTotalScMap(basic, deep || null, hasMultiResults ? multi : null, play || null, ext || null);
 
-            // DEEP/PLAY/EXT → SC単位統合（課題1）
-            const scUnifiedMap = buildScUnifiedMap(deep, play, ext, scSet);
-            scUnifiedMap.forEach((entry, sc) => {
-                const dkey = entry.primaryDkey;
-                const defaultBucket = entry.consolidatedStatus === 'fail' ? 'serious'
-                    : entry.consolidatedStatus === 'pass' ? 'pass'
-                    : entry.consolidatedStatus === 'na' ? 'na' : 'unverified';
-                const dest = applyDecision(dkey, defaultBucket, entry.impact || 'serious');
-                const wcagLevel = null;
-                (buckets[dest] || buckets.unverified).push({ src: 'UNIFIED', type: 'unified', sc, level: wcagLevel, entry, dkey });
+            // BASIC/MULTI/DEEP/PLAY/EXT → SC単位統合
+            const scUnifiedMap = buildScUnifiedMap(basic, hasMultiResults ? multi : null, deep, play, ext, scSet, lim, lo);
+            getTargetScList().forEach(sc => {
+                const totalEntry = totalScMap[sc];
+                const fallback = totalEntry || applyDecisionToStatus(`UNCOVERED:${sc}`, 'unverified', null);
+                const result = totalEntry ? totalEntry.result : fallback.status;
+                const impact = totalEntry ? totalEntry.impact : fallback.impact;
+                const dkey = totalEntry?.dkey || `UNCOVERED:${sc}`;
+                const defaultBucket = result === 'fail' ? (impact || 'serious')
+                    : result === 'pass' ? 'pass'
+                    : result === 'na' ? 'na' : 'unverified';
+                const entry = scUnifiedMap.get(sc);
+                if (entry) {
+                    const unifiedEntry = {
+                        ...entry,
+                        consolidatedStatus: result,
+                        impact,
+                        primaryDkey: dkey
+                    };
+                    (buckets[defaultBucket] || buckets.unverified).push({ src: 'UNIFIED', type: 'unified', sc, level: getScLevelFromList(sc), entry: unifiedEntry, dkey });
+                } else {
+                    const dest = defaultBucket;
+                    (buckets[dest] || buckets.unverified).push({ src: 'NONE', type: 'uncovered', sc, dkey });
+                }
             });
 
             // SC 3.2.3/3.2.4 ナビゲーション一貫性はカード表示せず情報バーで表示
-
-            // 未検査SC補完: どのバケットにも含まれないSCをuncovererdとして未検証バケットへ追加
-            // → badgeMap.unverified（SC単位集計）とカード数を一致させる
-            {
-                const coveredScs = new Set();
-                Object.values(buckets).forEach(arr => arr.forEach(item => {
-                    if (item.sc) {
-                        splitCompositeSc(item.sc).forEach(s => coveredScs.add(s));
-                    } else if (item.data) {
-                        const sc1 = extractSCFromTags(item.data.tags);
-                        if (sc1) coveredScs.add(sc1);
-                        if (item.data.ref) splitCompositeSc(item.data.ref).forEach(s => coveredScs.add(s));
-                    }
-                }));
-                getTargetScList().forEach(sc => {
-                    if (coveredScs.has(sc)) return;
-                    const dkey = `UNCOVERED:${sc}`;
-                    const dest = applyDecision(dkey, 'unverified', null);
-                    (buckets[dest] || buckets.unverified).push({ src: 'NONE', type: 'uncovered', sc, dkey });
-                });
-            }
 
             // 各タブを描画（バッジ数はSC単位のTOTALスコアに合わせる）
             const ts = normalizeScoreToTarget(computeTotalScore(basic, deep || null, hasMultiResults ? multi : null, play || null, ext || null));
@@ -3512,11 +3816,11 @@
                 extEnabled ? extData : null
             );
 
-            const nb = normalizeScoreToTarget(basicScore);
-            const nd = normalizeScoreToTarget(deepScore);
-            const nm = normalizeScoreToTarget(multiScore);
-            const np = normalizeScoreToTarget(playScore);
-            const ne = normalizeScoreToTarget(extScore);
+            const nb = normalizeScoreToTarget(basicScore, { mode: 'scan' });
+            const nd = normalizeScoreToTarget(deepScore, { mode: 'scan' });
+            const nm = normalizeScoreToTarget(multiScore, { mode: 'scan' });
+            const np = normalizeScoreToTarget(playScore, { mode: 'scan' });
+            const ne = normalizeScoreToTarget(extScore, { mode: 'scan' });
 
             function scoreChip(score) {
                 if (score === null || score === undefined) return DASH;
@@ -3573,7 +3877,7 @@
                 row(multiLabel, 'label-multi', multiBlockingIssue ? { error: `— ${multiBlockingIssue.label}: ${multiBlockingIssue.message || 'MULTI SCANの結果をスコアに反映できませんでした'} —` } : nm, multiEnabled, false) +
                 row(playLabel, 'label-play', np, playEnabled, false) +
                 row(extLabel, 'label-ext', ne, extEnabled, false) +
-                row('TOTAL', 'label-total', normalizeScoreToTarget(totalScore), true, true);
+                row('TOTAL', 'label-total', normalizeScoreToTarget(totalScore, { mode: 'total' }), true, true);
 
             const table = $(scoreTableId);
             if (table) table.style.display = 'block';
@@ -3608,12 +3912,54 @@
             return '';
         }
 
+        function appendImprovementPlanRows(rows, improvementPlan, itemNo, viewLabel = '') {
+            const plan = normalizeImprovementPlanClient(improvementPlan);
+            if (!plan) return itemNo;
+            const prefix = viewLabel ? `${viewLabel} ` : '';
+            if (plan.summary) {
+                rows.push([
+                    String(itemNo++), '改善計画', '',
+                    `${prefix}改善計画サマリー`, '', '',
+                    viewLabel, '', '', plan.summary, ''
+                ]);
+            }
+            plan.priorityActions.forEach(action => {
+                rows.push([
+                    String(itemNo++), '改善計画',
+                    action.relatedSc.join(', '),
+                    `${prefix}${action.title || '改善タスク'}`,
+                    '', '',
+                    action.sources.join('\n'),
+                    action.steps.length ? String(action.steps.length) : '',
+                    priorityJa(action.priority),
+                    action.reason || '',
+                    action.steps.join('\n')
+                ]);
+            });
+            plan.quickWins.forEach(item => {
+                rows.push([
+                    String(itemNo++), '改善計画', '',
+                    `${prefix}短期改善`, '', '',
+                    viewLabel, '', '低', item, ''
+                ]);
+            });
+            plan.manualChecks.forEach(item => {
+                rows.push([
+                    String(itemNo++), '改善計画', '',
+                    `${prefix}手動確認`, '', '',
+                    viewLabel, '', '中', item, ''
+                ]);
+            });
+            return itemNo;
+        }
+
         // 列構成: [No, 検査種別, SC, 検査項目, 適合レベル, 結果, 場所, 検出数, 重要度, 詳細, 改善案]
-        function buildReportRows(results, url, aiData, enhancedData, navConsistency, playData, extData) {
+        function buildReportRows(results, url, aiData, enhancedData, navConsistency, playData, extData, improvementPlan, viewLabel = '') {
             if (aiData === undefined) aiData = aiResults;
             if (enhancedData === undefined) enhancedData = lastEnhancedResults;
             if (playData === undefined) playData = lastPlayResults;
             if (extData === undefined) extData = lastExtResults;
+            if (improvementPlan === undefined) improvementPlan = lastImprovementPlan;
             const impactJa = { critical: '緊急', serious: '重大', moderate: '中程度', minor: '軽微' };
             const levelOrder = { 'A': 1, 'AA': 2, 'AAA': 3 };
             const targetLevelNum = levelOrder[targetLevel] || 2;
@@ -3781,6 +4127,8 @@
                 ]);
             }
 
+            itemNo = appendImprovementPlanRows(rows, improvementPlan, itemNo, viewLabel);
+
             return rows.map(row => row.map(cell => sanitizeHtmlTags(String(cell ?? ''))));
         }
 
@@ -3815,13 +4163,13 @@
                 const pages = [];
 
                 // PC rows
-                const pcRows = buildReportRows(lastResults, baseUrl, aiResults, lastEnhancedResults, batchNavConsistency, lastPlayResults, lastExtResults);
+                const pcRows = buildReportRows(lastResults, baseUrl, aiResults, lastEnhancedResults, batchNavConsistency, lastPlayResults, lastExtResults, lastImprovementPlan, 'PC VIEW');
 
                 let mergedRows;
                 if (lastMobileScanSnapshot) {
                     // SP rows を結合し 1 URL = 1 シートに統合
                     const sp = lastMobileScanSnapshot;
-                    const spRows = buildReportRows(sp.basic, baseUrl, sp.multi || {}, sp.deep || null, null, sp.play || null, sp.ext || null);
+                    const spRows = buildReportRows(sp.basic, baseUrl, sp.multi || {}, sp.deep || null, null, sp.play || null, sp.ext || null, sp.improvementPlan || null, 'SP VIEW');
                     const sep = Array(11).fill('');
                     mergedRows = [
                         Object.assign([...sep], { 0: '＜PC VIEW＞' }),
@@ -3866,13 +4214,13 @@
                 const hasMobile = batchMobileResultsData.length > 0;
 
                 batchResultsData.filter(r => r.success).forEach((r, i) => {
-                    const pcRows = buildReportRows(r.results, r.url, batchAIResults[r.url] || {}, batchEnhancedResults[r.url] || null, batchNavConsistency, batchPlayResults[r.url] || null, batchExtResults[r.url] || null);
+                    const pcRows = buildReportRows(r.results, r.url, batchAIResults[r.url] || {}, batchEnhancedResults[r.url] || null, batchNavConsistency, batchPlayResults[r.url] || null, batchExtResults[r.url] || null, batchImprovementPlans[r.url] || null, 'PC VIEW');
 
                     // SP データ（PC+SP モード時）は同一シートに統合
                     const mobileR = hasMobile ? batchMobileResultsData[i] : null;
                     let mergedRows;
                     if (mobileR?.success) {
-                        const spRows = buildReportRows(mobileR.results, mobileR.url, batchMobileAIResults[mobileR.url] || {}, batchMobileEnhancedResults[mobileR.url] || null, null, batchMobilePlayResults[mobileR.url] || null, batchMobileExtResults[mobileR.url] || null);
+                        const spRows = buildReportRows(mobileR.results, mobileR.url, batchMobileAIResults[mobileR.url] || {}, batchMobileEnhancedResults[mobileR.url] || null, null, batchMobilePlayResults[mobileR.url] || null, batchMobileExtResults[mobileR.url] || null, batchMobileImprovementPlans[mobileR.url] || null, 'SP VIEW');
                         const sep = Array(11).fill('');
                         mergedRows = [
                             Object.assign([...sep], { 0: '＜PC VIEW＞' }),

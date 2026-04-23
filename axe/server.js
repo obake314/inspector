@@ -3309,10 +3309,26 @@ ${JSON.stringify(evaluationItems, null, 2)}
     "selector": "該当するCSSセレクタ。特定不能なら空文字",
     "suggestion": "改善案。pass/not_applicableなら空文字"
   }
-  ]
+  ],
+  "improvementPlan": {
+    "summary": "全スキャン結果を踏まえた改善方針を2〜3文で要約",
+    "priorityActions": [
+      {
+        "priority": "high" | "medium" | "low",
+        "title": "改善タスク名",
+        "reason": "どの検出結果に基づくか。違反内容と影響",
+        "steps": ["具体的な修正手順1", "具体的な修正手順2"],
+        "relatedSc": ["2.4.4"],
+        "sources": ["BASIC", "MULTI"]
+      }
+    ],
+    "manualChecks": ["自動検査だけでは確定できず、手動確認が必要な確認事項"],
+    "quickWins": ["短時間で改善できる項目"]
+  }
 }
 
-全${itemsForAI.length}項目を評価してください。`;
+全${itemsForAI.length}項目を評価してください。
+improvementPlan はBASIC/EXT/DEEP/PLAY/MULTIの全結果を統合して作成し、最大6件の priorityActions に絞ってください。`;
 
     console.log(`[${provider}] AI API 呼び出し中...`);
     let aiResponse = '';
@@ -3331,7 +3347,7 @@ ${JSON.stringify(evaluationItems, null, 2)}
       return res.status(httpStatus).json(payload);
     }
     console.log('AI応答受信, 長さ:', aiResponse.length);
-    _lastAiDebug = { provider, model: usedModel, length: aiResponse.length, tokenLimited: aiTokenLimited, raw: aiResponse, timestamp: new Date().toISOString() };
+    _lastAiDebug = { ..._lastAiDebug, stage: 'ai_responded', model: usedModel, length: aiResponse.length, tokenLimited: aiTokenLimited, raw: aiResponse, timestamp: new Date().toISOString() };
     
     // ブラケットカウント方式で JSON 配列を抽出
     // 正規表現は文字列内の ] や } に誤反応するため使用しない
@@ -3378,6 +3394,75 @@ ${JSON.stringify(evaluationItems, null, 2)}
       return null;
     }
 
+    function extractJsonObject(text) {
+      const cleaned = text.replace(/```(?:json)?\s*/gi, '').replace(/```\s*/g, '').trim();
+      for (const src of [cleaned, text.trim()]) {
+        try {
+          const parsed = JSON.parse(src);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+        } catch (e) {}
+        const start = src.indexOf('{');
+        if (start === -1) continue;
+        let depth = 0, inStr = false, esc = false;
+        for (let i = start; i < src.length; i++) {
+          const c = src[i];
+          if (esc) { esc = false; continue; }
+          if (c === '\\' && inStr) { esc = true; continue; }
+          if (c === '"') { inStr = !inStr; continue; }
+          if (!inStr) {
+            if (c === '{') depth++;
+            else if (c === '}') {
+              depth--;
+              if (depth === 0) {
+                try {
+                  const raw = src.slice(start, i + 1)
+                    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ')
+                    .replace(/,(\s*[}\]])/g, '$1');
+                  const parsed = JSON.parse(raw);
+                  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+                } catch (e) {}
+                break;
+              }
+            }
+          }
+        }
+      }
+      return null;
+    }
+
+    function normalizeImprovementPlan(plan) {
+      if (!plan || typeof plan !== 'object') return null;
+      const toText = (value, max = 600) => compactForAI(value, max);
+      const toList = (value, maxItems = 6, maxText = 220) => (
+        Array.isArray(value) ? value : []
+      ).map(item => toText(item, maxText)).filter(Boolean).slice(0, maxItems);
+      const priorityActions = (Array.isArray(plan.priorityActions) ? plan.priorityActions : [])
+        .filter(action => action && typeof action === 'object')
+        .slice(0, 6)
+        .map(action => ({
+          priority: ['high', 'medium', 'low'].includes(action.priority) ? action.priority : 'medium',
+          title: toText(action.title, 160),
+          reason: toText(action.reason, 360),
+          steps: toList(action.steps, 5, 220),
+          relatedSc: Array.isArray(action.relatedSc)
+            ? action.relatedSc.map(sc => compactForAI(sc, 40)).filter(Boolean).slice(0, 6)
+            : [],
+          sources: Array.isArray(action.sources)
+            ? action.sources.map(src => compactForAI(src, 40)).filter(Boolean).slice(0, 6)
+            : []
+        }))
+        .filter(action => action.title || action.reason || action.steps.length);
+      const normalized = {
+        summary: toText(plan.summary, 700),
+        priorityActions,
+        manualChecks: toList(plan.manualChecks, 6, 260),
+        quickWins: toList(plan.quickWins, 6, 220)
+      };
+      return normalized.summary || normalized.priorityActions.length || normalized.manualChecks.length || normalized.quickWins.length
+        ? normalized
+        : null;
+    }
+
     // トークン切れで JSON が不完全な場合、完結しているオブジェクトを部分救出する
     function extractPartialItems(text) {
       const items = [];
@@ -3409,7 +3494,9 @@ ${JSON.stringify(evaluationItems, null, 2)}
     }
 
     let results = [];
-    const extracted = extractJsonArray(aiResponse);
+    const extractedObject = extractJsonObject(aiResponse);
+    const improvementPlan = normalizeImprovementPlan(extractedObject?.improvementPlan);
+    const extracted = Array.isArray(extractedObject?.results) ? extractedObject.results : extractJsonArray(aiResponse);
     if (extracted) {
       results = extracted;
     } else if (aiTokenLimited) {
@@ -3476,6 +3563,7 @@ ${JSON.stringify(evaluationItems, null, 2)}
       partialResults,
       missingCount: missingIndexes.length,
       warning,
+      improvementPlan,
       results: normalizedResults
     });
 

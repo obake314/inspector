@@ -1,6 +1,6 @@
 # SPEC_WEB
 
-最終更新: 2026-04-23（MULTI対象項目再定義・自動検査結果連携・スキャン順序変更・SC権威マージ・MULTIスコア反映修正・PLAY→MULTI事前解決・OpenAI response_format対応・デバッグエンドポイント追加）
+最終更新: 2026-04-23（MULTI対象項目再定義・自動検査結果連携・改善計画パネル/レポート反映・スキャン順序変更・SC権威マージ・MULTIスコア反映修正・PLAY→MULTI事前解決・OpenAI response_format対応・デバッグエンドポイント追加）
 
 ## 対象
 
@@ -48,11 +48,13 @@
 
 - API: `POST /api/ai-evaluate`
 - 入力: `{ url, checkItems[], viewportPreset?, basicResults?, extResults?, deepResults?, playResults? }`
-- 出力: `{ success, model, tokenLimited?, partialResults?, missingCount?, warning?, results: [{ index, status, reason, evidence, selector, suggestion, confidence? }] }`
+- 出力: `{ success, model, tokenLimited?, partialResults?, missingCount?, warning?, improvementPlan?, results: [{ index, status, reason, evidence, selector, suggestion, confidence? }] }`
 - status: `pass` / `fail` / `not_applicable` / `manual_required`
 - MULTIは全WCAG項目をAIで一括判定する機能ではない。`manualCheckItems` のうち `aiTarget: true` の項目のみを対象にする。
 - `aiTarget: true` は、自然言語・視覚的文脈・ページ間一貫性・フォームエラー文脈など、BASIC/EXT/DEEP/PLAYだけでは確定しにくい項目に限定する。
 - BASIC/EXT/DEEP/PLAYの結果を圧縮してAIプロンプトに渡し、自動ツールのfail/pass/not_applicableと矛盾する判定を避ける。
+- MULTIが有効な場合、AIはBASIC/EXT/DEEP/PLAY/MULTIの全結果を統合した `improvementPlan` を返す。構成は `summary`、最大6件の `priorityActions`、`quickWins`、`manualChecks`。
+- クライアントは `improvementPlan` を `#improvementPlanPanel` に表示する。APIエラー、モデル利用不可、JSON解析失敗、タイムアウト、または改善計画未生成は同パネルに明示し、通常の改善計画として扱わない。
 - AIには各対象項目ごとの `verificationMethod` をサーバー側で付与し、証拠不足の場合は推測せず `manual_required` を返させる。
 - AI未設定時: `success: true` のまま `model: manual-fallback` で全項目 `manual_required` を返し、`aiErrorType: api_error` / `detailLabel: APIエラー` を返す
 - AI接続失敗/認証失敗/HTTP 429 レート制限時: HTTP `502` / `401` / `429` を返し、`success: false`、`aiErrorType: api_error`、`detailLabel`、`rateLimited`、`quotaExceeded`、`retryAfterSeconds` を可能な範囲で返す
@@ -145,6 +147,7 @@
   - SP VIEW ブロック: SPスコアテーブル（BASIC/DEEP/MULTI/PLAY/EXT/TOTAL）＋ SPスコア詳細タブ
   - 各ブロックのスコア詳細タブ（緊急/重大/中程度/軽微/合格/該当なし/未検証）はそれぞれ独立して操作
   - タブ横の数字はそのタブに表示されるカードの実数（items.length）を表示。ただし0件のタブはSC単位集計値にフォールバック
+  - MULTI有効時はスコアブロック下に改善計画パネルを表示し、PC/SPそれぞれの改善計画またはMULTIエラーを表示
 - クリアボタン（エクスポートエリア右端）:
   - スキャン結果・状態を全リセットして再検査可能状態に戻す
   - UIロックを解除（モード切替・レベル・オプション等）
@@ -189,12 +192,14 @@
   - `batchAIResults`: `url → MULTI results`
   - `batchAITokenLimitedMap`: `url → bool`（MULTI トークン上限/部分応答/API制限フラグ）
   - `batchAIIssueMap`: `url → { label, message }`（MULTI 警告/エラー表示メタ）
+  - `batchImprovementPlans`: `url → MULTI improvementPlan`
   - `batchNavConsistency`: SC 3.2.3/3.2.4
   - `batchMobileResultsData`: SPデータ（`PC+SP` 時のみ使用）
   - `batchMobileEnhancedResults`: `url → SP DEEP results`
   - `batchMobileAIResults`: `url → SP MULTI results`
   - `batchMobileAITokenLimitedMap`: `url → bool`（SP MULTI トークン上限/部分応答/API制限フラグ）
   - `batchMobileAIIssueMap`: `url → { label, message }`（SP MULTI 警告/エラー表示メタ）
+  - `batchMobileImprovementPlans`: `url → SP MULTI improvementPlan`
   - `batchPlayResults`: `url → PLAY results`
   - `batchExtResults`: `url → EXT results`
   - `batchMobilePlayResults`: `url → SP PLAY results`
@@ -239,14 +244,20 @@
 
 ### 達成率
 
+個別スキャン（BASIC / DEEP / MULTI / PLAY / EXT）:
+
+`達成率 = ROUND(合格 / (全項目数 - 未検証) * 100)`
+
+例: 全55項目、合格25項目、未検証5項目の場合は `25 / (55 - 5) = 50%`。
+
+TOTAL:
+
 `達成率 = ROUND(合格 / (全項目数 - 該当なし) * 100)`
 
-例: 全55項目、合格25項目、該当なし5項目の場合は `25 / (55 - 5) = 50%`。
-
-この整合式はスコアテーブルの各行で成立する。TOTALは `computeTotalScore()` を `normalizeScoreToTarget()` で固定項目数へ正規化した SC 単位スコアと一致させる。
+個別スキャンは、そのスキャンが絶対に確認できない項目を `未検証` として扱い、分母から外す。TOTALのみ、対象レベルの全項目数を基準に `computeTotalScore()` を `normalizeScoreToTarget(..., { mode: 'total' })` で固定項目数へ正規化した SC 単位スコアと一致させる。
 
 - 未カバーSCは `unverified` に補完する
-- MULTI行はAI対象項目（`aiTarget: true`）だけを分母にする。AI対象外の手動項目をMULTIの未検証として積み上げない
+- MULTI行はAI対象項目（`aiTarget: true`）を判定可能範囲とし、AI対象外・未取得項目は未検証として表示する。ただし達成率の分母からは未検証を外す
 - MULTI の結果カードは MULTI 実行済みデータが存在する場合のみ描画し、`aiTarget: true` の項目に限定する
 - 詳細カードはエビデンス表示のため複数カードになることがあるが、タブバッジはカード枚数ではなくSC単位スコアを表示する
 - `displayResults(..., { renderTabs: false })` を使う実行経路では、BASIC直後の中間描画で詳細タブを更新せず、全スキャン完了後の `renderAllTabs()` で TOTAL 統合結果を描画する
@@ -317,24 +328,24 @@
 
 ## 詳細カード仕様
 
-### BASIC / MULTI カード
-- カード構成: `[バッジ] [SC番号] [レベル] タイトル ▼ / サマリー / 件数 / 検出箇所`
+### SC統合カード（UNIFIED）
+- BASIC / MULTI / DEEP / PLAY / EXT の詳細結果は SC番号をキーに `buildScUnifiedMap()` で統合され、1 SC につき 1 カードを生成する
+- カード構成: `[SCANバッジ群] [SC番号] [レベル] タイトル ▼ / ソース別サマリー / 件数 / 検出箇所`
 - SC番号は数字のみ表示（"SC" プレフィックスなし）
-- MULTI カードの検出箇所には、AIレスポンスの `selector` / `evidence` / `reason` / `suggestion` を「セレクタ」「根拠」「理由」「改善案」として表示する
-- カード内 `[No.n]` 要素は表示しない
-- 詳細カードの開閉は `.item-header` のクリックのみで行う。展開後の `.item-source-section` / `.item-locations` 内クリックではカードを閉じない
-- バッジ色: BASIC `#3581B8` / DEEP `#304C89` / MULTI `#0D7A5F` / PLAY `#7B4DC8` / EXT `#D97706` / BATCH `#334155`
-
-### DEEP / PLAY / EXT 統合カード（UNIFIED）
-- DEEP / PLAY / EXT の結果は SC をキーに `buildScUnifiedMap()` で統合され、1 SC につき 1 カードを生成する
 - タイトル: `getScName(sc)`（`manualCheckItems` → `wcagScNamesExtra` の順で日本語名を解決）
-- ステータス優先順: fail > unverified > pass > na
+- ステータス優先順: TOTAL算出と同じく fail > pass > unverified > na。PLAY/EXTの権威SCとMULTIのギャップ補完ルールも詳細表示の代表タブ選定に反映する
+- 詳細パネルの各タブは `buildTotalScMap()` のSC判定結果から生成し、タブバッジ件数とカード件数が一致するようにする。未カバーSCは `UNCOVERED:{sc}` の未検証カードとして補完する
 - 代表 `dkey` は最優先ソースの dkey を使用（OK/NG/保留判定の継承元）
 - `renderAllTabs()` のカード生成では `sc` / `level` / `entry` を item から受け取り、UNIFIEDカードに渡す
 - カード展開時に、ソース別エビデンスセクション（`.item-source-section`）を表示:
+  - BASIC → 検出ツール: "axe-core"
+  - MULTI → 検出ツール: "AI検査"。AIレスポンスの `selector` / `evidence` / `reason` / `suggestion` を表示する
   - DEEP → 検出ツール: "Puppeteer検査"
   - PLAY → 検出ツール: "Playwright検査"
   - EXT → `data.source` に応じて "IBM Equal Access" / "ネイティブDOM検査" / "CDP検査"
+- カード内 `[No.n]` 要素は表示しない
+- 詳細カードの開閉は `.item-header` のクリックのみで行う。展開後の `.item-source-section` / `.item-locations` 内クリックではカードを閉じない
+- バッジ色: BASIC `#3581B8` / DEEP `#304C89` / MULTI `#0D7A5F` / PLAY `#7B4DC8` / EXT `#D97706` / BATCH `#334155`
 - `.item-source-section` は詳細閲覧用の領域であり、クリックしても親 `.item-card` の開閉状態を変更しない
 - タブバッジは `badgeMap[key]`（`computeTotalScore()` と同一の SC 単位集計値）を使用
 
@@ -511,6 +522,7 @@
   - `SP VIEW` シート: SP結果が存在する場合のみ追加
 - ヘッダー列: `No` / `検査種別` / `SC` / `検査項目` / `適合レベル` / `結果` / `場所` / `検出数` / `重要度` / `詳細` / `改善案`
 - 列幅（`wch`）: No=4, 検査種別=8, SC=6, 検査項目=30, 適合レベル=6, 結果=8, 場所=20, 検出数=6, 重要度=8, 詳細=30, 改善案=20
+- MULTI改善計画が存在する場合、`検査種別=改善計画` の行としてサマリー、優先改善、短期改善、手動確認を末尾に追加する。結果列は空にし、集計対象には含めない。
 - 旧 CSV エクスポートボタン（`#csvBtn`）を `Excel` ボタンに置換済み
 
 ### Google Sheets エクスポート
@@ -523,7 +535,7 @@
   - 緊急/重大/中程度/軽微: 「結果=不合格」行の「重要度」列で分類
   - 合格/未検証/該当なし: 「結果」列の値で直接カウント
   - `passRate = Math.round(pass / (total - na) * 100)`（行数ベース、該当なしを母数から除外）
-  - 区切り行（結果列が空）は集計対象外
+  - 区切り行・改善計画行（結果列が空）は集計対象外
 - 一括検査（`PC+SP` モード）も各 URL を1シートに統合して出力
 
 ## GAS 報告書生成
