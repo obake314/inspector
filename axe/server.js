@@ -2722,14 +2722,26 @@ app.post('/api/enhanced-check', async (req, res) => {
   const includeAAA = false;
   if (!url) return res.status(400).json({ error: 'URLを指定してください' });
 
+  // リバースプロキシの proxy_read_timeout をかわすため Content-Type を先送りし、
+  // 25秒ごとにスペースを書き込んで接続を維持する
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('X-Accel-Buffering', 'no');
+  const keepAliveInterval = setInterval(() => {
+    try { if (!res.writableEnded) res.write(' '); } catch (_) {}
+  }, 25000);
+  const endWithJson = (statusCode, data) => {
+    clearInterval(keepAliveInterval);
+    if (res.writableEnded) return;
+    if (!res.headersSent) res.statusCode = statusCode;
+    try { res.write(JSON.stringify(data)); res.end(); } catch (_) {}
+  };
+
   // リクエスト全体に8分のタイムアウトを設定
   const HANDLER_TIMEOUT = 8 * 60 * 1000;
   let handlerTimedOut = false;
   const handlerTimer = setTimeout(() => {
     handlerTimedOut = true;
-    if (!res.headersSent) {
-      res.status(504).json({ error: 'DEEP SCANがタイムアウトしました（8分超過）。対象ページの応答が遅い可能性があります。' });
-    }
+    endWithJson(504, { error: 'DEEP SCANがタイムアウトしました（8分超過）。対象ページの応答が遅い可能性があります。' });
   }, HANDLER_TIMEOUT);
 
   let browser;
@@ -2899,11 +2911,11 @@ app.post('/api/enhanced-check', async (req, res) => {
       : results.filter(r => !AAA_SC_LIST.has(r.sc));
 
     console.log(`[Enhanced] 完了: ${finalResults.length}基準を検査 (includeAAA:${!!includeAAA})`);
-    if (!handlerTimedOut) res.json({ success: true, url, viewportPreset: preset, results: finalResults, includeAAA: !!includeAAA, checkedAt: new Date().toISOString() });
+    if (!handlerTimedOut) endWithJson(200, { success: true, url, viewportPreset: preset, results: finalResults, includeAAA: !!includeAAA, checkedAt: new Date().toISOString() });
 
   } catch (error) {
     console.error('[Enhanced] Error:', error);
-    if (!handlerTimedOut && !res.headersSent) res.status(500).json({ error: error.message });
+    if (!handlerTimedOut) endWithJson(500, { error: error.message });
   } finally {
     clearTimeout(handlerTimer);
     if (browser) await browser.close();
