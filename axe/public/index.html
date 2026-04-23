@@ -345,7 +345,7 @@
                             <thead>
                                 <tr>
                                     <th class="label">SCAN</th>
-                                    <th class="label-all"><span>対象項目/全項目数</span><br>スコア</th>
+                                    <th class="label-all"><span>合格数/分母</span><br>スコア</th>
                                     <th class="label-item">緊急</th>
                                     <th class="label-item">重大</th>
                                     <th class="label-item">中程度</th>
@@ -383,7 +383,7 @@
                             <thead>
                                 <tr>
                                     <th class="label">SCAN</th>
-                                    <th class="label-all"><span>対象項目/全項目数</span><br>スコア</th>
+                                    <th class="label-all"><span>合格数/分母</span><br>スコア</th>
                                     <th class="label-item">緊急</th>
                                     <th class="label-item">重大</th>
                                     <th class="label-item">中程度</th>
@@ -421,6 +421,9 @@
                 Export to
                 <button class="export-btn" id="csvBtn" onclick="exportExcel()">Excel</button>
                 <button class="export-btn" id="reportBtn" onclick="exportToSheets()">GoogleSheet</button>
+                <button class="export-btn" id="jsonExportBtn" onclick="exportScanStateJson()">JSON保存</button>
+                <button class="export-btn" id="jsonImportBtn" onclick="document.getElementById('scanStateImportInput').click()">JSON読込</button>
+                <input type="file" id="scanStateImportInput" accept="application/json,.json" hidden onchange="importScanStateJsonFile(this)">
                 <button class="export-btn clear-btn" id="clearBtn" onclick="clearScan()">クリア</button>
             </div>
         </div>
@@ -1094,11 +1097,18 @@
             'critical': '緊急', 'serious': '重大', 'moderate': '中程度', 'minor': '軽微'
         };
 
+        function setTargetLevel(level) {
+            const supportedLevel = ['A', 'AA', 'AAA'].includes(level) ? level : 'AA';
+            const nextLevel = supportedLevel === 'AAA' && !sessionAAABeta ? 'AA' : supportedLevel;
+            targetLevel = nextLevel;
+            document.querySelectorAll('.level-select-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.level === nextLevel);
+            });
+            $('levelNote').textContent = levelNotes[nextLevel] || '';
+        }
+
         document.querySelectorAll('.level-select-btn').forEach(b => b.addEventListener('click', () => {
-            document.querySelectorAll('.level-select-btn').forEach(x => x.classList.remove('active'));
-            b.classList.add('active');
-            targetLevel = b.dataset.level;
-            $('levelNote').textContent = levelNotes[targetLevel] || '';
+            setTargetLevel(b.dataset.level);
         }));
 
         ['pc', 'sp'].forEach(scope => {
@@ -1264,6 +1274,152 @@
         let lastPlayResults = null;
         let lastExtResults = null;
         let lastMobileScanSnapshot = null;
+
+        function getScanStateUrl(payload = {}) {
+            return payload.url
+                || lastResults?.url
+                || lastMobileScanSnapshot?.basic?.url
+                || $('urlInput')?.value?.trim()
+                || '';
+        }
+
+        function buildScanStatePayload() {
+            return {
+                app: 'accessibility-inspector',
+                schemaVersion: 1,
+                exportedAt: new Date().toISOString(),
+                targetLevel,
+                currentMode,
+                viewportMode: getViewportMode(),
+                url: getScanStateUrl(),
+                basic: cloneData(lastResults),
+                deep: cloneData(lastEnhancedResults),
+                play: cloneData(lastPlayResults),
+                ext: cloneData(lastExtResults),
+                multi: cloneData(aiResults),
+                multiTokenLimited: !!lastMultiTokenLimited,
+                multiIssue: cloneData(lastMultiIssue),
+                improvementPlan: cloneData(lastImprovementPlan),
+                navConsistency: cloneData(batchNavConsistency),
+                mobileSnapshot: cloneData(lastMobileScanSnapshot),
+                manualDecisions: Array.from(manualDecisions.entries()),
+                manualImpacts: Array.from(manualImpacts.entries())
+            };
+        }
+
+        function exportScanStateJson() {
+            if (!lastResults && !lastMobileScanSnapshot?.basic) {
+                alert('保存できるスキャン結果がありません');
+                return;
+            }
+            const payload = buildScanStatePayload();
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            const link = document.createElement('a');
+            const date = new Date().toISOString().slice(0, 10);
+            const urlPart = (payload.url || 'scan')
+                .replace(/^https?:\/\//i, '')
+                .replace(/[^\w.-]+/g, '-')
+                .replace(/^-+|-+$/g, '')
+                .slice(0, 60) || 'scan';
+            link.href = URL.createObjectURL(blob);
+            link.download = `accessibility-inspector-state-${urlPart}-${date}.json`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(link.href);
+        }
+
+        function restoreStateMap(map, entries) {
+            map.clear();
+            if (!Array.isArray(entries)) return;
+            entries.forEach(entry => {
+                if (Array.isArray(entry) && entry.length >= 2) map.set(entry[0], entry[1]);
+            });
+        }
+
+        function setViewportModeFromState(viewportMode) {
+            const normalized = ['desktop', 'mobile', 'both'].includes(viewportMode) ? viewportMode : 'desktop';
+            const idByMode = { desktop: 'viewportModeDesktop', mobile: 'viewportModeMobile', both: 'viewportModeBoth' };
+            const radio = $(idByMode[normalized]);
+            if (radio) radio.checked = true;
+        }
+
+        function restoreScanState(payload) {
+            if (!payload || typeof payload !== 'object') {
+                throw new Error('JSONの形式が正しくありません');
+            }
+            const mobileSnapshot = cloneData(payload.mobileSnapshot || payload.lastMobileScanSnapshot || null);
+            const basic = cloneData(payload.basic || payload.lastResults || mobileSnapshot?.basic || null);
+            if (!basic) {
+                throw new Error('BASIC結果を含むスキャン状態JSONではありません');
+            }
+            const url = getScanStateUrl({ url: payload.url || basic.url || mobileSnapshot?.basic?.url });
+            if (url) {
+                basic.url = basic.url || url;
+                const urlInput = $('urlInput');
+                if (urlInput) urlInput.value = url;
+            }
+
+            lastResults = basic;
+            lastEnhancedResults = cloneData(payload.deep || payload.lastEnhancedResults || mobileSnapshot?.deep || null);
+            lastPlayResults = cloneData(payload.play || payload.lastPlayResults || mobileSnapshot?.play || null);
+            lastExtResults = cloneData(payload.ext || payload.lastExtResults || mobileSnapshot?.ext || null);
+            const importedMulti = payload.multi || payload.aiResults || mobileSnapshot?.multi || {};
+            aiResults = importedMulti && typeof importedMulti === 'object' && !Array.isArray(importedMulti)
+                ? cloneData(importedMulti)
+                : {};
+            lastMultiTokenLimited = !!(payload.multiTokenLimited || mobileSnapshot?.multiTokenLimited);
+            lastMultiIssue = cloneData(payload.multiIssue || mobileSnapshot?.multiIssue || null);
+            lastImprovementPlan = cloneData(payload.improvementPlan || mobileSnapshot?.improvementPlan || null);
+            lastMobileScanSnapshot = mobileSnapshot;
+            batchNavConsistency = cloneData(payload.navConsistency || null);
+            restoreStateMap(manualDecisions, payload.manualDecisions);
+            restoreStateMap(manualImpacts, payload.manualImpacts);
+
+            setTargetLevel(payload.targetLevel || basic.level || targetLevel);
+            setViewportModeFromState(payload.viewportMode);
+            scanExecuted = false;
+            setMode(payload.currentMode || 'single');
+
+            $('errorMessage').classList.remove('visible');
+            $('results').classList.add('visible');
+            $('exportArea').classList.add('visible');
+            refreshScoreTable();
+            renderAllTabs('pc');
+            if (lastMobileScanSnapshot?.basic) {
+                renderAllTabs(
+                    'sp',
+                    lastMobileScanSnapshot.basic,
+                    lastMobileScanSnapshot.deep || null,
+                    lastMobileScanSnapshot.multi || {},
+                    lastMobileScanSnapshot.play || null,
+                    lastMobileScanSnapshot.ext || null
+                );
+            }
+            renderImprovementPlanPanel();
+            renderScanEstimate();
+        }
+
+        function importScanStateJsonFile(input) {
+            const file = input?.files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+                try {
+                    restoreScanState(JSON.parse(reader.result));
+                    alert('スキャン状態を読み込みました');
+                } catch (e) {
+                    alert(`JSON読込に失敗しました: ${e.message}`);
+                } finally {
+                    input.value = '';
+                }
+            };
+            reader.onerror = () => {
+                alert('JSONファイルを読み込めませんでした');
+                input.value = '';
+            };
+            reader.readAsText(file);
+        }
 
         function buildMultiIssue(data) {
             if (!data) return null;
@@ -2954,10 +3110,20 @@
 
         function splitCompositeSc(scText) {
             if (!scText) return [];
-            return String(scText)
+            const targetScList = getTargetScList();
+            const expanded = String(scText)
                 .split(/[\/,]/)
                 .map(s => s.trim())
+                .filter(Boolean)
+                .flatMap(s => {
+                    if (/^\d+\.\d+\.x$/i.test(s)) {
+                        const prefix = s.replace(/\.x$/i, '.');
+                        return targetScList.filter(sc => sc.startsWith(prefix));
+                    }
+                    return [s];
+                })
                 .filter(s => /^\d+\.\d+\.\d+$/.test(s));
+            return [...new Set(expanded)];
         }
 
         // decision を raw ステータスに上書き適用するヘルパー
@@ -3993,9 +4159,9 @@
                 if (n > 0) return `<span class="score-num is-pos tone-${tone}">${n}</span>`;
                 return `<span class="score-num is-zero">${n}</span>`;
             }
-            function totalText(data) {
-                const targetTotal = data.targetTotal || getTargetScList().length;
-                return `${data.total} / ${targetTotal}`;
+            function totalText(data, isTotal) {
+                const denominator = isTotal ? (data.targetTotal || getTargetScList().length) : data.total;
+                return `${data.pass} / ${denominator}`;
             }
             function row(labelHtml, labelClass, data, enabled, isTotal) {
                 const rowClass = `score-row${isTotal ? ' is-total' : ''}`;
@@ -4014,7 +4180,7 @@
                 return `<tr class="${rowClass}">
                     <td class="score-cell score-label ${labelClass}">${labelHtml}</td>
                     <td class="score-cell score-main">
-                        <div class="score-total">${totalText(data)}</div>
+                        <div class="score-total">${totalText(data, isTotal)}</div>
                         <div>${scoreChip(data.score)}</div>
                     </td>
                     <td class="score-cell">${num(data.critical, 'critical')}</td>

@@ -105,7 +105,9 @@
 - 入力: `{ url, basicAuth?, viewportPreset? }`
 - 出力: `{ success, url, results: [{ source, sc, status, violations[], message, name }], checkedAt }`
 - source: `IBM_ACE` / `EXT_NATIVE` / `EXT_CDP`
-- status: `pass` / `fail` / `unverified` / `error`
+- status: `pass` / `fail` / `unverified` / `manual_required` / `error`
+  - `manual_required`: IBM ACE の `POTENTIAL` / `MANUAL` 判定。violations に検出箇所を含み、詳細パネルで根拠確認が可能。TOTALスコアでは `unverified` 扱い
+  - 集約優先度: `fail > POTENTIAL/MANUAL (manual_required) > pass`（要手動確認が PASS に埋もれないよう優先）
 - APIコスト不要（ローカルブラウザ実行）
 - タイムアウト: サーバー6分 / クライアント7分
 
@@ -231,8 +233,8 @@
 
 ### 列
 
-- `全項目数` / `緊急` / `重大` / `中程度` / `軽微` / `合格` / `該当なし` / `未検証`
-- **`全項目数` セルの表示形式**: 個別スキャン行は `判定済み項目数 / 対象全項目数`（例: `38 / 55`）で表示。TOTAL行は `55 / 55` 固定。`totalText(data)` 関数が `data.total`（判定済み）と `data.targetTotal`（対象全項目数）を使用する
+- 列ヘッダー: `合格数/分母`（`<th class="label-all">`） / `緊急` / `重大` / `中程度` / `軽微` / `合格` / `該当なし` / `未検証`
+- **`合格数/分母` セルの表示形式**: 個別スキャン行は `判定済み項目数 / 対象全項目数`（例: `38 / 55`）で表示。TOTAL行は `合格数 / 対象SC総数`（例: `42 / 55`）で表示。`totalText(data, isTotal)` 関数が分母を切り替える: `isTotal=false` → `data.total`（判定済み数）、`isTotal=true` → `data.targetTotal`（対象SC総数）
 
 ### 全項目数（固定）
 
@@ -289,6 +291,8 @@ TOTAL:
   - 権威スキャンの結果は他スキャンのfailより強く適用される（例: PLAYがpassなら2.4.7はpassになる）
 - **MULTIはギャップ補完のみ**: 他スキャンが`unverified`のSCのみMULTI結果を適用。BASIC/EXT/DEEP/PLAYが確定済みのSCには上書きしない
 - MULTIは `aiTarget: true` の結果だけをTOTALへ補完する。AI対象外の手動項目はTOTAL上で未カバーSC補完に任せる
+- **手動判定の優先順位**: 詳細パネルの OK/NG/保留判定（`manualDecisions`）は権威スキャン・通常スキャンより最優先。`buildTotalScMap()` および各 `computeXxxScore()` 内の `merge()` で `isManual` フラグを使用し、手動判定が設定済みのSCは自動スキャン結果で上書きできない
+- **未カバーSCへの手動判定**: スキャンが未実施のSC（`UNCOVERED:{sc}` キー）に手動判定を設定した場合、`buildTotalScMap()` の末尾処理でTOTALスコアとタブバッジに反映する
 
 ## Web系API一覧
 
@@ -518,6 +522,16 @@ TOTAL:
 - 一括検査領域にも `batchReportBtn`（GoogleSheet）を配置し、Sheets設定状態に連動して有効/無効を切り替える
 
 ## エクスポート仕様
+
+### JSON スキャン状態の保存/読込
+
+- **JSON保存ボタン** (`#jsonExportBtn` → `exportScanStateJson()`): `buildScanStatePayload()` の内容を JSON ファイルとしてダウンロード
+  - ファイル名: `accessibility-inspector-state-{url}-{YYYY-MM-DD}.json`
+  - 保存フィールド: `schemaVersion` / `exportedAt` / `targetLevel` / `currentMode` / `viewportMode` / `url` / `basic` / `deep` / `play` / `ext` / `multi` / `multiTokenLimited` / `multiIssue` / `improvementPlan` / `navConsistency` / `mobileSnapshot` / `manualDecisions`（配列化）/ `manualImpacts`（配列化）
+- **JSON読込ボタン** (`#jsonImportBtn` → `importScanStateJsonFile()`): JSON ファイルを選択して `restoreScanState()` を呼び出し
+  - 復元後: `refreshScoreTable()` / `renderAllTabs('pc'/'sp')` / `renderImprovementPlanPanel()` を再描画
+  - `basic` フィールドが存在しない場合は読込エラー
+  - `mobileSnapshot` に SP 結果が含まれる場合は SP タブも復元
 
 ### Excel エクスポート（クライアント側）
 
