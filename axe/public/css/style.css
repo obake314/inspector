@@ -828,6 +828,8 @@ h1 {
 .violation-list {
   max-height: 500px;
   overflow-y: auto;
+  padding-bottom: var(--space-m);
+  scroll-padding: var(--space-m);
 }
 .violation-item {
   border-bottom: 1px solid var(--navy-200);

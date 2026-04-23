@@ -3574,7 +3574,7 @@
                     <button class="decision-btn${dec==='hold'?' active-hold':''}" onclick="setDecision('${escapeHtml(dk)}','hold',this)">保留</button>
                    </div>`;
             return `<div class="item-card ${decisionClass}" data-impact="${impact||''}" data-default-impact="${impact||'serious'}">
-                <div class="item-header" onclick="this.closest('.item-card').classList.toggle('expanded')">
+                <div class="item-header" onclick="toggleItemCard(this)">
                     ${srcBadge}
                     ${scBadge}${lvBadge}
                     <span class="item-title">${escapeHtml(title)}</span>
@@ -3585,6 +3585,34 @@
                 ${countText ? `<div class="item-count">${escapeHtml(countText)}</div>` : ''}
                 ${locHtml}
             </div>`;
+        }
+
+        function toggleItemCard(headerEl) {
+            const card = headerEl?.closest('.item-card');
+            if (!card) return;
+            const isOpening = !card.classList.contains('expanded');
+            card.classList.toggle('expanded');
+            if (isOpening) requestAnimationFrame(() => scrollExpandedCardIntoView(card));
+        }
+
+        function scrollExpandedCardIntoView(card) {
+            const buffer = 16;
+            const list = card.closest('.violation-list');
+            if (list) {
+                const listRect = list.getBoundingClientRect();
+                const cardRect = card.getBoundingClientRect();
+                if (cardRect.bottom > listRect.bottom - buffer) {
+                    list.scrollBy({ top: cardRect.bottom - listRect.bottom + buffer, behavior: 'smooth' });
+                } else if (cardRect.top < listRect.top + buffer) {
+                    list.scrollBy({ top: cardRect.top - listRect.top - buffer, behavior: 'smooth' });
+                }
+            }
+            requestAnimationFrame(() => {
+                const cardRect = card.getBoundingClientRect();
+                if (cardRect.bottom > window.innerHeight - buffer) {
+                    window.scrollBy({ top: cardRect.bottom - window.innerHeight + buffer, behavior: 'smooth' });
+                }
+            });
         }
 
 
@@ -3875,7 +3903,7 @@
             }).join('');
 
             return `<div class="item-card ${decisionClass}" data-impact="${impact||''}" data-default-impact="${impact||'serious'}">
-                <div class="item-header" onclick="this.closest('.item-card').classList.toggle('expanded')">
+                <div class="item-header" onclick="toggleItemCard(this)">
                     ${srcBadges}
                     ${scBadge}${lvBadge}
                     <span class="item-title">${escapeHtml(titleText)}</span>
