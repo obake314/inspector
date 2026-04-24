@@ -718,6 +718,55 @@ app.post('/api/settings-save', (req, res) => {
   res.json({ success: true });
 });
 
+async function detectPageSignals(page) {
+  try {
+    return await page.evaluate(() => {
+      const iframeSrcs = Array.from(document.querySelectorAll('iframe'))
+        .map(frame => String(frame.getAttribute('src') || '').trim())
+        .filter(Boolean);
+      const mediaEmbedCount = iframeSrcs.filter(src =>
+        /youtube\.com|youtu\.be|vimeo\.com|soundcloud\.com|spotify\.com\/embed|podcasters\.spotify\.com|player\.fm/i.test(src)
+      ).length;
+      const formSelector = [
+        'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"])',
+        'select',
+        'textarea',
+        '[contenteditable="true"]',
+        '[role="textbox"]',
+        '[role="searchbox"]',
+        '[role="combobox"]',
+        '[role="listbox"]',
+        '[role="spinbutton"]'
+      ].join(',');
+      const audioCount = document.querySelectorAll('audio').length;
+      const videoCount = document.querySelectorAll('video').length;
+      const formControlCount = document.querySelectorAll(formSelector).length;
+      const hasAnyMedia = (audioCount + videoCount + mediaEmbedCount) > 0;
+      const hasVideoLikeMedia = (videoCount + mediaEmbedCount) > 0;
+      return {
+        audioCount,
+        videoCount,
+        mediaEmbedCount,
+        formControlCount,
+        hasAnyMedia,
+        hasVideoLikeMedia,
+        hasFormControls: formControlCount > 0
+      };
+    });
+  } catch (error) {
+    return {
+      audioCount: 0,
+      videoCount: 0,
+      mediaEmbedCount: 0,
+      formControlCount: 0,
+      hasAnyMedia: false,
+      hasVideoLikeMedia: false,
+      hasFormControls: false,
+      detectionError: error.message
+    };
+  }
+}
+
 /**
  * アクセシビリティチェック（axe-core実行）API
  */
@@ -739,12 +788,12 @@ app.post('/api/check', async (req, res) => {
       });
       console.log('Basic認証を設定しました');
     }
-    
-    await page.setDefaultNavigationTimeout(60000);
-    await page.goto(url, { waitUntil: 'networkidle2' });
+	    await page.setDefaultNavigationTimeout(60000);
+	    await page.goto(url, { waitUntil: 'networkidle2' });
+	    const pageSignals = await detectPageSignals(page);
 
-    const builder = new AxePuppeteer(page);
-    
+	    const builder = new AxePuppeteer(page);
+
     // WCAGレベルに応じたタグ設定の実装
     const tags = ['wcag2a', 'wcag21a', 'wcag22a'];
     if (level === 'AA' || level === 'AAA') {
@@ -755,8 +804,9 @@ app.post('/api/check', async (req, res) => {
     }
     builder.withTags(tags);
     
-    const results = await builder.analyze();
-    await page.close();
+	    const results = await builder.analyze();
+	    results.pageSignals = pageSignals;
+	    await page.close();
     
     res.json({ success: true, viewportPreset: preset, results });
 
@@ -802,13 +852,15 @@ app.post('/api/batch-check', async (req, res) => {
         await applyViewportPreset(page, preset);
         if (basicAuth && basicAuth.user && basicAuth.pass) {
           await page.authenticate({ username: basicAuth.user, password: basicAuth.pass });
-        }
-        await page.setDefaultNavigationTimeout(60000);
-        await page.goto(url, { waitUntil: 'networkidle2' });
+	        }
+	        await page.setDefaultNavigationTimeout(60000);
+	        await page.goto(url, { waitUntil: 'networkidle2' });
+	        const pageSignals = await detectPageSignals(page);
 
-        const builder = new AxePuppeteer(page);
-        builder.withTags(tags);
-        const results = await builder.analyze();
+	        const builder = new AxePuppeteer(page);
+	        builder.withTags(tags);
+	        const results = await builder.analyze();
+	        results.pageSignals = pageSignals;
 
         // SC 3.2.3/3.2.4 用にナビ構造を抽出
         const navStructure = await page.evaluate(() => {
