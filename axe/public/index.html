@@ -711,6 +711,48 @@
             { text: "カスタムウィジェットのroleが意味的に正確（例: role='button'が実際にボタン動作をする）", ref: "4.1.2", level: "A", category: "ARIA" }
         ];
 
+        const AUTO_PASS_SIGNAL_RULES = {
+            '1.2.1': { test: signals => !signals.hasAnyMedia, reason: '音声・動画コンテンツが存在しません' },
+            '1.2.2': { test: signals => !signals.hasVideoLikeMedia, reason: '動画コンテンツが存在しません' },
+            '1.2.3': { test: signals => !signals.hasVideoLikeMedia, reason: '動画コンテンツが存在しません' },
+            '1.4.2': { test: signals => !signals.hasAnyMedia, reason: '音声・動画コンテンツが存在しません' },
+            '3.3.1': { test: signals => !signals.hasFormControls, reason: '入力欄が存在しません' }
+        };
+
+        function getPageSignals(results) {
+            return results?.pageSignals || null;
+        }
+
+        function getAutoDetectedPassEntries(results) {
+            const signals = getPageSignals(results);
+            if (!signals || signals.detectionError) return [];
+            return Object.entries(AUTO_PASS_SIGNAL_RULES).flatMap(([ref, rule]) => {
+                const item = manualCheckItems.find(it => it.ref === ref);
+                if (!item || !rule.test(signals)) return [];
+                return [{
+                    ref,
+                    text: item.text,
+                    level: item.level,
+                    category: item.category,
+                    status: 'pass',
+                    autoDetected: true,
+                    reason: rule.reason,
+                    detail: `事前検出: ${rule.reason}`,
+                    remark: '該当箇所なし'
+                }];
+            });
+        }
+
+        function getAutoDetectedPassRefs(results) {
+            return new Set(getAutoDetectedPassEntries(results).map(entry => entry.ref));
+        }
+
+        function getAutoDetectedPassMap(results) {
+            const map = new Map();
+            getAutoDetectedPassEntries(results).forEach(entry => map.set(entry.ref, entry));
+            return map;
+        }
+
         // manualCheckItems に含まれない SC の日本語名補完
         const wcagScNamesExtra = {
             '1.1.1': 'テキストによる代替', '1.2.1': '音声のみ及び映像のみ', '1.2.2': 'キャプション（収録済）',
@@ -795,7 +837,7 @@
             renderScanScoreTable(
                 computeBasicScore(lastResults, pcDecisionScope),
                 doDeep  ? computeDeepScore(lastEnhancedResults, pcDecisionScope)  : null,
-                doMulti ? computeMultiScore(aiResults, pcDecisionScope)           : null,
+                doMulti ? computeMultiScore(aiResults, pcDecisionScope, lastResults)           : null,
                 doDeep, doMulti,
                 {
                     scoreBodyId: 'scanScoreBody', scoreTableId: 'scanScoreTable', scoreBlockId: 'scoreBlockDesktop',
@@ -842,7 +884,7 @@
                 renderScanScoreTable(
                     computeBasicScore(spData.basic, spDecisionScope),
                     spDeep  ? computeDeepScore(spData.deep, spDecisionScope)   : null,
-                    spMulti ? computeMultiScore(spData.multi, spDecisionScope) : null,
+                    spMulti ? computeMultiScore(spData.multi, spDecisionScope, spData.basic) : null,
                     spDeep, spMulti,
                     {
                         scoreBodyId: 'scanScoreBodyMobile', scoreTableId: 'scanScoreTableMobile', scoreBlockId: 'scoreBlockMobile',
@@ -1765,12 +1807,7 @@
             }
 
             try {
-                // 対象レベルに応じたチェック項目をフィルタ
-                const levelOrder = { 'A': 1, 'AA': 2, 'AAA': 3 };
-                const targetLevelNum = levelOrder[targetLevel];
-                const filteredItems = manualCheckItems
-                    .map((item, index) => ({ ...item, index }))
-                    .filter(item => levelOrder[item.level] <= targetLevelNum && item.aiTarget);
+                const filteredItems = getFilteredAiItemsForTargetLevel(lastResults);
 
                 if (!silent) status.textContent = `${filteredItems.length}項目 SCORING...（1-2分かかります）`;
 
@@ -2210,7 +2247,7 @@
             renderScanScoreTable(
                 computeBasicScore(lastResults, pcDecisionScope),
                 deepEnabled  ? computeDeepScore(lastEnhancedResults, pcDecisionScope) : null,
-                multiEnabled ? computeMultiScore(aiResults, pcDecisionScope) : null,
+                multiEnabled ? computeMultiScore(aiResults, pcDecisionScope, lastResults) : null,
                 deepEnabled, multiEnabled,
                 {
                     scoreBodyId: 'scanScoreBody', scoreTableId: 'scanScoreTable', scoreBlockId: 'scoreBlockDesktop',
@@ -2247,7 +2284,7 @@
                 renderScanScoreTable(
                     computeBasicScore(mobileR.results, spDecisionScope),
                     mDeepEnabled  ? computeDeepScore(mobileEnhanced, spDecisionScope) : null,
-                    mMultiEnabled ? computeMultiScore(mobileAI, spDecisionScope) : null,
+                    mMultiEnabled ? computeMultiScore(mobileAI, spDecisionScope, mobileR.results) : null,
                     mDeepEnabled, mMultiEnabled,
                     {
                         scoreBodyId: 'scanScoreBodyMobile', scoreTableId: 'scanScoreTableMobile', scoreBlockId: 'scoreBlockMobile',
@@ -2374,10 +2411,6 @@
                 const basicUser = $('basicUser')?.value?.trim() || '';
                 const basicPassVal = $('basicPass')?.value || '';
                 const basicAuth = (basicUser && basicPassVal) ? { user: basicUser, pass: basicPassVal } : null;
-                const levelOrder = { 'A': 1, 'AA': 2, 'AAA': 3 };
-                const filteredItems = manualCheckItems.map((item, index) => ({ ...item, index }))
-                    .filter(item => levelOrder[item.level] <= levelOrder[targetLevel] && item.aiTarget);
-
                 // ビュー1件分のパイプライン（BASIC → DEEP → MULTI）を実行
                 async function runBatchViewport(viewportPreset, viewLabel, phaseOffset) {
                     const vPrefix = viewLabel ? `[${viewLabel}] ` : '';
@@ -2593,36 +2626,39 @@
                     // MULTI
                     if (doAI && successUrls.length > 0) {
                         renderPhases(localPhase + 1);
-                        for (let i = 0; i < successUrls.length; i++) {
-                            const shortUrl = successUrls[i].replace(/^https?:\/\//, '').substring(0, 40);
-                            progressLabel.textContent = `${vPrefix}MULTI SCANNING: ${shortUrl}`;
-                            progressSub.textContent = `${i + 1} / ${successUrls.length} URL`;
-                            setPhaseProgress(localPhase, i / successUrls.length);
+	                        for (let i = 0; i < successUrls.length; i++) {
+	                            const shortUrl = successUrls[i].replace(/^https?:\/\//, '').substring(0, 40);
+	                            progressLabel.textContent = `${vPrefix}MULTI SCANNING: ${shortUrl}`;
+	                            progressSub.textContent = `${i + 1} / ${successUrls.length} URL`;
+	                            setPhaseProgress(localPhase, i / successUrls.length);
                             try {
                                 const aiController = new AbortController();
                                 const aiTimer = setTimeout(() => aiController.abort(), 10 * 60 * 1000);
                                 let ar, ad;
+                                const basicResultsForUrl = resultsData.find(rd => rd.url === successUrls[i])?.results || null;
+                                const filteredItemsForUrl = getFilteredAiItemsForTargetLevel(basicResultsForUrl);
                                 try {
                                     const r = await fetchApiJson(apiUrl('/api/ai-evaluate'), {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify({
                                             url: successUrls[i],
-                                            checkItems: filteredItems,
+                                            checkItems: filteredItemsForUrl,
                                             viewportPreset,
-                                            basicResults: resultsData.find(rd => rd.url === successUrls[i])?.results || null,
+                                            basicResults: basicResultsForUrl,
                                             extResults: extResultsMap[successUrls[i]] || null,
                                             deepResults: enhancedResults[successUrls[i]] || null,
                                             playResults: playResultsMap[successUrls[i]] || null
                                         }),
                                         signal: aiController.signal
                                     }, '/api/ai-evaluate');
-                                    ar = r.response; ad = r.data;
+                                    ar = r.response;
+                                    ad = r.data;
                                 } finally {
                                     clearTimeout(aiTimer);
                                 }
                                 if (ar && ar.ok) {
-                                    const processed = mapAiResultsByOriginalIndex(ad.results || [], filteredItems);
+                                    const processed = mapAiResultsByOriginalIndex(ad.results || [], filteredItemsForUrl);
                                     const issue = Object.keys(processed).length === 0
                                         ? buildMultiScoreReflectionIssue((ad.results || []).length)
                                         : buildMultiIssue(ad);
@@ -2633,7 +2669,7 @@
                                     console.log(`[BATCH-MULTI] ${successUrls[i]}: ${(ad.results || []).length} 結果${ad.tokenLimited ? ' [トークン上限]' : ad.partialResults ? ' [部分応答]' : ''}`);
                                 } else {
                                     const errorMsg = ad?.error || 'MULTI SCAN失敗';
-                                    const processed = mapAiResultsByOriginalIndex(makeClientFallbackAiResults(filteredItems, errorMsg), filteredItems);
+                                    const processed = mapAiResultsByOriginalIndex(makeClientFallbackAiResults(filteredItemsForUrl, errorMsg), filteredItemsForUrl);
                                     aiResultsMap[successUrls[i]] = processed;
                                     aiTokenLimitedMap[successUrls[i]] = true;
                                     aiIssueMap[successUrls[i]] = buildMultiIssue(ad) || { label: 'APIエラー', message: errorMsg };
@@ -2650,7 +2686,9 @@
                                 if (isTimeoutLike(e, msg)) {
                                     recordTimeoutRetry({ url: successUrls[i], scanType: 'MULTI', mode: 'batch', viewportPreset, message: msg });
                                 }
-                                const processed = mapAiResultsByOriginalIndex(makeClientFallbackAiResults(filteredItems, msg), filteredItems);
+                                const basicResultsForUrl = resultsData.find(rd => rd.url === successUrls[i])?.results || null;
+                                const filteredItemsForUrl = getFilteredAiItemsForTargetLevel(basicResultsForUrl);
+                                const processed = mapAiResultsByOriginalIndex(makeClientFallbackAiResults(filteredItemsForUrl, msg), filteredItemsForUrl);
                                 aiResultsMap[successUrls[i]] = processed;
                                 aiTokenLimitedMap[successUrls[i]] = true;
                                 aiIssueMap[successUrls[i]] = {
@@ -2966,7 +3004,7 @@
                         renderScanScoreTable(
                             computeBasicScore(snapshot.basic),
                             doDeep ? computeDeepScore(snapshot.deep) : null,
-                            computeMultiScore(snapshot.multi), doDeep, true,
+                            computeMultiScore(snapshot.multi, null, snapshot.basic), doDeep, true,
                             {
                                 ...scoreTableIds,
                                 playEnabled: doPlay, playScore: snapshot.play ? computePlayScore(snapshot.play) : null,
@@ -2996,7 +3034,7 @@
                         renderScanScoreTable(
                             computeBasicScore(snapshot.basic),
                             doDeep ? computeDeepScore(snapshot.deep) : null,
-                            computeMultiScore(snapshot.multi), doDeep, true,
+                            computeMultiScore(snapshot.multi, null, snapshot.basic), doDeep, true,
                             {
                                 ...scoreTableIds,
                                 playEnabled: doPlay, playScore: snapshot.play ? computePlayScore(snapshot.play) : null,
@@ -3530,14 +3568,15 @@
                      score: calculateScanAchievementRate(pass, total, unverified) };
         }
 
-        function computeMultiScore(aiData, decisionScope = null) {
+        function computeMultiScore(aiData, decisionScope = null, basicResults = lastResults) {
             if (!aiData) return null;
             const lo = { 'A': 1, 'AA': 2, 'AAA': 3 };
             const lim = lo[targetLevel] || 2;
+            const autoPassRefs = getAutoDetectedPassRefs(basicResults);
             let fail = 0, pass = 0, na = 0, unverified = 0;
             const targetItems = manualCheckItems
                 .map((item, i) => ({ item, i }))
-                .filter(({ item }) => (lo[item.level] || 2) <= lim && item.aiTarget);
+                .filter(({ item }) => (lo[item.level] || 2) <= lim && item.aiTarget && !autoPassRefs.has(item.ref));
             targetItems.forEach(({ item, i }) => {
                 if ((lo[item.level] || 2) > lim) return;
                 const r = aiData[i];
@@ -3632,6 +3671,11 @@
                     const d = applyDecisionToStatus(`BASIC:${v.id}`, 'unverified', v.impact, decisionScope);
                     merge(extractSCFromTags(v.tags), d.status, d.impact, 'BASIC', `BASIC:${v.id}`);
                 });
+                getAutoDetectedPassEntries(basicResults).forEach(entry => {
+                    if ((lo[entry.level] || 2) > lim) return;
+                    const d = applyDecisionToStatus(`AUTO:${entry.ref}`, 'pass', null, decisionScope);
+                    merge(entry.ref, d.status, d.impact, 'AUTO', `AUTO:${entry.ref}`);
+                });
             }
             if (extResults) {
                 extResults.forEach(r => {
@@ -3724,6 +3768,7 @@
             MULTI: 'badge-multi',
             PLAY: 'badge-play',
             EXT: 'badge-ext',
+            AUTO: 'badge-batch',
             BATCH: 'badge-batch'
         };
 
@@ -3878,6 +3923,15 @@
                 (basic.incomplete || []).forEach(i => setBasicRule(i, 'incomplete', 'unverified', 'serious', 1, 'BASIC:'));
                 (basic.passes || []).forEach(p => setBasicRule(p, 'pass', 'pass', null, 2, 'BASIC:pass:'));
                 basicByRule.forEach(sourceEntry => addSource(sourceEntry.sc, sourceEntry.status, sourceEntry.impact, sourceEntry));
+                getAutoDetectedPassEntries(basic).forEach(entry => {
+                    if ((lo[entry.level] || 2) > lim || !entry.ref || !scSet.has(entry.ref)) return;
+                    addSource(entry.ref, 'pass', null, {
+                        src: 'AUTO',
+                        type: 'auto',
+                        data: entry,
+                        dkey: `AUTO:${entry.ref}`
+                    });
+                });
             }
 
             if (multi && Object.keys(multi || {}).length > 0) {
@@ -3964,6 +4018,7 @@
                 let locs = [];
                 let suggestions = [];
                 let toolLabel = src === 'BASIC' ? 'axe-core'
+                    : src === 'AUTO' ? '事前検出'
                     : src === 'MULTI' ? 'AI検査'
                     : src === 'DEEP' ? 'Puppeteer検査'
                     : src === 'PLAY' ? 'Playwright検査'
@@ -4006,6 +4061,9 @@
                     toolLabel = data.source === 'IBM_ACE' ? 'IBM Equal Access'
                         : data.source === 'EXT_NATIVE' ? 'ネイティブDOM検査'
                         : data.source === 'EXT_CDP' ? 'CDP検査' : 'EXT検査';
+                } else if (type === 'auto') {
+                    summary = data.detail || data.reason || data.text || '';
+                    countText = data.remark || '該当なし';
                 } else if (type === 'nav') {
                     const compared = data.comparedUrls || [];
                     const issues = data.issues || [];
@@ -4235,11 +4293,11 @@
         // スキャン予測時間（課題3）
         // ============================================================
         const SCAN_TIME = {
-            BASIC: { min: 10/60, max: 30/60 }, // 分換算
-            DEEP:  { min: 2, max: 4 },
-            MULTI: { min: 1, max: 2 },
-            PLAY:  { min: 3, max: 5 },
-            EXT:   { min: 2, max: 4 }
+            BASIC: { min: 5/60, max: 20/60 }, // 分換算
+            DEEP:  { min: 1.5, max: 3 },
+            MULTI: { min: 0.5, max: 1.5 },
+            PLAY:  { min: 1, max: 2.5 },
+            EXT:   { min: 0.5, max: 2 }
         };
 
         function estimateScanDuration({ urlCount = 1, viewportMode = 'pc', scanTypes = [] }) {
@@ -4462,12 +4520,13 @@
             }
         }
 
-        function getFilteredAiItemsForTargetLevel() {
+        function getFilteredAiItemsForTargetLevel(basicResults = lastResults) {
             const levelOrder = { 'A': 1, 'AA': 2, 'AAA': 3 };
             const targetLevelNum = levelOrder[targetLevel] || 2;
+            const autoPassRefs = getAutoDetectedPassRefs(basicResults);
             return manualCheckItems
                 .map((item, index) => ({ ...item, index }))
-                .filter(item => levelOrder[item.level] <= targetLevelNum && item.aiTarget);
+                .filter(item => levelOrder[item.level] <= targetLevelNum && item.aiTarget && !autoPassRefs.has(item.ref));
         }
 
         async function postScoreRescanJson(endpoint, body, timeoutMs) {
@@ -4591,7 +4650,7 @@
             }
 
             if (scanType === 'MULTI') {
-                const filteredItems = getFilteredAiItemsForTargetLevel();
+                const filteredItems = getFilteredAiItemsForTargetLevel(ctx.basic);
                 const { response, data: rawData } = await postScoreRescanJson('/api/ai-evaluate', {
                     url: ctx.url,
                     checkItems: filteredItems,
@@ -4759,11 +4818,11 @@
         function startScoreRescanProgress(scanType, view) {
             clearInterval(scoreRescanProgressTimer);
             const estimates = {
-                BASIC: 6 * 60 * 1000,
-                DEEP: 9 * 60 * 1000,
-                MULTI: 10 * 60 * 1000,
-                PLAY: 6 * 60 * 1000,
-                EXT: 7 * 60 * 1000
+                BASIC: 2 * 60 * 1000,
+                DEEP:  5 * 60 * 1000,
+                MULTI: 7 * 60 * 1000,
+                PLAY:  4 * 60 * 1000,
+                EXT:   3 * 60 * 1000
             };
             const startedAt = Date.now();
             const estimateMs = estimates[scanType] || 6 * 60 * 1000;
@@ -4978,28 +5037,34 @@
                 ]);
             });
 
-            // --- 手動/AIチェック項目（targetLevel以上のみ）---
-            const statusMap = { pass: '合格', fail: '不合格', manual_required: '判定不能', not_applicable: '該当なし' };
-            manualCheckItems.forEach((item, i) => {
-                if ((levelOrder[item.level] || 2) > targetLevelNum) return;
-                const ai = aiData[i];
-                let result = '未検証', location = '', detail = '', suggestion = '';
-                if (ai) {
-                    result = statusMap[ai.status] || '未検証';
-                    detail = ai.reason || '';
-                    suggestion = ai.suggestion || '';
-                    if (ai.status === 'fail' || ai.status === 'manual_required') location = '（AI評価による検出）';
-                }
-                // 手動決定（OK/NG/保留）があれば上書き
-                const dec = reportDecision(`MULTI:${i}`);
-                if (dec) result = dec === 'ok' ? '合格' : dec === 'ng' ? '不合格' : '未検証';
-                detail = withNotApplicableRemark(detail, result === '合格' && ai?.status === 'not_applicable');
-                rows.push([
-                    String(itemNo++), ai ? 'AI' : '手動', item.ref,
-                    item.text, item.level, result,
-                    location, '', '', detail, suggestion
-                ]);
-            });
+	            // --- 手動/AIチェック項目（targetLevel以上のみ）---
+	            const statusMap = { pass: '合格', fail: '不合格', manual_required: '判定不能', not_applicable: '該当なし' };
+	            const autoPassMap = getAutoDetectedPassMap(results);
+	            manualCheckItems.forEach((item, i) => {
+	                if ((levelOrder[item.level] || 2) > targetLevelNum) return;
+	                const ai = aiData[i];
+	                const auto = autoPassMap.get(item.ref) || null;
+	                let result = '未検証', location = '', detail = '', suggestion = '';
+	                if (auto) {
+	                    result = '合格';
+	                    location = '（事前検出）';
+	                    detail = auto.detail || auto.reason || '';
+	                } else if (ai) {
+	                    result = statusMap[ai.status] || '未検証';
+	                    detail = ai.reason || '';
+	                    suggestion = ai.suggestion || '';
+	                    if (ai.status === 'fail' || ai.status === 'manual_required') location = '（AI評価による検出）';
+	                }
+	                // 手動決定（OK/NG/保留）があれば上書き
+	                const dec = reportDecision(auto ? `AUTO:${item.ref}` : `MULTI:${i}`, item.ref);
+	                if (dec) result = dec === 'ok' ? '合格' : dec === 'ng' ? '不合格' : '未検証';
+	                detail = withNotApplicableRemark(detail, result === '合格' && (auto || ai?.status === 'not_applicable'));
+	                rows.push([
+	                    String(itemNo++), auto ? '自動' : ai ? 'AI' : '手動', item.ref,
+	                    item.text, item.level, result,
+	                    location, '', '', detail, suggestion
+	                ]);
+	            });
 
             // --- 高精度検査（Puppeteer）結果 ---
             if (enhancedData && enhancedData.length > 0) {
