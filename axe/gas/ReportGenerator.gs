@@ -176,6 +176,7 @@ function generateReport(info) {
 
   appendHeading_(body, '総合評価結果', 2);
   appendSummaryTable_(body, totalScore);
+  appendPieChart_(body, totalScore);
   body.appendParagraph(buildExecutiveSummary_(info, totalScore, issues))
     .editAsText().setFontSize(12);
 
@@ -306,20 +307,76 @@ function appendBullets_(body, items) {
 
 function appendSummaryTable_(body, totalScore) {
   var review = totalScore.unknown + totalScore.unverified;
+  var passWithNa = totalScore.pass + totalScore.na;
+  var total = passWithNa + totalScore.fail + review;
+  var rate = total > 0 ? Math.round(passWithNa / total * 100) : 0;
   var table = body.appendTable([
-    ['合格', '不合格', '要確認', '対象外'],
-    [totalScore.pass + ' 項目', totalScore.fail + ' 項目', review + ' 項目', totalScore.na + ' 項目']
+    ['合格', '不合格', '要確認', '対象外（該当なし）', '達成率'],
+    [
+      totalScore.pass + ' 項目',
+      totalScore.fail + ' 項目',
+      review + ' 項目',
+      totalScore.na + ' 項目',
+      rate + ' %'
+    ]
   ]);
   styleTable_(table, {
     headerRows: 1,
-    widths: [110, 110, 110, 110],
+    widths: [90, 90, 90, 120, 90],
     fontSize: 12,
-    centerColumns: [0, 1, 2, 3],
+    centerColumns: [0, 1, 2, 3, 4],
     headerBackground: '#e5e7eb',
     headerColor: '#111827'
   });
   for (var c = 0; c < table.getRow(1).getNumCells(); c++) {
     table.getRow(1).getCell(c).editAsText().setFontSize(12);
+  }
+  if (totalScore.na > 0) {
+    body.appendParagraph('※ 達成率は「対象外（該当なし）」' + totalScore.na + '件を合格として算入しています。WCAG 上、該当箇所が存在しない基準は適用外のため合格扱いとします。')
+      .editAsText().setFontSize(10).setForegroundColor('#6b7280');
+  }
+}
+
+function appendPieChart_(body, totalScore) {
+  var passWithNa = totalScore.pass + totalScore.na;
+  var failCount   = totalScore.fail;
+  var reviewCount = totalScore.unknown + totalScore.unverified;
+  var total = passWithNa + failCount + reviewCount;
+  if (total === 0) return;
+
+  var rate = (passWithNa / total * 100).toFixed(1);
+  var naLabel = totalScore.na > 0
+    ? '合格（該当なし ' + totalScore.na + '件含む）'
+    : '合格';
+
+  var dataTable = Charts.newDataTable()
+    .addColumn(Charts.ColumnType.STRING, 'カテゴリ')
+    .addColumn(Charts.ColumnType.NUMBER, '件数')
+    .addRow([naLabel,    passWithNa])
+    .addRow(['不合格',   failCount])
+    .addRow(['要確認',   reviewCount])
+    .build();
+
+  var chart = Charts.newPieChart()
+    .setDataTable(dataTable)
+    .setOption('title', '達成率: ' + rate + '%')
+    .setOption('colors', ['#22c55e', '#ef4444', '#f59e0b'])
+    .setOption('pieHole', 0.4)
+    .setOption('is3D', false)
+    .setOption('width', 480)
+    .setOption('height', 300)
+    .setOption('chartArea', {left: 20, top: 40, width: '60%', height: '80%'})
+    .setOption('legend', {position: 'right', textStyle: {fontSize: 11}})
+    .setOption('titleTextStyle', {fontSize: 14, bold: true, color: '#1f2937'})
+    .build();
+
+  try {
+    body.appendImage(chart.getAs('image/png'))
+      .setWidth(480).setHeight(300);
+  } catch (e) {
+    // Charts サービスが利用できない環境ではスキップ
+    body.appendParagraph('[円グラフ生成エラー: ' + e.message + ']')
+      .editAsText().setFontSize(10).setForegroundColor('#9ca3af');
   }
 }
 
@@ -425,9 +482,12 @@ function appendReferenceTable_(body, info) {
   var table = body.appendTable([
     ['項目', '詳細'],
     ['審査基準', info.standard],
-    ['自動テストツール', '自動化ツールによる静的解析および動的解析'],
-    ['AI評価', '大規模言語モデル（LLM）による補助判定'],
-    ['手動確認対象', 'キーボード操作、フォーカス表示、フォーム、代替テキスト、コントラスト、ターゲットサイズ等']
+    ['BASIC スキャン', 'axe-core による静的 DOM 解析。属性欠落・HTML/ARIA 文法エラーを高速に検出。'],
+    ['EXT スキャン', 'IBM Equal Access Checker (ACE) による拡張ルールセット解析。ARIA 関係性・ランドマーク・ステータスメッセージ等。'],
+    ['DEEP スキャン', 'Puppeteer によるレンダリング・視覚検査。リフロー・テキスト間隔・ターゲットサイズ・色の使用・コントラスト等。'],
+    ['PLAY スキャン', 'Playwright によるキーボード操作・フォーカス検査。Tab トラバーサル・フォーカス可視性・キーボードトラップ等。'],
+    ['MULTI スキャン', 'AI（LLM/VLM）による文脈・視覚意味推論。代替テキスト品質・リンク目的・エラー修正提案・一貫性等 18 項目を評価。'],
+    ['手動確認対象', '自動検査で判定不能な項目（映像・音声コンテンツの内容、感覚的特徴の意味依存、複雑なフォームフロー等）は目視確認を要します。']
   ]);
   styleTable_(table, {
     headerRows: 1,
@@ -535,7 +595,7 @@ function calcTotalScore_(pages) {
     total.total += s.total;
     total.applicable += s.applicable;
   });
-  total.rate = total.applicable > 0 ? Math.round(total.pass / total.applicable * 100) : 0;
+  total.rate = total.total > 0 ? Math.round((total.pass + total.na) / total.total * 100) : 0;
   return total;
 }
 
@@ -993,18 +1053,20 @@ function calcScore_(pg) {
   pg.rows.forEach(function(r) {
     s.total++;
     switch (r.result) {
-      case '合格':     s.pass++; break;
-      case '不合格':   s.fail++; break;
-      case '判定不能': s.unknown++; break;
-      case '要手動確認': s.unknown++; break;
-      case 'エラー':   s.unknown++; break;
-      case '該当なし': s.na++; break;
-      case '対象外':   s.na++; break;
-      default:         s.unverified++; break;
+      case '合格':       s.pass++;       break;
+      case '不合格':     s.fail++;       break;
+      case '判定不能':   s.unknown++;    break;
+      case '要手動確認': s.unknown++;    break;
+      case 'エラー':     s.unknown++;    break;
+      case '該当なし':   s.na++;         break;
+      case '対象外':     s.na++;         break;
+      case '未検証':     s.unverified++; break;
+      default:           s.unverified++; break;
     }
   });
-  s.applicable = Math.max(0, s.total - s.na);
-  s.rate = s.applicable > 0 ? Math.round(s.pass / s.applicable * 100) : 0;
+  // 達成率: 「該当なし」は WCAG 適用外のため合格として算入（分母にも含む）
+  s.applicable = s.total;
+  s.rate = s.total > 0 ? Math.round((s.pass + s.na) / s.total * 100) : 0;
   return s;
 }
 
