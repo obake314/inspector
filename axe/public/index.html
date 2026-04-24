@@ -18,6 +18,7 @@
             <div class="login-error" id="loginError">パスワードが正しくありません</div>
             <input type="password" id="loginPassword" placeholder="パスワード" autocomplete="current-password">
             <button type="button" id="loginBtn">ログイン</button>
+            <div class="login-meta"><small id="loginUpdateTime">LAST UPDATE : -</small></div>
         </div>
     </div>
 
@@ -451,7 +452,7 @@
             </div>
         </div>
         <footer>
-            <p><small>LAST UPDATE : __BUILD_TIME__</small></p>
+            <p><small id="appFooterUpdateTime">LAST UPDATE : -</small></p>
         </footer>
     </div>
     <script>
@@ -1166,9 +1167,18 @@
         // --- ログイン・設定 ---
         let sessionPassword = '';
 
+        function setAppUpdatedDisplay(label) {
+            const safeLabel = String(label || 'LAST UPDATE : -');
+            const loginEl = $('loginUpdateTime');
+            const footerEl = $('appFooterUpdateTime');
+            if (loginEl) loginEl.textContent = safeLabel;
+            if (footerEl) footerEl.textContent = safeLabel;
+        }
+
         (async function initAuth() {
             try {
                 const { data } = await fetchApiJson(apiUrl('/api/auth-status'), undefined, '/api/auth-status');
+                setAppUpdatedDisplay(data?.appUpdatedLabel);
                 if (!data.passwordRequired) {
                     $('loginOverlay').classList.add('hidden');
                     return;
@@ -1177,6 +1187,7 @@
                 $('loginBtn').addEventListener('click', doLogin);
                 $('loginPassword').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
             } catch (e) {
+                setAppUpdatedDisplay();
                 $('loginOverlay').classList.add('hidden');
             }
         })();

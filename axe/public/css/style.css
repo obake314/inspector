@@ -1873,6 +1873,14 @@ footer small {
 .login-box button:hover {
   background: var(--navy-700);
 }
+.login-meta {
+  margin-top: var(--space-m);
+  color: var(--navy-500);
+  font-size: var(--font-size-s);
+}
+.login-meta small {
+  font-family: var(--font-latin);
+}
 .login-error {
   color: var(--color-serious);
   font-size: var(--font-size-m);

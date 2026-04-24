@@ -11,6 +11,27 @@ const OpenAI = require("openai");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const APP_UPDATE_TARGETS = [
+  path.join(__dirname, 'server.js'),
+  path.join(__dirname, 'public', 'index.html'),
+  path.join(__dirname, 'public', 'css', 'style.css')
+];
+
+function getAppUpdatedAt() {
+  let latest = null;
+  APP_UPDATE_TARGETS.forEach(filePath => {
+    try {
+      const stat = fs.statSync(filePath);
+      if (!latest || stat.mtimeMs > latest.mtimeMs) latest = stat;
+    } catch (_) {}
+  });
+  return latest ? latest.mtime : null;
+}
+
+function formatAppUpdatedLabel(date) {
+  if (!date) return 'LAST UPDATE : -';
+  return `LAST UPDATE : ${date.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`;
+}
 
 // --- 設定の永続化（JSON）---
 const SETTINGS_PATH = path.join(__dirname, '.settings.json');
@@ -588,7 +609,12 @@ app.get('/api/last-ai-debug', (req, res) => {
  * 認証API
  */
 app.get('/api/auth-status', (req, res) => {
-  res.json({ passwordRequired: !!APP_PASSWORD_HASH });
+  const appUpdatedAt = getAppUpdatedAt();
+  res.json({
+    passwordRequired: !!APP_PASSWORD_HASH,
+    appUpdatedAt: appUpdatedAt ? appUpdatedAt.toISOString() : null,
+    appUpdatedLabel: formatAppUpdatedLabel(appUpdatedAt)
+  });
 });
 
 app.post('/api/login', (req, res) => {
