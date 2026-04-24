@@ -4574,7 +4574,7 @@
                     ...baseBody,
                     includeAAA: false
                 }, 9 * 60 * 1000);
-                if (!response.ok) throw new Error(data.error || data.message || 'DEEP SCANに失敗しました');
+                if (!response.ok || !data.success) throw new Error(data.error || data.message || 'DEEP SCANに失敗しました');
                 return { deep: data.results || [] };
             }
 
