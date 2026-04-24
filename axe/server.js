@@ -2397,8 +2397,8 @@ async function check_2_3_1_three_flashes(page) {
                 let hasOpacityHigh = false;
                 for (const key of keys) {
                   const text = key.cssText || '';
-                  if (text.includes('opacity: 0') || text.includes('opacity:0') || text.includes('visibility: hidden')) hasOpacityZero = true;
-                  if (/opacity\s*:\s*(?:0*\.?[5-9]\d*|1)\b/.test(text)) hasOpacityHigh = true;
+                  if (text.includes('opacity: 0') || text.includes('opacity:0') || /visibility\s*:\s*hidden/.test(text)) hasOpacityZero = true;
+                  if (/opacity\s*:\s*(?:0*\.?[5-9]\d*|1)\b/.test(text) || /visibility\s*:\s*visible/.test(text)) hasOpacityHigh = true;
                 }
                 // 往復パターン（低 ↔ 高）のみが閃光候補。片方向フェードは対象外
                 if (hasOpacityZero && hasOpacityHigh) {
@@ -2983,7 +2983,7 @@ async function check_1_3_5_input_purpose(page) {
       const patterns = [
         { re: /email|メール/i,          autocomplete: 'email',          label: 'メール' },
         { re: /tel|phone|電話/i,         autocomplete: 'tel',            label: '電話番号' },
-        { re: /\bname\b|氏名|お名前/i,   autocomplete: 'name',           label: '氏名' },
+        { re: /(?:full|your|contact)?name\b|氏名|お名前/i,   autocomplete: 'name',           label: '氏名' },
         { re: /given.?name|名前|first.?name/i, autocomplete: 'given-name',  label: '名' },
         { re: /family.?name|姓|last.?name/i,   autocomplete: 'family-name', label: '姓' },
         { re: /postal|zip|郵便/i,        autocomplete: 'postal-code',    label: '郵便番号' },
@@ -5093,7 +5093,7 @@ async function pw_check_1_3_5_input_purpose(page) {
         { re: /\btel\b|phone|電話/i,                    ac: 'tel' },
         { re: /given.?name|first.?name|名前|名$/i,      ac: 'given-name' },
         { re: /family.?name|last.?name|姓$/i,           ac: 'family-name' },
-        { re: /\bname\b|氏名|お名前/i,                  ac: 'name' },
+        { re: /(?:full|your|contact)?name\b|氏名|お名前/i, ac: 'name' },
         { re: /postal|zip|郵便/i,                       ac: 'postal-code' },
         { re: /\baddress\b|住所/i,                      ac: 'street-address' },
         { re: /birthday|birth.?date|生年月日/i,         ac: 'bday' },
