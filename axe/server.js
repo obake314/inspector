@@ -1071,13 +1071,13 @@ async function check_2_5_8_target_size(page) {
           if (isScreenReaderOnlyElement(el)) continue;
           const rect = el.getBoundingClientRect();
           if (rect.width === 0 && rect.height === 0) continue;
+          const tag = el.tagName.toLowerCase();
+          const text = (el.textContent || el.value || el.getAttribute('aria-label') || '').trim().slice(0, 30);
           if (rect.width < 24 || rect.height < 24) {
-            const tag = el.tagName.toLowerCase();
             const id = el.id ? `#${el.id}` : '';
             const cls = el.getAttribute('class')
               ? '.' + el.getAttribute('class').trim().split(/\s+/).slice(0, 2).join('.')
               : '';
-            const text = (el.textContent || el.value || el.getAttribute('aria-label') || '').trim().slice(0, 30);
             violations.push({
               selector: `${tag}${id}${cls}`.slice(0, 80),
               text,

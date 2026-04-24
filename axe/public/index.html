@@ -287,6 +287,11 @@
                                 <span>ジェスチャ・ドラッグ・モーション操作なし</span>
                                 <small>2.5.1 / 2.5.2 / 2.5.4 / 2.5.7 を合格扱い</small>
                             </label>
+                            <label class="pre-check-item">
+                                <input type="checkbox" id="preCheckNoPartialLanguage">
+                                <span>一部分の他言語記述なし</span>
+                                <small>3.1.2 を合格扱い</small>
+                            </label>
                         </div>
                     </details>
                 </div>
@@ -733,6 +738,7 @@
             { text: "モーション操作の代替がある", ref: "2.5.4", level: "A", category: "ポインタ" },
             { text: "ドラッグ操作の代替がある", ref: "2.5.7", level: "AA", category: "ポインタ" },
             { text: "ターゲットサイズが24x24px以上", ref: "2.5.8", level: "AA", category: "ポインタ" },
+            { text: "ページ内に一部分の他言語記述がない", ref: "3.1.2", level: "AA", category: "言語" },
             { text: "読み順序が意味のある順序", ref: "1.3.2", level: "A", category: "構造" },
             { text: "感覚的特徴だけに依存しない", ref: "1.3.3", level: "A", category: "構造", aiTarget: true },
             { text: "ステータスメッセージがARIAで通知される", ref: "4.1.3", level: "AA", category: "構造" },
@@ -760,19 +766,28 @@
             '2.5.1': { test: (s, d) => d.noGesture,                       reason: 'マルチポイント・経路依存ジェスチャが存在しません' },
             '2.5.2': { test: (s, d) => d.noGesture,                       reason: 'シングルポインタで操作する機能が存在しません' },
             '2.5.4': { test: (s, d) => d.noGesture,                       reason: 'モーション操作で動作する機能が存在しません' },
-            '2.5.7': { test: (s, d) => d.noGesture,                       reason: 'ドラッグ操作を必要とするUIが存在しません' }
+            '2.5.7': { test: (s, d) => d.noGesture,                       reason: 'ドラッグ操作を必要とするUIが存在しません' },
+            '3.1.2': { test: (s, d) => d.noPartialLanguage,               reason: 'ページ内に一部分の他言語記述が存在しません' }
         };
 
         // 事前申告の状態（シングルモード共通）
-        let userDeclarations = { noMedia: false, noForm: false, noMoving: false, noTimelimit: false, noGesture: false };
-        // バッチモード用 URL ごとの申告（url → { noMedia, noForm, noMoving, noTimelimit, noGesture }）
+        let userDeclarations = { noMedia: false, noForm: false, noMoving: false, noTimelimit: false, noGesture: false, noPartialLanguage: false };
+        // バッチモード用 URL ごとの申告（url → { noMedia, noForm, noMoving, noTimelimit, noGesture, noPartialLanguage }）
         let batchUserDeclarations = {};
         // 現在表示中の URL（バッチ時に申告を切り替えるために使用）
         let currentDisplayUrl = null;
 
-        function getActiveDeclarations() {
-            if (currentDisplayUrl && batchUserDeclarations[currentDisplayUrl]) {
-                return batchUserDeclarations[currentDisplayUrl];
+        function getActiveDeclarations(resultsOrUrl = null) {
+            const explicitUrl = typeof resultsOrUrl === 'string'
+                ? resultsOrUrl
+                : String(resultsOrUrl?.url || '').trim();
+            if (currentMode === 'batch') {
+                if (explicitUrl && batchUserDeclarations[explicitUrl]) {
+                    return batchUserDeclarations[explicitUrl];
+                }
+                if (currentDisplayUrl && batchUserDeclarations[currentDisplayUrl]) {
+                    return batchUserDeclarations[currentDisplayUrl];
+                }
             }
             return userDeclarations;
         }
@@ -783,8 +798,8 @@
 
         function getAutoDetectedPassEntries(results) {
             const signals = getPageSignals(results) || {};
-            const decl = getActiveDeclarations();
-            const hasDecl = decl.noMedia || decl.noForm || decl.noMoving;
+            const decl = getActiveDeclarations(results);
+            const hasDecl = decl.noMedia || decl.noForm || decl.noMoving || decl.noTimelimit || decl.noGesture || decl.noPartialLanguage;
             // 自動検出もユーザー申告もなければスキップ
             if (!hasDecl && (!signals || signals.detectionError)) return [];
             return Object.entries(AUTO_PASS_SIGNAL_RULES).flatMap(([ref, rule]) => {
@@ -870,6 +885,7 @@
             else if (val === 'hold') card.classList.add('item-card-dec-hold');
             renderAllTabs('pc');
             if (currentMode === 'batch' && currentBatchIdx !== null) {
+                renderBatchSummary();
                 const mobileR = batchMobileResultsData[currentBatchIdx];
                 if (mobileR?.success) {
                     renderAllTabs('sp', mobileR.results,
@@ -2252,11 +2268,10 @@
 
         function renderBatchNav(activeIdx) {
             $('batchResultsNav').innerHTML = batchResultsData.map((r, i) => {
-                const dotClass = r.success ? (r.results.violations.length > 0 ? 'ng' : 'ok') : 'ng';
                 const btnClass = (i === activeIdx ? ' active' : '') + (!r.success ? ' error' : '');
                 let label;
                 try { label = new URL(r.url).pathname || '/'; } catch (e) { label = r.url; }
-                return `<button class="batch-page-btn${btnClass}" onclick="showBatchDetail(${i})" title="${r.url}"><span class="status-dot ${dotClass}"></span>${label}</button>`;
+                return `<button class="batch-page-btn${btnClass}" onclick="showBatchDetail(${i})" title="${r.url}">${label}</button>`;
             }).join('');
         }
 
@@ -2302,13 +2317,15 @@
                 ${chk('noMoving',    d.noMoving,    '動くコンテンツなし',       '2.2.2 / 2.3.1')}
                 ${chk('noTimelimit', d.noTimelimit, 'タイムリミットなし',       '2.2.1')}
                 ${chk('noGesture',   d.noGesture,   'ジェスチャ・ドラッグなし', '2.5.1 / 2.5.2 / 2.5.4 / 2.5.7')}
+                ${chk('noPartialLanguage', d.noPartialLanguage, '他言語記述なし', '3.1.2')}
             </div>`;
-            ['noMedia','noForm','noMoving','noTimelimit','noGesture'].forEach(key => {
+            ['noMedia','noForm','noMoving','noTimelimit','noGesture','noPartialLanguage'].forEach(key => {
                 const cb = document.getElementById(`bpc_${key}_${encodeURIComponent(url)}`);
                 if (!cb) return;
                 cb.addEventListener('change', () => {
                     batchUserDeclarations[url][key] = cb.checked;
                     currentDisplayUrl = url;
+                    renderBatchSummary();
                     showBatchDetail(currentBatchIdx);
                 });
             });
@@ -2560,7 +2577,16 @@
                     setPhaseProgress(phaseOffset, 1);
                     if (!response.ok) throw new Error(data.error || '一括チェックに失敗しました');
 
-                    const resultsData = data.results;
+                    const resultsData = (data.results || []).map(record => {
+                        if (!record?.success || !record.results) return record;
+                        return {
+                            ...record,
+                            results: {
+                                ...record.results,
+                                url: record.results.url || record.url
+                            }
+                        };
+                    });
                     resultsData
                         .filter(r => !r.success && isTimeoutLike(null, r.error || ''))
                         .forEach(r => recordTimeoutRetry({
@@ -3260,7 +3286,8 @@
                 noForm:      !!$('preCheckNoForm')?.checked,
                 noMoving:    !!$('preCheckNoMoving')?.checked,
                 noTimelimit: !!$('preCheckNoTimelimit')?.checked,
-                noGesture:   !!$('preCheckNoGesture')?.checked
+                noGesture:   !!$('preCheckNoGesture')?.checked,
+                noPartialLanguage: !!$('preCheckNoPartialLanguage')?.checked
             };
         }
         function onPreCheckChange() {
@@ -3272,7 +3299,7 @@
                 if (getViewportMode() !== 'desktop') renderAllTabs('sp');
             }
         }
-        ['preCheckNoMedia', 'preCheckNoForm', 'preCheckNoMoving', 'preCheckNoTimelimit', 'preCheckNoGesture'].forEach(id => {
+        ['preCheckNoMedia', 'preCheckNoForm', 'preCheckNoMoving', 'preCheckNoTimelimit', 'preCheckNoGesture', 'preCheckNoPartialLanguage'].forEach(id => {
             const el = $(id);
             if (el) el.addEventListener('change', onPreCheckChange);
         });

@@ -21,3 +21,4 @@ axe/plan
 axe/spec
 axe/test
 axe/log
+.claude/scheduled_tasks.lock
