@@ -1772,9 +1772,7 @@ async function check_1_4_4_text_resize(page) {
   }
 }
 
-/** SC 1.2.1-1.2.5 メディアキャプション
- *  [改善] track ファイルの HTTP 200 確認を追加
- */
+/** SC 1.2.1/1.2.2/1.2.4/1.2.5 メディアキャプション（1.2.3は別関数で専用検査） */
 async function check_1_2_x_media_captions(page) {
   try {
     const result = await page.evaluate(async () => {
@@ -1784,12 +1782,10 @@ async function check_1_2_x_media_captions(page) {
       const issues  = [];
 
       for (const v of videos) {
-        const capTracks  = v.querySelectorAll('track[kind="captions"], track[kind="subtitles"]');
-        const descTracks = v.querySelectorAll('track[kind="descriptions"]');
+        const capTracks = v.querySelectorAll('track[kind="captions"], track[kind="subtitles"]');
         if (capTracks.length === 0) {
           issues.push(`video: キャプションtrack欠如 (src: ${(v.src || v.currentSrc || '').slice(0, 50)})`);
         } else {
-          // track ファイルの HTTP 確認
           for (const t of capTracks) {
             const src = t.src;
             if (src) {
@@ -1802,7 +1798,6 @@ async function check_1_2_x_media_captions(page) {
             }
           }
         }
-        if (descTracks.length === 0) issues.push(`video: 音声解説track欠如`);
       }
       for (const a of audios) {
         const parent = a.parentElement;
@@ -1822,18 +1817,127 @@ async function check_1_2_x_media_captions(page) {
     });
 
     if (result.videoCount === 0 && result.audioCount === 0 && result.iframeCount === 0) {
-      return { sc: '1.2.x', name: 'メディアキャプション（1.2.1-1.2.5）', status: 'not_applicable', message: 'video/audio/iframeが存在しません', violations: [] };
+      return { sc: '1.2.1 / 1.2.2 / 1.2.4 / 1.2.5', name: 'メディアキャプション（1.2.1/1.2.2/1.2.4/1.2.5）', status: 'not_applicable', message: 'video/audio/iframeが存在しません', violations: [] };
     }
     return {
-      sc: '1.2.x', name: 'メディアキャプション（1.2.1-1.2.5）',
+      sc: '1.2.1 / 1.2.2 / 1.2.4 / 1.2.5', name: 'メディアキャプション（1.2.1/1.2.2/1.2.4/1.2.5）',
       status: result.issues.length === 0 ? 'pass' : 'fail',
       message: result.issues.length === 0
-        ? `メディア要素(video:${result.videoCount}, audio:${result.audioCount}, iframe:${result.iframeCount})にキャプション/解説あり`
-        : `${result.issues.length}件のメディアアクセシビリティ問題を検出`,
+        ? `メディア要素(video:${result.videoCount}, audio:${result.audioCount}, iframe:${result.iframeCount})にキャプションあり`
+        : `${result.issues.length}件のキャプション問題を検出`,
       violations: result.issues
     };
   } catch (e) {
-    return { sc: '1.2.x', name: 'メディアキャプション（1.2.1-1.2.5）', status: 'error', message: e.message, violations: [] };
+    return { sc: '1.2.1 / 1.2.2 / 1.2.4 / 1.2.5', name: 'メディアキャプション（1.2.1/1.2.2/1.2.4/1.2.5）', status: 'error', message: e.message, violations: [] };
+  }
+}
+
+/** SC 1.2.3 音声解説またはメディア代替（収録済）
+ *  track[kind="descriptions"] / aria-describedby / 近接テキストキーワード / muted属性 を多段階検証
+ */
+async function check_1_2_3_audio_description(page) {
+  try {
+    const result = await page.evaluate(() => {
+      const videos  = Array.from(document.querySelectorAll('video'));
+      const iframes = Array.from(document.querySelectorAll('iframe')).filter(f => {
+        const s = f.src || '';
+        return s.includes('youtube.com') || s.includes('youtu.be') || s.includes('vimeo.com');
+      });
+
+      if (videos.length === 0 && iframes.length === 0) {
+        return { applicable: false, items: [] };
+      }
+
+      const DESC_KEYWORDS = ['音声解説', 'audio description', '音声ガイド', '解説版', 'テキスト版', 'transcript', '書き起こし', '代替テキスト', 'メディア代替'];
+      const items = [];
+
+      for (const v of videos) {
+        const src = (v.src || v.currentSrc || '').slice(0, 80);
+
+        // muted かつ controls なし → 装飾的動画、解説不要
+        if (v.hasAttribute('muted') && !v.hasAttribute('controls')) {
+          items.push({ status: 'pass', src, method: 'muted属性あり（音声なし装飾動画）' });
+          continue;
+        }
+
+        // track[kind="descriptions"] の有無
+        const descTracks = Array.from(v.querySelectorAll('track[kind="descriptions"]')).filter(t => t.src);
+        if (descTracks.length > 0) {
+          items.push({ status: 'pass', src, method: `track[kind="descriptions"] src="${descTracks[0].src.slice(-50)}"` });
+          continue;
+        }
+
+        // aria-describedby → テキスト代替
+        const describedById = v.getAttribute('aria-describedby');
+        if (describedById) {
+          const descEl = document.getElementById(describedById);
+          if (descEl && descEl.textContent.trim().length > 15) {
+            items.push({ status: 'pass', src, method: `aria-describedby="#${describedById}" テキスト代替あり` });
+            continue;
+          }
+        }
+
+        // 近接コンテナのテキスト・リンクにキーワード
+        const container = v.closest('figure, section, article, div') || v.parentElement;
+        const nearText = container ? container.textContent : '';
+        const nearLinks = container ? Array.from(container.querySelectorAll('a')).map(a => a.textContent.trim()) : [];
+        const hasKeyword = DESC_KEYWORDS.some(kw => nearText.toLowerCase().includes(kw.toLowerCase()));
+        const hasDescLink = nearLinks.some(txt => DESC_KEYWORDS.some(kw => txt.toLowerCase().includes(kw.toLowerCase())));
+        if (hasKeyword || hasDescLink) {
+          const evidence = hasDescLink ? `近接リンク「${nearLinks.find(t => DESC_KEYWORDS.some(k => t.toLowerCase().includes(k.toLowerCase())))}」` : '近接テキストにキーワードあり';
+          items.push({ status: 'unverified', src, method: `${evidence}（内容の確認が必要）` });
+          continue;
+        }
+
+        // 小サイズ要素は装飾扱い
+        const w = v.offsetWidth, h = v.offsetHeight;
+        if (w > 0 && h > 0 && w < 80 && h < 80) {
+          items.push({ status: 'pass', src, method: `小サイズ動画（${w}×${h}px）装飾と推定` });
+          continue;
+        }
+
+        items.push({ status: 'fail', src, method: '音声解説またはメディア代替の証拠なし（track/aria-describedby/テキスト代替いずれも未検出）' });
+      }
+
+      // 埋め込み動画（YouTube/Vimeo）は解説有無をDOMから確認不可
+      for (const iframe of iframes) {
+        items.push({ status: 'unverified', src: iframe.src.slice(0, 80), method: '埋め込み動画のため手動確認が必要（音声解説トラックまたはテキスト代替の有無を確認）' });
+      }
+
+      return { applicable: true, items };
+    });
+
+    if (!result.applicable) {
+      return { sc: '1.2.3', name: '音声解説またはメディア代替（収録済）', status: 'not_applicable', message: '動画要素が存在しません', violations: [] };
+    }
+
+    const failures   = result.items.filter(i => i.status === 'fail');
+    const unverified = result.items.filter(i => i.status === 'unverified');
+
+    if (failures.length > 0) {
+      return {
+        sc: '1.2.3', name: '音声解説またはメディア代替（収録済）',
+        status: 'fail',
+        message: `${failures.length}件の動画で音声解説またはメディア代替が未検出`,
+        violations: failures.map(f => `[要修正] ${f.src || '動画'}: ${f.method}`)
+      };
+    }
+    if (unverified.length > 0) {
+      return {
+        sc: '1.2.3', name: '音声解説またはメディア代替（収録済）',
+        status: 'unverified',
+        message: `${unverified.length}件の動画は手動確認が必要`,
+        violations: unverified.map(u => `[要確認] ${u.src || '動画'}: ${u.method}`)
+      };
+    }
+    return {
+      sc: '1.2.3', name: '音声解説またはメディア代替（収録済）',
+      status: 'pass',
+      message: `全${result.items.length}件の動画で音声解説またはメディア代替を確認`,
+      violations: []
+    };
+  } catch (e) {
+    return { sc: '1.2.3', name: '音声解説またはメディア代替（収録済）', status: 'error', message: e.message, violations: [] };
   }
 }
 
@@ -2923,6 +3027,9 @@ app.post('/api/enhanced-check', async (req, res) => {
 
     // 2-5
     results.push(await withTimeout(() => check_1_2_x_media_captions(page)));
+
+    // 2-5b SC 1.2.3 専用検査
+    results.push(await withTimeout(() => check_1_2_3_audio_description(page)));
 
     // 2-6
     results.push(await withTimeout(() => check_2_2_2_pause_stop(page)));
