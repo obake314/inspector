@@ -1,6 +1,6 @@
 # SPEC_WEB
 
-最終更新: 2026-04-23（MULTI対象項目再定義・自動検査結果連携・改善計画パネル/レポート反映・スキャン順序変更・SC権威マージ・MULTIスコア反映修正・PLAY→MULTI事前解決・OpenAI response_format対応・デバッグエンドポイント追加）
+最終更新: 2026-04-24（SC 1.4.1 役割分担整理・DEEP主判定化・MULTI補助判定化・自動検査結果連携・改善計画パネル/レポート反映・スキャン順序変更・SC権威マージ・OpenAI response_format対応・デバッグエンドポイント追加）
 
 ## 対象
 
@@ -25,6 +25,10 @@
 - SC 2.5.8 ターゲットサイズ検査では、class/id/data属性に `sr-only` / `screen-reader` / `screen-reader-text` / `visually-hidden` / `assistive-text` 等のスクリーンリーダー専用マーカーを持つ要素とその配下を24×24px判定から除外する
 - SC 2.3.1 点滅検査では、現在ページ上の要素に実際に適用され、`animation-duration > 0` の `animation-name` に対応する keyframes のみを点滅候補にする。WordPress標準 lightbox 由来の `turn-on-visibility` / `turn-off-visibility` / `lightbox-zoom-in` / `lightbox-zoom-out` keyframes は除外する
 - SC 2.4.11 / 2.4.12 フォーカス隠れ検査では、通常時の表示状態ではなく、Tabで実際にfocusした後の表示状態を判定する。通常時は隠れていてもfocus時に表示される要素は違反にしない
+- SC 1.4.1 色だけの情報伝達では、**本文中リンク**と**ナビゲーションの current/selected 状態**を通常表示時の視覚差分で判定する。header/footer のナビゲーションリンク全体を一律違反にせず、色だけで識別されている状態差のみを対象にする
+- SC 1.4.1 の pass 根拠として認める非色手掛かりは、下線、十分な太さ差、十分な文字サイズ差、枠線/アウトライン/アイコン、背景塗りと前景色の反転、または周囲テキストに対する `3:1` 以上の明度差とする。`hover` / `focus` 時だけ現れる手掛かり、`cursor:pointer`、`aria-current` のみは通常表示時の pass 根拠にしない
+- SC 1.3.2 意味のある順序では、header/nav/footer/aside を除く主要な本文・フォーム・表について、**非ゼロの CSS `order`** と、単一カラム領域での **DOM順に対する大きな視覚的上戻り** を順序ずれシグナルとして検出する
+- SC 1.3.3 感覚的特徴では、操作説明文から位置・色・形・大きさ・音に依存する文言候補を抽出し、**ラベル名や見出し名が併記されない候補** がある場合は `manual_required` とする。最終判断は MULTI の文脈判定を優先する
 - AAA βは一時停止中。フロントUIはコメントアウトし、`includeAAA` が送信されてもサーバー側で `false` 固定として扱う。
 - status: `pass` / `fail` / `not_applicable` / `manual_required` / `error`
 - タイムアウト仕様:
@@ -53,9 +57,11 @@
 - MULTIは全WCAG項目をAIで一括判定する機能ではない。`manualCheckItems` のうち `aiTarget: true` の項目のみを対象にする。
 - `aiTarget: true` は、自然言語・視覚的文脈・ページ間一貫性・フォームエラー文脈など、BASIC/EXT/DEEP/PLAYだけでは確定しにくい項目に限定する。
 - BASIC/EXT/DEEP/PLAYの結果を圧縮してAIプロンプトに渡し、自動ツールのfail/pass/not_applicableと矛盾する判定を避ける。
+- SC 1.4.1 は MULTI の直接評価対象に残すが、役割は **色語・凡例・必須/エラー/成功表示・操作指示の意味依存**の補助判定に限定する。本文中リンク識別やナビゲーション current/selected の視覚差分は DEEP の結果を優先的に利用する
 - MULTIが有効な場合、AIはBASIC/EXT/DEEP/PLAY/MULTIの全結果を統合した `improvementPlan` を返す。構成は `summary`、最大6件の `priorityActions`、`quickWins`、`manualChecks`。
 - クライアントは `improvementPlan` を `#improvementPlanPanel` に表示する。APIエラー、モデル利用不可、JSON解析失敗、タイムアウト、または改善計画未生成は同パネルに明示し、通常の改善計画として扱わない。
 - AIには各対象項目ごとの `verificationMethod` をサーバー側で付与し、証拠不足の場合は推測せず `manual_required` を返させる。
+- SC 1.4.1 の TOTAL / 詳細統合はハイブリッド扱いとし、**DEEP の pass を MULTI の fail で補足的に覆せる**。つまり 1.4.1 は `DEEP fail` または `MULTI fail` のいずれかで fail、両者が fail を出さない場合のみ pass / unverified を採用する
 - AI未設定時: `success: true` のまま `model: manual-fallback` で全項目 `manual_required` を返し、`aiErrorType: api_error` / `detailLabel: APIエラー` を返す
 - AI接続失敗/認証失敗/HTTP 429 レート制限時: HTTP `502` / `401` / `429` を返し、`success: false`、`aiErrorType: api_error`、`detailLabel`、`rateLimited`、`quotaExceeded`、`retryAfterSeconds` を可能な範囲で返す
 - モデルが存在しない、権限がない、または利用できない場合: HTTP `404`、`aiErrorType: model_unavailable`、`detailLabel: モデル利用不可` を返す
@@ -73,11 +79,11 @@
 - エンジン: Playwright（`playwright` npm パッケージ、Chromium ヘッドレス）
 - 入力: `{ url, basicAuth?, viewportPreset? }`
 - 出力: `{ success, url, results: [{ sc, status, violations[], message, tabSequence? }], checkedAt }`
-- status: `pass` / `fail` / `not_applicable` / `unverified`
+- status: `pass` / `fail` / `not_applicable` / `manual_required` / `unverified`
 - APIコスト不要（ローカルブラウザ実行）
 - タイムアウト: サーバー5分 / クライアント6分
 
-#### PLAY SCAN 検査項目（15項目）
+#### PLAY SCAN 検査項目（17項目）
 
 | 項目 | SC | 手法 |
 |---|---|---|
@@ -91,9 +97,11 @@
 | ステータスメッセージ | 4.1.3 | aria-live / role=status / role=alert の有無を確認 |
 | 見出し・ラベル | 2.4.6 | 空見出し・ラベル未設定フォームを検出 |
 | 情報と関係性 | 1.3.1 | テーブルヘッダー欠落・fieldset未使用ラジオグループを検出 |
+| 意味のある順序 | 1.3.2 | 主要な本文・フォーム・表で CSS `order` と視覚的な上戻りを順序ずれシグナルとして検出 |
+| 感覚的特徴 | 1.3.3 | 感覚依存らしい操作指示文を抽出し、候補があれば `manual_required`（スコア上は未検証扱い） |
 | フォーカス表示（全要素） | 2.4.7 | フォーカス可能要素に outline/box-shadow を確認（最大40要素） |
 | キーボード完全到達性 | 2.1.1 | Tab キーシーケンスで到達可能要素を列挙（最大60要素） |
-| キーボードトラップ | 2.1.2 | Tab 連続押下で同一要素3回連続 = トラップとして検出（aria-modal 除外） |
+| キーボードトラップ | 2.1.2 | Tab 連続押下で同一要素3回連続を候補とし、さらに `Shift+Tab → Tab → Tab` でも同一要素から移動できない場合のみトラップとして検出（aria-modal 除外） |
 | フォーカス順序 | 2.4.3 | tabindex > 0 の有無・視覚的読み順からの逸脱を検出 |
 | フォーカスが隠れない（最低限） | 2.4.11 | Tabでfocusした後に、fixed/sticky 要素による完全隠蔽、またはfocus時にも表示されない要素を検出 |
 
@@ -289,9 +297,10 @@ TOTAL:
 - **SC権威スキャン（`SC_AUTHORITY`）**: 特定SCはそのスキャンの結果が他のfail/passより優先される
   - キーボード操作SC（2.1.1/2.1.2/2.1.4/2.4.3/2.4.7/2.4.11/2.4.12）→ **PLAYが権威**
   - アクセシビリティ名/ロールSC（4.1.2/4.1.3/1.3.1/1.3.5）→ **EXTが権威**
+  - 色だけの情報伝達（1.4.1）は固定権威スキャンを設けず、**DEEP主判定 + MULTI補助fail** のハイブリッドマージで扱う
   - 権威スキャンの結果は他スキャンのfailより強く適用される（例: PLAYがpassなら2.4.7はpassになる）
-- **MULTIはギャップ補完のみ**: 他スキャンが`unverified`のSCのみMULTI結果を適用。BASIC/EXT/DEEP/PLAYが確定済みのSCには上書きしない
-- MULTIは `aiTarget: true` の結果だけをTOTALへ補完する。AI対象外の手動項目はTOTAL上で未カバーSC補完に任せる
+- **MULTIはギャップ補完のみ**: 他スキャンが`unverified`のSCのみMULTI結果を適用。BASIC/EXT/DEEP/PLAYが確定済みのSCには上書きしない。**ただし 1.4.1 は例外で、DEEP pass に対する MULTI fail を補足的に反映できる**
+- MULTIは `aiTarget: true` の結果だけをTOTALへ補完する。AI対象外の手動項目はTOTAL上で未カバーSC補完に任せる。`1.4.1` は視覚判定を DEEP、意味判定を MULTI で分担する
 - **手動判定の優先順位**: 詳細パネルの OK/NG/保留判定（`manualDecisions`）は権威スキャン・通常スキャンより最優先。`buildTotalScMap()` および各 `computeXxxScore()` 内の `merge()` で `isManual` フラグを使用し、手動判定が設定済みのSCは自動スキャン結果で上書きできない
 - **未カバーSCへの手動判定**: スキャンが未実施のSC（`UNCOVERED:{sc}` キー）に手動判定を設定した場合、`buildTotalScMap()` の末尾処理でTOTALスコアとタブバッジに反映する
 
@@ -380,11 +389,11 @@ TOTAL:
 
 | スキャン | 最小 | 最大 |
 |---|---|---|
-| BASIC | 10秒 | 30秒 |
-| DEEP | 2分 | 4分 |
-| MULTI | 1分 | 2分 |
-| PLAY | 3分 | 5分 |
-| EXT | 2分 | 4分 |
+| BASIC | 5秒 | 20秒 |
+| DEEP | 1.5分 | 3分 |
+| MULTI | 0.5分 | 1.5分 |
+| PLAY | 1分 | 2.5分 |
+| EXT | 0.5分 | 2分 |
 
 - PC+SP は viewport 数 ×2 として計算
 - MULTI が disabled（AIキー未設定）の場合は除外して計算

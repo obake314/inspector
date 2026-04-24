@@ -747,6 +747,7 @@ app.post('/api/settings-save', (req, res) => {
 async function detectPageSignals(page) {
   try {
     return await page.evaluate(() => {
+      const authKeywordRe = /(log\s?in|sign\s?in|sign\s?up|signin|signup|register|create account|passkey|webauthn|verification code|one[- ]?time code|otp|認証|ログイン|サインイン|新規登録|会員登録|パスワード|パスキー|確認コード|ワンタイム)/i;
       const iframeSrcs = Array.from(document.querySelectorAll('iframe'))
         .map(frame => String(frame.getAttribute('src') || '').trim())
         .filter(Boolean);
@@ -767,6 +768,25 @@ async function detectPageSignals(page) {
       const audioCount = document.querySelectorAll('audio').length;
       const videoCount = document.querySelectorAll('video').length;
       const formControlCount = document.querySelectorAll(formSelector).length;
+      const passwordInputCount = document.querySelectorAll('input[type="password"], input[autocomplete*="current-password"], input[autocomplete*="new-password"]').length;
+      const oneTimeCodeInputCount = document.querySelectorAll('input[autocomplete="one-time-code"], input[name*="otp" i], input[id*="otp" i], input[name*="verification" i], input[id*="verification" i], input[name*="passcode" i], input[id*="passcode" i]').length;
+      const passkeyTriggerCount = Array.from(document.querySelectorAll('button, [role="button"], input[type="button"], input[type="submit"]'))
+        .filter(el => authKeywordRe.test([
+          el.textContent || '',
+          el.getAttribute('value') || '',
+          el.getAttribute('aria-label') || '',
+          el.getAttribute('title') || ''
+        ].join(' ')))
+        .length;
+      const authFormCount = Array.from(document.querySelectorAll('form'))
+        .filter(form => authKeywordRe.test([
+          form.getAttribute('id') || '',
+          form.getAttribute('class') || '',
+          form.getAttribute('name') || '',
+          form.getAttribute('action') || '',
+          form.textContent || ''
+        ].join(' ')))
+        .length;
       const hasAnyMedia = (audioCount + videoCount + mediaEmbedCount) > 0;
       const hasVideoLikeMedia = (videoCount + mediaEmbedCount) > 0;
       return {
@@ -774,9 +794,14 @@ async function detectPageSignals(page) {
         videoCount,
         mediaEmbedCount,
         formControlCount,
+        passwordInputCount,
+        oneTimeCodeInputCount,
+        passkeyTriggerCount,
+        authFormCount,
         hasAnyMedia,
         hasVideoLikeMedia,
-        hasFormControls: formControlCount > 0
+        hasFormControls: formControlCount > 0,
+        hasAuthenticationUi: (passwordInputCount + oneTimeCodeInputCount + passkeyTriggerCount + authFormCount) > 0
       };
     });
   } catch (error) {
@@ -785,9 +810,14 @@ async function detectPageSignals(page) {
       videoCount: 0,
       mediaEmbedCount: 0,
       formControlCount: 0,
+      passwordInputCount: 0,
+      oneTimeCodeInputCount: 0,
+      passkeyTriggerCount: 0,
+      authFormCount: 0,
       hasAnyMedia: false,
       hasVideoLikeMedia: false,
       hasFormControls: false,
+      hasAuthenticationUi: false,
       detectionError: error.message
     };
   }
@@ -1105,55 +1135,105 @@ async function check_2_5_8_target_size(page) {
 }
 
 /** SC 2.1.2 キーボードトラップなし */
+const KEYBOARD_TRAP_FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled]):not([type="hidden"])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])'
+].join(', ');
+
+async function getActiveElementSnapshot(page) {
+  return page.evaluate(() => {
+    const a = document.activeElement;
+    if (!a || a === document.body || a === document.documentElement) return null;
+    const tag = a.tagName.toLowerCase();
+    const id = a.id ? `#${a.id}` : '';
+    const cls = a.className && typeof a.className === 'string'
+      ? '.' + a.className.trim().split(/\s+/).slice(0, 2).join('.')
+      : '';
+    const text = (a.getAttribute('aria-label') || a.textContent || a.value || '').trim().slice(0, 25);
+    let inModal = false;
+    let p = a;
+    while (p) {
+      if (p.getAttribute && p.getAttribute('aria-modal') === 'true') {
+        inModal = true;
+        break;
+      }
+      p = p.parentElement;
+    }
+    const key = `${tag}${id}${cls}`.slice(0, 60);
+    const display = `${key}${text ? ' "' + text + '"' : ''}`.slice(0, 80);
+    return { key, display, inModal };
+  });
+}
+
+async function pressTabAndCapture(page, { shift = false } = {}) {
+  if (shift) await page.keyboard.down('Shift');
+  await page.keyboard.press('Tab');
+  if (shift) await page.keyboard.up('Shift');
+  await new Promise(resolve => setTimeout(resolve, 40));
+  return getActiveElementSnapshot(page);
+}
+
+async function confirmKeyboardTrap(page, suspectKey) {
+  const current = await getActiveElementSnapshot(page);
+  if (!current || current.key !== suspectKey || current.inModal) return false;
+  const backward = await pressTabAndCapture(page, { shift: true });
+  const restored = await pressTabAndCapture(page);
+  const forward = await pressTabAndCapture(page);
+  return !!backward && !!restored && !!forward
+    && backward.key === suspectKey
+    && restored.key === suspectKey
+    && forward.key === suspectKey;
+}
+
+async function detectKeyboardTrapsByTabbing(page) {
+  const focusableCount = await page.evaluate(selector =>
+    document.querySelectorAll(selector).length,
+    KEYBOARD_TRAP_FOCUSABLE_SELECTOR
+  );
+  if (focusableCount <= 1) {
+    return { focusableCount, traps: [] };
+  }
+
+  const maxTabs = Math.min(focusableCount + 20, 50);
+  const history = [];
+  const traps = [];
+  const seenTrapKeys = new Set();
+
+  for (let i = 0; i < maxTabs; i++) {
+    const el = await pressTabAndCapture(page);
+    if (!el) continue;
+    history.push(el);
+    if (history.length < 3) continue;
+    const last = history[history.length - 1];
+    const prev = history[history.length - 2];
+    const prev2 = history[history.length - 3];
+    if (last.inModal) continue;
+    if (last.key !== prev.key || last.key !== prev2.key) continue;
+    if (seenTrapKeys.has(last.key)) continue;
+    const confirmed = await confirmKeyboardTrap(page, last.key);
+    if (confirmed) {
+      seenTrapKeys.add(last.key);
+      traps.push(last.display);
+    }
+  }
+
+  return { focusableCount, traps };
+}
+
 async function check_2_1_2_keyboard_trap(page) {
   try {
-    const focusableCount = await page.evaluate(() => {
-      return document.querySelectorAll(
-        'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-      ).length;
-    });
-
-    const maxTabs = Math.min(focusableCount + 20, 50);
-    const history = [];
-
-    // 最初のfocusable要素にフォーカス
-    await page.keyboard.press('Tab');
-
-    for (let i = 0; i < maxTabs; i++) {
-      const el = await page.evaluate(() => {
-        const a = document.activeElement;
-        if (!a || a === document.body) return null;
-        const tag = a.tagName.toLowerCase();
-        const id = a.id ? `#${a.id}` : '';
-        const cls = a.className && typeof a.className === 'string'
-          ? '.' + a.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
-        const text = (a.getAttribute('aria-label') || a.textContent || a.value || '').trim().slice(0, 25);
-        // aria-modal ダイアログ内かチェック
-        let inModal = false;
-        let p = a;
-        while (p) { if (p.getAttribute && p.getAttribute('aria-modal') === 'true') { inModal = true; break; } p = p.parentElement; }
-        const key = `${tag}${id}${cls}`.slice(0, 60);
-        const display = `${key}${text ? ' "'+text+'"' : ''}`.slice(0, 80);
-        return { key, display, inModal };
-      });
-      if (el) history.push(el);
-      await page.keyboard.press('Tab');
-    }
-
-    // 連続3回同一要素 = トラップ（aria-modal除外）
-    const traps = [];
-    for (let i = 2; i < history.length; i++) {
-      if (history[i].key === history[i - 1].key && history[i].key === history[i - 2].key && !history[i].inModal) {
-        if (!traps.some(t => t.startsWith(history[i].key))) traps.push(history[i].display);
-      }
-    }
+    const { traps } = await detectKeyboardTrapsByTabbing(page);
 
     return {
       sc: '2.1.2', name: 'キーボードトラップなし',
       status: traps.length === 0 ? 'pass' : 'fail',
       message: traps.length === 0
         ? 'キーボードトラップは検出されませんでした'
-        : `${traps.length}箇所でキーボードトラップを検出`,
+        : `${traps.length}箇所でキーボードトラップを確認`,
       violations: traps
     };
   } catch (e) {
@@ -1728,6 +1808,203 @@ async function check_2_4_3_focus_order(page) {
   }
 }
 
+/** SC 1.3.2 意味のある順序 */
+async function check_1_3_2_meaningful_sequence(page) {
+  try {
+    const result = await page.evaluate(() => {
+      const selector = [
+        'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+        'p', 'li', 'dt', 'dd',
+        'label', 'legend', 'figcaption', 'caption',
+        'td', 'th', 'summary'
+      ].join(', ');
+      const containerSelector = [
+        'main',
+        'article',
+        'section',
+        'form',
+        'ol',
+        'ul',
+        'dl',
+        'table',
+        'fieldset',
+        '[role="main"]',
+        '[role="form"]',
+        '[role="article"]',
+        '[role="region"]'
+      ].join(', ');
+      const excludedSelector = 'header, nav, footer, aside, dialog, [aria-modal="true"], [hidden], [aria-hidden="true"]';
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1280;
+      const cssOrderIssues = [];
+      const positionIssues = [];
+      const grouped = new Map();
+
+      const normalize = text => (text || '').replace(/\s+/g, ' ').trim();
+      const describe = el => {
+        const tag = el.tagName.toLowerCase();
+        const id = el.id ? `#${el.id}` : '';
+        const cls = el.className && typeof el.className === 'string'
+          ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.')
+          : '';
+        const text = normalize(el.innerText || el.textContent || '').slice(0, 32);
+        return `${tag}${id}${cls}${text ? ` "${text}"` : ''}`.slice(0, 96);
+      };
+      const isVisible = el => {
+        const style = getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity || '1') === 0) return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      };
+      const getContainerKey = el => {
+        const container = el.closest(containerSelector) || el.parentElement;
+        if (!container) return null;
+        const parts = [];
+        let current = container;
+        let depth = 0;
+        while (current && depth < 4) {
+          const tag = current.tagName ? current.tagName.toLowerCase() : 'node';
+          const id = current.id ? `#${current.id}` : '';
+          const cls = current.className && typeof current.className === 'string'
+            ? '.' + current.className.trim().split(/\s+/).slice(0, 1).join('.')
+            : '';
+          parts.unshift(`${tag}${id}${cls}`);
+          current = current.parentElement;
+          depth++;
+        }
+        return parts.join('>');
+      };
+
+      Array.from(document.querySelectorAll(selector)).forEach((el, domIndex) => {
+        if (!isVisible(el)) return;
+        if (el.closest(excludedSelector)) return;
+        const text = normalize(el.innerText || el.textContent || '');
+        if (text.length < 2) return;
+        const rect = el.getBoundingClientRect();
+        const style = getComputedStyle(el);
+        const position = style.position || 'static';
+        const order = Number(style.order || 0);
+        const parentDisplay = el.parentElement ? getComputedStyle(el.parentElement).display || '' : '';
+        const info = {
+          domIndex,
+          top: Math.round(rect.top),
+          left: Math.round(rect.left),
+          desc: describe(el)
+        };
+
+        if (order !== 0 && /(flex|grid)/i.test(parentDisplay) && cssOrderIssues.length < 6) {
+          cssOrderIssues.push(`${info.desc} (order:${order})`);
+        }
+
+        if ((position === 'absolute' || position === 'fixed') && text.length >= 6) {
+          const containerKey = getContainerKey(el);
+          if (!containerKey) return;
+          if (!grouped.has(containerKey)) grouped.set(containerKey, []);
+          grouped.get(containerKey).push({ ...info, position });
+          return;
+        }
+
+        const containerKey = getContainerKey(el);
+        if (!containerKey) return;
+        if (!grouped.has(containerKey)) grouped.set(containerKey, []);
+        grouped.get(containerKey).push(info);
+      });
+
+      for (const items of grouped.values()) {
+        if (!items || items.length < 3) continue;
+        const minLeft = Math.min(...items.map(item => item.left));
+        const maxLeft = Math.max(...items.map(item => item.left));
+        const singleColumn = (maxLeft - minLeft) <= Math.min(160, viewportWidth * 0.18);
+        if (!singleColumn) continue;
+
+        let backtracks = 0;
+        for (let i = 1; i < items.length; i++) {
+          const prev = items[i - 1];
+          const curr = items[i];
+          if (curr.top < prev.top - 48) {
+            backtracks++;
+            if (positionIssues.length < 6) {
+              positionIssues.push(`${prev.desc} の後に ${curr.desc} が視覚的に上へ戻っています`);
+            }
+          }
+        }
+
+        if (backtracks >= 2) break;
+      }
+
+      return { cssOrderIssues, positionIssues };
+    });
+
+    const violations = [...result.cssOrderIssues, ...result.positionIssues].slice(0, 8);
+    return {
+      sc: '1.3.2',
+      name: '意味のある順序',
+      status: violations.length === 0 ? 'pass' : 'fail',
+      message: violations.length === 0
+        ? '主要な本文・フォーム・表のDOM順と視覚順に大きな不一致は見つかりませんでした'
+        : `${violations.length}件の順序ずれシグナルを検出しました`,
+      violations
+    };
+  } catch (e) {
+    return { sc: '1.3.2', name: '意味のある順序', status: 'error', message: e.message, violations: [] };
+  }
+}
+
+/** SC 1.3.3 感覚的特徴だけに依存しない */
+async function check_1_3_3_sensory_characteristics(page) {
+  try {
+    const result = await page.evaluate(() => {
+      const selector = 'p, li, label, legend, td, th, span, div, small, strong, em';
+      const excludedSelector = 'script, style, noscript, header, nav, footer';
+      const instructionPattern = /(クリック|押して|押下|選択|タップ|入力|進んで|移動して|確認して|参照して|open|click|tap|press|select|choose|enter|go to|move to)/i;
+      const sensoryOnlyPattern = /(右|左|上|下|横|隣|手前|奥|上記|下記|赤|青|緑|黄|白|黒|丸|四角|三角|大きい|小さい|音が鳴|点滅|right|left|upper|lower|top|bottom|red|blue|green|yellow|round|square|triangle|large|small|sound|beep)/i;
+      const textualIdentifierPattern = /(「[^」]{1,30}」|"[^"]{1,30}"|'[^']{1,30}'|ラベル|見出し|heading|label(ed)?|named|name|id=|タイトル|title|「次へ」|「送信」|「検索」|Next|Submit|Search|Login)/i;
+      const candidates = [];
+
+      const normalize = text => (text || '').replace(/\s+/g, ' ').trim();
+      const describe = el => {
+        const tag = el.tagName.toLowerCase();
+        const id = el.id ? `#${el.id}` : '';
+        const cls = el.className && typeof el.className === 'string'
+          ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.')
+          : '';
+        return `${tag}${id}${cls}`.slice(0, 80);
+      };
+      const isVisible = el => {
+        const style = getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity || '1') === 0) return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      };
+
+      Array.from(document.querySelectorAll(selector)).forEach(el => {
+        if (candidates.length >= 8) return;
+        if (!isVisible(el)) return;
+        if (el.closest(excludedSelector)) return;
+        const text = normalize(el.innerText || el.textContent || '');
+        if (text.length < 8 || text.length > 180) return;
+        if (!instructionPattern.test(text)) return;
+        if (!sensoryOnlyPattern.test(text)) return;
+        if (textualIdentifierPattern.test(text)) return;
+        candidates.push(`${describe(el)}: ${text.slice(0, 100)}`);
+      });
+
+      return candidates;
+    });
+
+    return {
+      sc: '1.3.3',
+      name: '感覚的特徴',
+      status: result.length === 0 ? 'pass' : 'manual_required',
+      message: result.length === 0
+        ? '感覚的特徴だけに依存する疑いが強い操作指示は見つかりませんでした'
+        : `${result.length}件の感覚依存らしい指示文候補を抽出しました`,
+      violations: result
+    };
+  } catch (e) {
+    return { sc: '1.3.3', name: '感覚的特徴', status: 'error', message: e.message, violations: [] };
+  }
+}
+
 /** SC 1.4.4 テキスト200%拡大 */
 async function check_1_4_4_text_resize(page) {
   try {
@@ -2001,8 +2278,33 @@ async function check_2_2_2_pause_stop(page) {
 async function check_3_3_8_accessible_authentication(page) {
   try {
     const result = await page.evaluate(() => {
-      const pwInputs = document.querySelectorAll('input[type="password"]');
-      if (pwInputs.length === 0) return { notApplicable: true };
+      const authKeywordRe = /(passkey|webauthn|security key|verification code|one[- ]?time code|otp|認証|ログイン|サインイン|パスキー|セキュリティキー|確認コード|ワンタイム)/i;
+      const pwInputs = Array.from(document.querySelectorAll('input[type="password"], input[autocomplete*="current-password"], input[autocomplete*="new-password"]'));
+      const otpInputs = document.querySelectorAll('input[autocomplete="one-time-code"], input[name*="otp" i], input[id*="otp" i], input[name*="verification" i], input[id*="verification" i], input[name*="passcode" i], input[id*="passcode" i]');
+      const passkeyButtons = Array.from(document.querySelectorAll('button, [role="button"], input[type="button"], input[type="submit"]'))
+        .filter(el => authKeywordRe.test([
+          el.textContent || '',
+          el.getAttribute('value') || '',
+          el.getAttribute('aria-label') || '',
+          el.getAttribute('title') || ''
+        ].join(' ')));
+      const authForms = Array.from(document.querySelectorAll('form'))
+        .filter(form => authKeywordRe.test([
+          form.getAttribute('id') || '',
+          form.getAttribute('class') || '',
+          form.getAttribute('name') || '',
+          form.getAttribute('action') || '',
+          form.textContent || ''
+        ].join(' ')));
+      const hasAuthenticationUi = pwInputs.length > 0 || otpInputs.length > 0 || passkeyButtons.length > 0 || authForms.length > 0;
+      if (!hasAuthenticationUi) return { notApplicable: true };
+      if (pwInputs.length === 0) {
+        return {
+          notApplicable: false,
+          manualRequired: true,
+          issues: [`認証UIを検出しました（OTP:${otpInputs.length} / passkey:${passkeyButtons.length} / auth form:${authForms.length}）。認知機能テストの有無は手動確認してください`]
+        };
+      }
 
       const issues = [];
       for (const input of pwInputs) {
@@ -2016,13 +2318,19 @@ async function check_3_3_8_accessible_authentication(page) {
       if (captchaFrames.length > 0) {
         issues.push(`CAPTCHA検出 (${captchaFrames.length}個): 音声代替の有無を手動確認してください`);
       }
-      return { notApplicable: false, issues };
+      return { notApplicable: false, manualRequired: false, issues };
     });
 
     if (result.notApplicable) {
       return {
         sc: '3.3.8', name: '認証アクセシブル',
-        status: 'not_applicable', message: 'パスワード入力フィールドが存在しません', violations: []
+        status: 'not_applicable', message: '認証UIが存在しません', violations: []
+      };
+    }
+    if (result.manualRequired) {
+      return {
+        sc: '3.3.8', name: '認証アクセシブル',
+        status: 'manual_required', message: '認証UIを検出しました。認知機能テストの有無は手動確認が必要です', violations: result.issues || []
       };
     }
 
@@ -2057,7 +2365,8 @@ async function check_2_3_1_three_flashes(page) {
         if (!Number.isFinite(num)) return 0;
         return text.endsWith('ms') ? num / 1000 : num;
       }
-      const usedAnimationNames = new Set();
+      // name → 最短 duration(秒) を記録（フェードインと高速点滅を区別するために使用）
+      const usedAnimations = new Map();
       for (const el of document.querySelectorAll('*')) {
         const style = getComputedStyle(el);
         const names = String(style.animationName || '').split(',');
@@ -2066,29 +2375,40 @@ async function check_2_3_1_three_flashes(page) {
           const name = rawName.trim().replace(/^['"]|['"]$/g, '');
           if (!name || name === 'none') return;
           const duration = parseCssTime(durations[idx] || durations[durations.length - 1]);
-          if (duration > 0) usedAnimationNames.add(name);
+          if (duration > 0) {
+            const prev = usedAnimations.get(name);
+            usedAnimations.set(name, prev === undefined ? duration : Math.min(prev, duration));
+          }
         });
       }
-      // @keyframes で急速な色変化を検出
+      // @keyframes で明滅パターン（往復する opacity 変化）を検出
+      // 単方向フェードイン(0→1)はフラッシュではないため除外
+      const flashIssues = [];
+      const manualIssues = [];
       for (const sheet of document.styleSheets) {
         try {
           for (const rule of sheet.cssRules || []) {
             if (rule.type === CSSRule.KEYFRAMES_RULE) {
               if (ignoredKeyframes.has(rule.name)) continue;
-              if (!usedAnimationNames.has(rule.name)) continue;
+              if (!usedAnimations.has(rule.name)) continue;
               const keys = Array.from(rule.cssRules || []);
-              // 明暗反転を0%→50%→100%でチェック
               if (keys.length >= 3) {
-                let hasFlash = false;
+                let hasOpacityZero = false;
+                let hasOpacityHigh = false;
                 for (const key of keys) {
                   const text = key.cssText || '';
-                  if (text.includes('opacity: 0') || text.includes('opacity:0') || text.includes('visibility: hidden')) {
-                    hasFlash = true;
-                  }
+                  if (text.includes('opacity: 0') || text.includes('opacity:0') || text.includes('visibility: hidden')) hasOpacityZero = true;
+                  if (/opacity\s*:\s*(?:0*\.?[5-9]\d*|1)\b/.test(text)) hasOpacityHigh = true;
                 }
-                if (hasFlash) {
-                  issues.push(`@keyframes "${rule.name}": 点滅を含む可能性のあるアニメーション — 速度を手動確認してください`);
-                  if (issues.length >= 5) break;
+                // 往復パターン（低 ↔ 高）のみが閃光候補。片方向フェードは対象外
+                if (hasOpacityZero && hasOpacityHigh) {
+                  const duration = usedAnimations.get(rule.name);
+                  if (duration <= 1) {
+                    flashIssues.push(`@keyframes "${rule.name}" (${duration}s): 高速明滅パターン — 手動確認してください`);
+                  } else {
+                    manualIssues.push(`@keyframes "${rule.name}" (${duration}s): 明滅パターンあり（低速）— 手動確認`);
+                  }
+                  if (flashIssues.length + manualIssues.length >= 5) break;
                 }
               }
             }
@@ -2098,18 +2418,24 @@ async function check_2_3_1_three_flashes(page) {
       // video[autoplay] の点滅リスク
       const flashVideos = document.querySelectorAll('video[autoplay]');
       if (flashVideos.length > 0) {
-        issues.push(`video[autoplay] (${flashVideos.length}個): 点滅コンテンツの手動確認が必要`);
+        manualIssues.push(`video[autoplay] (${flashVideos.length}個): 点滅コンテンツの手動確認が必要`);
       }
-      return issues;
+      return { flashIssues, manualIssues };
     });
 
+    const allIssues = [...result.flashIssues, ...result.manualIssues];
+    const status = result.flashIssues.length > 0 ? 'fail'
+                 : result.manualIssues.length > 0 ? 'manual_required'
+                 : 'pass';
     return {
       sc: '2.3.1', name: '3回点滅（seizure）',
-      status: result.length === 0 ? 'pass' : 'fail',
-      message: result.length === 0
+      status,
+      message: status === 'pass'
         ? '点滅の疑いのあるアニメーションは検出されませんでした'
-        : `${result.length}件の要確認アニメーションを検出（手動確認推奨）`,
-      violations: result
+        : status === 'fail'
+          ? `${result.flashIssues.length}件の高速明滅パターンを検出`
+          : `${result.manualIssues.length}件の要確認アニメーション（手動確認推奨）`,
+      violations: allIssues
     };
   } catch (e) {
     return { sc: '2.3.1', name: '3回点滅（seizure）', status: 'error', message: e.message, violations: [] };
@@ -2182,15 +2508,24 @@ async function check_1_4_13_hover_content(page) {
 }
 
 /** SC 1.4.1 色だけの情報伝達
- *  [改善] 下線なしリンクの色コントラスト比（3:1）計算を追加
+ *  DEEPを主判定とし、本文中リンクとナビゲーションの current/selected 状態を決定論的に検査する。
+ *  色語の意味依存（「赤いボタン」等）は MULTI が補助的に確認する。
  */
 async function check_1_4_1_use_of_color(page) {
   try {
     const result = await page.evaluate(() => {
-      // 相対輝度計算（WCAG 2.x準拠）
       function parseCssColor(cssColor) {
-        const m = cssColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-        return m ? [+m[1], +m[2], +m[3]] : null;
+        if (!cssColor || cssColor === 'transparent') return null;
+        const rgba = cssColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\s*\)/i);
+        if (rgba) {
+          if (rgba[4] !== undefined && parseFloat(rgba[4]) === 0) return null;
+          return [+rgba[1], +rgba[2], +rgba[3]];
+        }
+        const hex = cssColor.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+        if (!hex) return null;
+        const raw = hex[1];
+        if (raw.length === 3) return raw.split('').map(ch => parseInt(ch + ch, 16));
+        return [raw.slice(0, 2), raw.slice(2, 4), raw.slice(4, 6)].map(part => parseInt(part, 16));
       }
       function getLuminance(r, g, b) {
         return [r, g, b].reduce((sum, c, i) => {
@@ -2202,70 +2537,162 @@ async function check_1_4_1_use_of_color(page) {
         const [l1, l2] = [c1, c2].map(c => getLuminance(...c)).sort((a, b) => b - a);
         return (l1 + 0.05) / (l2 + 0.05);
       }
+      function px(value) {
+        const num = parseFloat(value || '0');
+        return Number.isFinite(num) ? num : 0;
+      }
+      function fontWeight(value) {
+        if (!value) return 400;
+        if (value === 'normal') return 400;
+        if (value === 'bold') return 700;
+        const num = parseInt(value, 10);
+        return Number.isFinite(num) ? num : 400;
+      }
+      function getColorContrast(styleA, styleB, prop = 'color') {
+        const colorA = parseCssColor(styleA?.[prop] || '');
+        const colorB = parseCssColor(styleB?.[prop] || '');
+        if (!colorA || !colorB) return 1;
+        return contrastRatio(colorA, colorB);
+      }
+      function isVisible(el) {
+        if (!el || !(el instanceof Element)) return false;
+        const style = getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      }
+      function hasText(el) {
+        return !!String(el?.textContent || '').replace(/\s+/g, ' ').trim();
+      }
+      function hasVisibleBorder(style) {
+        return ['Top', 'Right', 'Bottom', 'Left'].some(side =>
+          px(style[`border${side}Width`]) > 0 && !/none|hidden/i.test(style[`border${side}Style`] || '')
+        );
+      }
+      function hasOutlineCue(style) {
+        return px(style.outlineWidth) > 0 || (style.boxShadow && style.boxShadow !== 'none');
+      }
+      function hasWeightCue(style, refStyle) {
+        const w = fontWeight(style.fontWeight);
+        const rw = fontWeight(refStyle.fontWeight);
+        return (w - rw) >= 200 || (w >= 600 && rw < 600);
+      }
+      function hasSizeCue(style, refStyle) {
+        const size = px(style.fontSize);
+        const ref = px(refStyle.fontSize) || 16;
+        return size >= ref + 2 && size / ref >= 1.125;
+      }
+      function hasUnderlineCue(style, refStyle) {
+        return style.textDecorationLine.includes('underline') && !refStyle.textDecorationLine.includes('underline');
+      }
+      function hasBackgroundCue(style, refStyle, containerStyle) {
+        const bg = parseCssColor(style.backgroundColor);
+        if (!bg) return false;
+        const refBg = parseCssColor(refStyle.backgroundColor);
+        const containerBg = parseCssColor(containerStyle?.backgroundColor || '');
+        const fg = parseCssColor(style.color);
+        const ownContrast = (bg && fg) ? contrastRatio(bg, fg) : 1;
+        const refContrast = (bg && refBg) ? contrastRatio(bg, refBg) : 1;
+        const containerContrast = (bg && containerBg) ? contrastRatio(bg, containerBg) : 1;
+        return ownContrast >= 3 && (refContrast >= 3 || containerContrast >= 3);
+      }
+      function describeElement(el) {
+        const tag = el.tagName.toLowerCase();
+        const id = el.id ? `#${el.id}` : '';
+        const cls = el.className && typeof el.className === 'string'
+          ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.')
+          : '';
+        const txt = String(el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 30);
+        return `${tag}${id || cls}${txt ? ` "${txt}"` : ''}`.slice(0, 120);
+      }
+      function isInlineTextLink(link, style, parentStyle) {
+        if (!link.matches('a[href]') || !isVisible(link) || !hasText(link)) return false;
+        if (link.closest('nav, header nav, footer nav, [role="navigation"], [role="tablist"], menu, [class*="nav" i], [class*="menu" i], [class*="tab" i]')) return false;
+        if (style.display !== 'inline' && style.display !== 'inline-block') return false;
+        if (hasVisibleBorder(style) || hasOutlineCue(style)) return false;
+        if ((px(style.paddingLeft) + px(style.paddingRight) + px(style.paddingTop) + px(style.paddingBottom)) >= 8) return false;
+        if (hasBackgroundCue(style, parentStyle, getComputedStyle(link.parentElement || document.body))) return false;
+        const siblings = Array.from((link.parentNode && link.parentNode.childNodes) || []);
+        const idx = siblings.indexOf(link);
+        const hasBefore = idx > 0 && siblings.slice(0, idx).some(node => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
+        const hasAfter = idx >= 0 && siblings.slice(idx + 1).some(node => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
+        if (hasBefore || hasAfter) return true;
+        const parentText = String(link.parentElement?.textContent || '').replace(/\s+/g, ' ').trim();
+        const linkText = String(link.textContent || '').replace(/\s+/g, ' ').trim();
+        const surroundingText = parentText.replace(linkText, '').trim();
+        return surroundingText.length >= Math.max(10, linkText.length + 4);
+      }
 
       const issues = [];
-      const links = Array.from(document.querySelectorAll('p a, li a, td a')).slice(0, 30);
-      let lowContrastCount = 0;
+      const inlineLinks = Array.from(document.querySelectorAll('a[href]'))
+        .filter(link => {
+          if (!link.parentElement) return false;
+          const style = getComputedStyle(link);
+          const parentStyle = getComputedStyle(link.parentElement);
+          return isInlineTextLink(link, style, parentStyle);
+        })
+        .slice(0, 40);
 
-      for (const link of links) {
-        if (!link.parentElement) continue;
-        const linkStyle   = getComputedStyle(link);
+      let inlineLinkIssueCount = 0;
+      for (const link of inlineLinks) {
+        const linkStyle = getComputedStyle(link);
         const parentStyle = getComputedStyle(link.parentElement);
-
-        const hasUnderline = linkStyle.textDecorationLine.includes('underline');
-        const hasBold      = parseInt(linkStyle.fontWeight) >= 700;
-        const hasBorder    = linkStyle.borderBottomWidth !== '0px';
-
-        if (!hasUnderline && !hasBold && !hasBorder) {
-          // 下線等なし → コントラスト比 3:1 以上を要求
-          const linkRgb   = parseCssColor(linkStyle.color);
-          const parentRgb = parseCssColor(parentStyle.color);
-          if (linkRgb && parentRgb) {
-            const ratio = contrastRatio(linkRgb, parentRgb);
-            if (ratio < 3.0) {
-              lowContrastCount++;
-              if (lowContrastCount <= 5) {
-                const id  = link.id ? `#${link.id}` : '';
-                const cls = link.className && typeof link.className === 'string'
-                  ? '.' + link.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
-                const href = link.getAttribute('href')
-                  ? ` href="${link.getAttribute('href').slice(0, 40)}"` : '';
-                const txt = (link.textContent || '').trim().slice(0, 20);
-                const label = `a${id || cls}${href}${txt ? ` "${txt}"` : ''}`;
-                issues.push(`${label}: 下線なし + 周囲テキストとのコントラスト比${ratio.toFixed(2)}:1 (要3:1以上)`.slice(0, 120));
-              }
-            }
-          } else {
-            // 色が取れない場合は件数のみカウント
-            lowContrastCount++;
+        const hasNonColorCue = hasUnderlineCue(linkStyle, parentStyle)
+          || hasWeightCue(linkStyle, parentStyle)
+          || hasSizeCue(linkStyle, parentStyle)
+          || hasVisibleBorder(linkStyle)
+          || hasOutlineCue(linkStyle);
+        const ratio = getColorContrast(linkStyle, parentStyle, 'color');
+        if (!hasNonColorCue && ratio < 3) {
+          inlineLinkIssueCount++;
+          if (inlineLinkIssueCount <= 5) {
+            issues.push(`${describeElement(link)}: 本文リンクが通常時に色だけで識別されている可能性 (周囲テキスト比 ${ratio.toFixed(2)}:1 / 要3:1以上)`);
           }
         }
       }
-      if (lowContrastCount > 5) {
-        issues.push(`（他${lowContrastCount - 5}件の下線なしリンクも同様に要確認）`);
+      if (inlineLinkIssueCount > 5) {
+        issues.push(`（他${inlineLinkIssueCount - 5}件の本文リンクも同様に要確認）`);
       }
 
-      // エラー表示が色のみか
-      for (const el of document.querySelectorAll('[class*="error" i], [aria-invalid="true"]')) {
-        const hasNonColor = el.querySelector('svg, img, [aria-label], [title]') || (el.textContent || '').trim().length > 0;
-        if (!hasNonColor) {
-          const id  = el.id ? `#${el.id}` : '';
-          const cls = el.className && typeof el.className === 'string'
-            ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
-          const txt = (el.textContent || '').trim().slice(0, 20);
-          issues.push(`エラー表示が色のみの可能性: ${el.tagName.toLowerCase()}${id || cls}${txt ? ` "${txt}"` : ''}`.slice(0, 100));
+      const currentCandidates = Array.from(document.querySelectorAll(
+        'nav [aria-current], [role="navigation"] [aria-current], header [aria-current], footer [aria-current], [role="tablist"] [aria-selected="true"], nav .active, nav .current, nav .selected, header nav .active, footer nav .active'
+      ))
+        .filter(el => isVisible(el) && hasText(el));
+      const seenCurrent = new Set();
+
+      for (const currentEl of currentCandidates) {
+        if (seenCurrent.has(currentEl)) continue;
+        seenCurrent.add(currentEl);
+        const parent = currentEl.parentElement;
+        if (!parent) continue;
+        const peers = Array.from(parent.children).filter(el => el !== currentEl && isVisible(el) && hasText(el));
+        if (peers.length === 0) continue;
+        const peer = peers.find(el => el.tagName === currentEl.tagName) || peers[0];
+        const style = getComputedStyle(currentEl);
+        const peerStyle = getComputedStyle(peer);
+        const parentStyle = getComputedStyle(parent);
+        const hasNonColorCue = hasUnderlineCue(style, peerStyle)
+          || hasWeightCue(style, peerStyle)
+          || hasSizeCue(style, peerStyle)
+          || (hasVisibleBorder(style) && !hasVisibleBorder(peerStyle))
+          || (hasOutlineCue(style) && !hasOutlineCue(peerStyle))
+          || hasBackgroundCue(style, peerStyle, parentStyle);
+        const ratio = getColorContrast(style, peerStyle, 'color');
+        if (!hasNonColorCue && ratio < 3) {
+          issues.push(`${describeElement(currentEl)}: ナビゲーションの current/selected 状態が色だけで示されている可能性 (隣接項目比 ${ratio.toFixed(2)}:1 / 要3:1以上または非色手掛かり)`);
         }
       }
-      return issues;
+
+      return { issues, inlineLinkIssueCount, navIssueCount: Math.max(0, issues.length - Math.min(inlineLinkIssueCount, 5) - (inlineLinkIssueCount > 5 ? 1 : 0)) };
     });
 
     return {
       sc: '1.4.1', name: '色だけの情報伝達',
-      status: result.length === 0 ? 'pass' : 'fail',
-      message: result.length === 0
-        ? '色以外の視覚的手がかりが確認できます'
-        : `${result.length}件: 色のみで情報を伝達している可能性（下線なしリンクのコントラスト比不足を含む）`,
-      violations: result
+      status: result.issues.length === 0 ? 'pass' : 'fail',
+      message: result.issues.length === 0
+        ? '本文リンクとナビゲーションの状態表示に、色以外の視覚的手がかりが確認できます'
+        : `${result.issues.length}件: 本文リンクまたはナビゲーション状態が色だけで区別されている可能性`,
+      violations: result.issues
     };
   } catch (e) {
     return { sc: '1.4.1', name: '色だけの情報伝達', status: 'error', message: e.message, violations: [] };
@@ -2336,14 +2763,16 @@ async function check_2_2_1_timing_adjustable(page) {
       timers: (window.__longTimers || []).slice(0, 5)
     }));
 
-    const issues = result.timers.map(ms => `setTimeout: ${Math.round(ms / 1000)}秒のタイマー検出 — ユーザーに延長/無効化手段が必要`);
+    const issues = result.timers.map(ms => `setTimeout: ${Math.round(ms / 1000)}秒のタイマー検出 — UI上の制限時間であれば延長/無効化手段が必要（分析・keepalive等は対象外）`);
 
     return {
       sc: '2.2.1', name: '制限時間調整',
-      status: issues.length === 0 ? 'pass' : 'fail',
+      // setTimeout だけではアナリティクス・セッション keepalive と UI 制限時間を区別できないため
+      // タイマーが検出されても manual_required とし、手動確認を促す
+      status: issues.length === 0 ? 'pass' : 'manual_required',
       message: issues.length === 0
         ? '長時間タイマー（20秒超）は検出されませんでした'
-        : `${issues.length}件の長時間タイマーを検出`,
+        : `${issues.length}件の長時間タイマーを検出 — UI制限時間かどうか手動確認が必要`,
       violations: issues
     };
   } catch (e) {
@@ -2489,8 +2918,12 @@ async function check_2_5_3_label_in_name(page) {
 async function check_1_3_4_orientation(page) {
   try {
     const issues = await page.evaluate(() => {
-      const found = [];
+      const failItems = [];
+      const manualItems = [];
       // CSS @media orientation ルールで display:none / visibility:hidden を設定しているか
+      // body/html/main/ルートラッパー等の広域セレクタのみ「向き固定」として fail
+      // クラス・ID 付きのコンポーネント単位の非表示はレスポンシブデザインとして manual_required
+      const broadSelectorRe = /^(body|html|main|\*|#root|#app|#wrapper|#content|#main|\.app\b|\.container\b|\.wrapper\b)/i;
       for (const sheet of document.styleSheets) {
         try {
           for (const rule of sheet.cssRules || []) {
@@ -2500,7 +2933,12 @@ async function check_1_3_4_orientation(page) {
                 for (const inner of rule.cssRules || []) {
                   const text = inner.cssText || '';
                   if (/display\s*:\s*none|visibility\s*:\s*hidden/.test(text)) {
-                    found.push(`@media(${cond}){ ${text.slice(0, 80)} } — 特定方向でコンテンツ非表示`);
+                    const selector = text.split('{')[0].trim();
+                    if (broadSelectorRe.test(selector)) {
+                      failItems.push(`@media(${cond}){ ${text.slice(0, 80)} } — ページ全体が特定方向で非表示`);
+                    } else {
+                      manualItems.push(`@media(${cond}){ ${text.slice(0, 80)} } — コンポーネント非表示（レスポンシブの可能性: 手動確認）`);
+                    }
                   }
                 }
               }
@@ -2511,17 +2949,23 @@ async function check_1_3_4_orientation(page) {
       // body/html に transform:rotate がないか
       const bodyStyle = getComputedStyle(document.body);
       if (/rotate\((?!0)/.test(bodyStyle.transform)) {
-        found.push(`body transform:${bodyStyle.transform} — 表示方向がロックされている可能性`);
+        failItems.push(`body transform:${bodyStyle.transform} — 表示方向がロックされている可能性`);
       }
-      return found;
+      return { failItems, manualItems };
     });
+    const allItems = [...issues.failItems, ...issues.manualItems];
+    const status = issues.failItems.length > 0 ? 'fail'
+                 : issues.manualItems.length > 0 ? 'manual_required'
+                 : 'pass';
     return {
       sc: '1.3.4', name: '表示方向',
-      status: issues.length === 0 ? 'pass' : 'fail',
-      message: issues.length === 0
+      status,
+      message: status === 'pass'
         ? '表示方向を制限するCSSは検出されませんでした'
-        : `${issues.length}件: 特定方向でコンテンツを非表示にしている可能性`,
-      violations: issues
+        : status === 'fail'
+          ? `${issues.failItems.length}件: ページ全体が特定方向で非表示（向き固定の可能性）`
+          : `${issues.manualItems.length}件: コンポーネント単位の orientation 非表示（手動確認推奨）`,
+      violations: allItems
     };
   } catch (e) {
     return { sc: '1.3.4', name: '表示方向', status: 'error', message: e.message, violations: [] };
@@ -2683,11 +3127,11 @@ async function check_3_2_6_consistent_help(page) {
     }
     return {
       sc: '3.2.6', name: 'ヘルプの位置一貫性',
-      status: result.found ? 'pass' : 'fail',
+      status: result.found ? 'pass' : 'not_applicable',
       message: result.found
         ? `header/footer/navにヘルプ/連絡先リンクあり: ${result.locations.slice(0, 3).join(', ')}`
-        : 'header/footer内にヘルプ・連絡先・FAQリンクが見つかりません',
-      violations: result.found ? [] : ['ヘルプリンク（tel/mailto/contact/FAQ）をheader/footerに配置してください']
+        : 'header/footer内にヘルプ・連絡先・FAQリンクが見つかりません — ヘルプ手段がないページには SC 3.2.6 は適用されません',
+      violations: []
     };
   } catch (e) {
     return { sc: '3.2.6', name: 'ヘルプの位置一貫性', status: 'error', message: e.message, violations: [] };
@@ -2747,7 +3191,9 @@ async function check_3_3_7_redundant_entry(page) {
     }
     return {
       sc: '3.3.7', name: '冗長な入力',
-      status: result.issues.some(i => i.includes('重複')) ? 'fail' : 'manual_required',
+      // マルチステップ UI がある場合のみ同名フィールド重複を fail とする
+      // step indicator なし = 独立したフォームの共存（ログイン + 問い合わせ等）であり 3.3.7 対象外
+      status: (result.issues.some(i => i.includes('重複')) && result.hasMultiStep) ? 'fail' : 'manual_required',
       message: result.issues.length === 0
         ? 'マルチステップUI検出 — 手動確認を推奨'
         : `${result.issues.length}件の問題を検出`,
@@ -3023,21 +3469,31 @@ app.post('/api/enhanced-check', async (req, res) => {
     await new Promise(r => setTimeout(r, 1000));
 
     // 2-4
-    results.push(await withTimeout(() => check_1_4_4_text_resize(page)));
+    results.push(await withTimeout(() => check_1_3_2_meaningful_sequence(page)));
+
+    // 2-4b
+    results.push(await withTimeout(() => check_1_3_3_sensory_characteristics(page)));
+
+    // ページ再読み込み
+    await page.goto(url, { waitUntil: 'networkidle2' }).catch(() => {});
+    await new Promise(r => setTimeout(r, 1000));
 
     // 2-5
-    results.push(await withTimeout(() => check_1_2_x_media_captions(page)));
-
-    // 2-5b SC 1.2.3 専用検査
-    results.push(await withTimeout(() => check_1_2_3_audio_description(page)));
+    results.push(await withTimeout(() => check_1_4_4_text_resize(page)));
 
     // 2-6
-    results.push(await withTimeout(() => check_2_2_2_pause_stop(page)));
+    results.push(await withTimeout(() => check_1_2_x_media_captions(page)));
+
+    // 2-6b SC 1.2.3 専用検査
+    results.push(await withTimeout(() => check_1_2_3_audio_description(page)));
 
     // 2-7
+    results.push(await withTimeout(() => check_2_2_2_pause_stop(page)));
+
+    // 2-8
     results.push(await withTimeout(() => check_3_3_8_accessible_authentication(page)));
 
-    // 2-8 (SC 2.3.1)
+    // 2-9 (SC 2.3.1)
     results.push(await withTimeout(() => check_2_3_1_three_flashes(page)));
 
     // ページ再読み込み（Phase 3用）
@@ -3262,12 +3718,13 @@ function relevantToolFindingsForAI(toolResults, ref) {
 function getMultiVerificationMethodForAI(item) {
   const ref = item?.ref || '';
   const methods = {
+    '1.1.1': '画像リストの各imgを以下の順で評価する。【スキップ条件（違反にしない）】isHidden=trueは評価不要。role="presentation"またはrole="none"は評価不要。ariaLabelまたはariaLabelledbyが存在すればalt欠落でもpass。【alt=""（空）】装飾画像として正しい（pass）。ただしinLink=trueかつBASICのrelevantToolFindingsにlink-name違反があれば除く。【alt=null（属性なし）】上記スキップ条件を満たさない場合はfail。BASICがすでにfailを出している場合は違反内容を具体化する。【alt値の品質評価（最重要）】BASICが構造的には問題なしと判定した画像について、alt値が意味を持つかを確認する: (1)ファイル名・拡張子を含む（"image001.jpg" "photo.png"等）→fail、(2)"image" "img" "photo" "pic" "画像" "写真" "バナー" "アイコン" "図" 等の汎用語のみ→fail、(3)スクリーンショットで画像が確認できれば内容との一致を評価。全画像がスキップまたは適切なalt/aria名を持つ場合はpass。一部確認不能ならmanual_required。',
     '1.2.1': 'audio/video/iframe等のメディアをHTMLと画面から探す。音声のみコンテンツがあり、近接する文字起こし・テキスト代替・説明リンクが確認できればpass。メディア内容の聴取が必要ならmanual_required。メディアが無ければnot_applicable。',
     '1.2.2': '収録済み動画があるか確認し、track kind="captions"、字幕ボタン、キャプション付きプレーヤー、字幕/文字起こしリンクを証拠にする。動画があるが字幕の有無をHTML/画面で確認できなければmanual_required。',
     '1.2.3': '動画に音声解説または同等のメディア代替があるか、リンク・説明・track・プレーヤー表示から確認する。映像内容の理解が必要で証拠が無い場合はmanual_required。動画が無ければnot_applicable。',
     '1.2.5': '収録済み動画の音声解説を確認する。音声解説付き版、説明音声トラック、詳細なテキスト代替が明示されていればpass。ページ証拠だけで確認不能ならmanual_required。',
-    '1.3.3': '「右の」「左の」「上の」「丸い」「赤い」「音が鳴ったら」など、位置・形・色・音だけで操作を指示する文言を探す。テキスト名やラベルも併記されていればpass、感覚的特徴だけならfail。',
-    '1.4.1': '色分けされた状態表示、凡例、必須/エラー/選択状態の説明を確認する。「赤いボタン」「緑の項目」等、色だけで情報や操作を伝える場合はfail。文字・アイコン・形状も併用されていればpass。',
+    '1.3.3': 'DEEP結果に感覚依存らしい指示文候補があればそれを優先確認しつつ、「右の」「左の」「上の」「丸い」「赤い」「音が鳴ったら」など、位置・形・色・音だけで操作を指示する文言を探す。テキスト名やラベルも併記されていればpass、感覚的特徴だけならfail。',
+    '1.4.1': 'DEEP結果で本文リンク識別とナビゲーション current/selected の視覚差分を先に確認し、その上で色語・凡例・必須/エラー/成功表示・操作指示の意味依存を確認する。「赤いボタン」「緑が完了」等、色だけで情報や操作を伝える場合はfail。文字・アイコン・形状・ラベルも併用されていればpass。証拠不足ならmanual_required。',
     '1.4.5': 'スクリーンショットとimg/背景画像から、本文や操作説明が画像化されていないか確認する。ロゴ等の例外を除き、読ませる目的の文字画像があればfail。画像内文字の有無が不確実ならmanual_required。',
     '2.4.4': 'リンクテキストと直近の見出し・段落・aria-label/titleを見て目的が分かるか確認する。「こちら」「詳細」「click here」等が文脈なしで並ぶ場合はfail。リンクが無ければnot_applicable。',
     '2.4.5': '検索、サイトマップ、グローバルナビ、パンくず、関連リンクなど、ページへ到達する複数手段の証拠を探す。単一ページ証拠ではサイト全体を確認できない場合はmanual_required。',
@@ -3387,7 +3844,24 @@ app.post('/api/ai-evaluate', async (req, res) => {
       .replace(/<style[\s\S]*?<\/style>/gi, '')
       .replace(/\s+/g, ' ')
       .substring(0, 15000);
-    
+
+    // 1.1.1 alt品質評価用: img要素リストを構造化して抽出
+    const imgAltList = await page.evaluate(() => {
+      return Array.from(document.querySelectorAll('img')).slice(0, 50).map(img => {
+        const alt = img.getAttribute('alt');
+        return {
+          src: (img.getAttribute('src') || '').split('/').pop().replace(/[?#].*$/, '').slice(0, 50),
+          alt: alt,           // null=属性なし, ''=装飾(空alt), string=値あり
+          ariaLabel: img.getAttribute('aria-label') || null,
+          ariaLabelledby: img.getAttribute('aria-labelledby') || null,
+          role: img.getAttribute('role') || null,
+          inLink: !!img.closest('a'),
+          inButton: !!img.closest('button'),
+          isHidden: img.getAttribute('aria-hidden') === 'true'
+        };
+      });
+    });
+
     await page.close();
     const targetScSet = new Set(safeCheckItems.map(item => item.ref).filter(Boolean));
     const toolResults = buildToolResultsForAI({ basicResults, extResults, deepResults, playResults, targetScSet });
@@ -3486,7 +3960,7 @@ ${JSON.stringify(toolResults, null, 2)}
 
 ## HTML（抜粋）
 ${shortHtml}
-
+${targetScSet.has('1.1.1') ? `\n## 画像リスト（alt品質評価用、最大50件）\n${JSON.stringify(imgAltList, null, 2)}\n` : ''}
 ## 評価対象
 ${JSON.stringify(evaluationItems, null, 2)}
 
@@ -4606,17 +5080,30 @@ async function pw_check_3_1_1_language(page) {
 async function pw_check_1_3_5_input_purpose(page) {
   try {
     const issues = await page.evaluate(() => {
-      const purposeMap = {
-        name: 'name', 'given-name': 'given-name', 'family-name': 'family-name',
-        email: 'email', tel: 'tel', username: 'username', 'new-password': 'new-password',
-        'current-password': 'current-password', bday: 'bday', 'street-address': 'street-address',
-        'address-line1': 'address-line1', 'postal-code': 'postal-code', country: 'country',
-        'cc-name': 'cc-name', 'cc-number': 'cc-number', 'cc-exp': 'cc-exp', organization: 'organization'
+      // WCAG 1.3.5 対象: 個人情報を収集するフィールドのみ
+      // type から期待 autocomplete を一意に決定できるもの
+      const typeToAC = {
+        email: ['email'],
+        tel: ['tel'],
+        password: ['current-password', 'new-password'],
       };
-      const typeHints = {
-        email: 'email', tel: 'tel', password: ['current-password', 'new-password'],
-        text: null
-      };
+      // name/id/placeholder パターンで個人情報フィールドを推定
+      const personalInfoPatterns = [
+        { re: /\bemail\b|メール/i,                      ac: 'email' },
+        { re: /\btel\b|phone|電話/i,                    ac: 'tel' },
+        { re: /given.?name|first.?name|名前|名$/i,      ac: 'given-name' },
+        { re: /family.?name|last.?name|姓$/i,           ac: 'family-name' },
+        { re: /\bname\b|氏名|お名前/i,                  ac: 'name' },
+        { re: /postal|zip|郵便/i,                       ac: 'postal-code' },
+        { re: /\baddress\b|住所/i,                      ac: 'street-address' },
+        { re: /birthday|birth.?date|生年月日/i,         ac: 'bday' },
+        { re: /\busername\b|ユーザー.?名/i,             ac: 'username' },
+        { re: /organization|会社.?名|組織/i,            ac: 'organization' },
+        { re: /cc.?name|card.?name|カード.?名義/i,      ac: 'cc-name' },
+        { re: /cc.?num|card.?num|カード.?番号/i,        ac: 'cc-number' },
+        { re: /cc.?exp|card.?exp|有効.?期限/i,          ac: 'cc-exp' },
+        { re: /\bcountry\b|国$/i,                       ac: 'country' },
+      ];
       const inputs = Array.from(document.querySelectorAll('input, textarea, select')).filter(el => {
         const s = getComputedStyle(el);
         return s.display !== 'none' && s.visibility !== 'hidden' && !el.disabled;
@@ -4624,14 +5111,31 @@ async function pw_check_1_3_5_input_purpose(page) {
       const missing = [];
       inputs.forEach(el => {
         const type = (el.type || 'text').toLowerCase();
-        if (['hidden', 'submit', 'button', 'reset', 'image', 'file', 'checkbox', 'radio', 'range', 'color', 'search'].includes(type)) return;
+        if (['hidden', 'submit', 'button', 'reset', 'image', 'file', 'checkbox', 'radio',
+             'range', 'color', 'search', 'number', 'date', 'time', 'datetime-local', 'month', 'week'].includes(type)) return;
         const ac = (el.getAttribute('autocomplete') || '').toLowerCase().trim();
-        if (!ac || ac === 'on' || ac === 'off') {
-          const tag = el.tagName.toLowerCase();
-          const id = el.id ? `#${el.id}` : '';
-          const name = el.name ? `[name="${el.name}"]` : '';
-          missing.push(`${tag}${id}${name} (type="${type}") にautocomplete属性なし`);
+        const tag = el.tagName.toLowerCase();
+        const id = el.id ? `#${el.id}` : '';
+        const nameAttr = el.name ? `[name="${el.name}"]` : '';
+        // type から直接判定できる場合（email/tel/password は type だけで十分な証拠）
+        if (typeToAC[type]) {
+          const expected = typeToAC[type];
+          if (!expected.includes(ac)) {
+            missing.push(`${tag}${id}${nameAttr} (type="${type}") に autocomplete="${expected[0]}" 推奨 — 現在: "${ac || '未設定'}"`);
+          }
+          return;
         }
+        // name/id/placeholder パターンで個人情報フィールドか判定
+        const hint = `${el.name || ''} ${el.id || ''} ${el.getAttribute('placeholder') || ''}`;
+        for (const pat of personalInfoPatterns) {
+          if (pat.re.test(hint)) {
+            if (!ac || ac === 'on' || ac === 'off') {
+              missing.push(`${tag}${id}${nameAttr} (type="${type}") に autocomplete="${pat.ac}" 推奨 — 現在: "${ac || '未設定'}"`);
+            }
+            break;
+          }
+        }
+        // パターン不一致 = 個人情報フィールドと判定できないため 1.3.5 対象外
       });
       return missing;
     });
@@ -4640,8 +5144,8 @@ async function pw_check_1_3_5_input_purpose(page) {
       status: issues.length === 0 ? 'pass' : 'fail',
       violations: issues.slice(0, 10),
       message: issues.length === 0
-        ? 'フォーム入力のautocomplete属性を確認（問題なし）'
-        : `${issues.length}個の入力欄にautocomplete属性がありません`
+        ? '個人情報フィールドのautocomplete属性を確認（問題なし）'
+        : `${issues.length}個の個人情報フィールドにautocompleteが不適切`
     };
   } catch (e) {
     return { sc: '1.3.5', status: 'error', violations: [], message: e.message };
@@ -4725,47 +5229,33 @@ async function pw_check_2_5_3_label_in_name(page) {
   }
 }
 
+/** SC 1.3.2 - 意味のある順序（Playwright版） */
+async function pw_check_1_3_2_meaningful_sequence(page) {
+  try {
+    return await check_1_3_2_meaningful_sequence(page);
+  } catch (e) {
+    return { sc: '1.3.2', status: 'error', violations: [], message: e.message };
+  }
+}
+
+/** SC 1.3.3 - 感覚的特徴（Playwright版） */
+async function pw_check_1_3_3_sensory_characteristics(page) {
+  try {
+    return await check_1_3_3_sensory_characteristics(page);
+  } catch (e) {
+    return { sc: '1.3.3', status: 'error', violations: [], message: e.message };
+  }
+}
+
 /** SC 2.1.2 - キーボードトラップなし（Playwright版） */
 async function pw_check_2_1_2_keyboard_trap(page) {
   try {
-    const focusableCount = await page.evaluate(() =>
-      document.querySelectorAll(
-        'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-      ).length
-    );
-    const maxTabs = Math.min(focusableCount + 20, 50);
-    const history = [];
-    await page.keyboard.press('Tab');
-    for (let i = 0; i < maxTabs; i++) {
-      const el = await page.evaluate(() => {
-        const a = document.activeElement;
-        if (!a || a === document.body) return null;
-        const tag = a.tagName.toLowerCase();
-        const id = a.id ? `#${a.id}` : '';
-        const cls = a.className && typeof a.className === 'string'
-          ? '.' + a.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
-        const text = (a.getAttribute('aria-label') || a.textContent || a.value || '').trim().slice(0, 25);
-        let inModal = false;
-        let p = a;
-        while (p) { if (p.getAttribute && p.getAttribute('aria-modal') === 'true') { inModal = true; break; } p = p.parentElement; }
-        const key = `${tag}${id}${cls}`.slice(0, 60);
-        const display = `${key}${text ? ' "'+text+'"' : ''}`.slice(0, 80);
-        return { key, display, inModal };
-      });
-      if (el) history.push(el);
-      await page.keyboard.press('Tab');
-    }
-    const traps = [];
-    for (let i = 2; i < history.length; i++) {
-      if (history[i].key === history[i-1].key && history[i].key === history[i-2].key && !history[i].inModal) {
-        if (!traps.some(t => t.startsWith(history[i].key))) traps.push(history[i].display);
-      }
-    }
+    const { traps } = await detectKeyboardTrapsByTabbing(page);
     return {
       sc: '2.1.2',
       status: traps.length === 0 ? 'pass' : 'fail',
       violations: traps,
-      message: traps.length === 0 ? 'キーボードトラップは検出されませんでした' : `${traps.length}箇所でキーボードトラップを検出`
+      message: traps.length === 0 ? 'キーボードトラップは検出されませんでした' : `${traps.length}箇所でキーボードトラップを確認`
     };
   } catch (e) {
     return { sc: '2.1.2', status: 'error', violations: [], message: e.message };
@@ -5375,6 +5865,8 @@ app.post('/api/playwright-check', async (req, res) => {
     results.push(await withTimeout(() => pw_check_4_1_3_status_messages(page)));
     results.push(await withTimeout(() => pw_check_2_4_6_headings_labels(page)));
     results.push(await withTimeout(() => pw_check_1_3_1_info_relationships(page)));
+    results.push(await withTimeout(() => pw_check_1_3_2_meaningful_sequence(page)));
+    results.push(await withTimeout(() => pw_check_1_3_3_sensory_characteristics(page)));
     // フォーカス系検査
     await page.reload({ waitUntil: 'networkidle' }).catch(() => {});
     await page.waitForTimeout(500);

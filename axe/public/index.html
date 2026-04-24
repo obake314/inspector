@@ -270,7 +270,12 @@
                             <label class="pre-check-item">
                                 <input type="checkbox" id="preCheckNoForm">
                                 <span>入力フォームなし</span>
-                                <small>3.3.1 / 3.3.3 / 3.3.4 / 3.3.7 / 3.3.8 を合格扱い</small>
+                                <small>3.3.1 / 3.3.3 / 3.3.4 / 3.3.7 を合格扱い</small>
+                            </label>
+                            <label class="pre-check-item">
+                                <input type="checkbox" id="preCheckNoAuth">
+                                <span>認証機能なし</span>
+                                <small>3.3.8 を合格扱い</small>
                             </label>
                             <label class="pre-check-item">
                                 <input type="checkbox" id="preCheckNoMoving">
@@ -705,6 +710,7 @@
             { text: "論理的なフォーカス順序", ref: "2.4.3", level: "A", category: "キーボード" },
             { text: "フォーカスインジケータが見える", ref: "2.4.7", level: "AA", category: "キーボード" },
             { text: "フォーカスが隠れない（最低限）", ref: "2.4.11", level: "AA", category: "キーボード" },
+            { text: "画像に適切な代替テキストがある", ref: "1.1.1", level: "A", category: "メディア", aiTarget: true },
             { text: "音声のみのコンテンツにテキスト代替がある", ref: "1.2.1", level: "A", category: "メディア", aiTarget: true },
             { text: "動画にキャプションがある", ref: "1.2.2", level: "A", category: "メディア", aiTarget: true },
             { text: "動画に音声解説がある", ref: "1.2.3", level: "A", category: "メディア", aiTarget: true },
@@ -759,7 +765,7 @@
             '3.3.3': { test: (s, d) => d.noForm,                          reason: '入力フォームが存在しません' },
             '3.3.4': { test: (s, d) => d.noForm,                          reason: '入力フォームが存在しません' },
             '3.3.7': { test: (s, d) => d.noForm,                          reason: '入力フォームが存在しません' },
-            '3.3.8': { test: (s, d) => d.noForm,                          reason: '入力フォームが存在しません' },
+            '3.3.8': { test: (s, d) => !s.hasAuthenticationUi || d.noAuth, reason: '認証機能が存在しません' },
             '2.2.2': { test: (s, d) => d.noMoving,                        reason: '動くコンテンツ・点滅要素が存在しません' },
             '2.3.1': { test: (s, d) => d.noMoving,                        reason: '動くコンテンツ・点滅要素が存在しません' },
             '2.2.1': { test: (s, d) => d.noTimelimit,                     reason: 'タイムリミットのある操作が存在しません' },
@@ -771,8 +777,8 @@
         };
 
         // 事前申告の状態（シングルモード共通）
-        let userDeclarations = { noMedia: false, noForm: false, noMoving: false, noTimelimit: false, noGesture: false, noPartialLanguage: false };
-        // バッチモード用 URL ごとの申告（url → { noMedia, noForm, noMoving, noTimelimit, noGesture, noPartialLanguage }）
+        let userDeclarations = { noMedia: false, noForm: false, noAuth: false, noMoving: false, noTimelimit: false, noGesture: false, noPartialLanguage: false };
+        // バッチモード用 URL ごとの申告（url → { noMedia, noForm, noAuth, noMoving, noTimelimit, noGesture, noPartialLanguage }）
         let batchUserDeclarations = {};
         // 現在表示中の URL（バッチ時に申告を切り替えるために使用）
         let currentDisplayUrl = null;
@@ -799,7 +805,7 @@
         function getAutoDetectedPassEntries(results) {
             const signals = getPageSignals(results) || {};
             const decl = getActiveDeclarations(results);
-            const hasDecl = decl.noMedia || decl.noForm || decl.noMoving || decl.noTimelimit || decl.noGesture || decl.noPartialLanguage;
+            const hasDecl = decl.noMedia || decl.noForm || decl.noAuth || decl.noMoving || decl.noTimelimit || decl.noGesture || decl.noPartialLanguage;
             // 自動検出もユーザー申告もなければスキップ
             if (!hasDecl && (!signals || signals.detectionError)) return [];
             return Object.entries(AUTO_PASS_SIGNAL_RULES).flatMap(([ref, rule]) => {
@@ -1523,10 +1529,43 @@
 
         function getScanStateUrl(payload = {}) {
             return payload.url
+                || payload.batch?.resultsData?.[payload.batch?.currentBatchIdx || 0]?.url
+                || payload.batch?.resultsData?.[0]?.url
                 || lastResults?.url
+                || batchResultsData?.[currentBatchIdx || 0]?.url
+                || batchResultsData?.[0]?.url
                 || lastMobileScanSnapshot?.basic?.url
                 || $('urlInput')?.value?.trim()
                 || '';
+        }
+
+        function buildBatchScanStatePayload() {
+            const hasBatchData = batchResultsData.length > 0 || batchMobileResultsData.length > 0;
+            if (!hasBatchData) return null;
+            return {
+                resultsData: cloneData(batchResultsData),
+                navConsistency: cloneData(batchNavConsistency),
+                currentBatchIdx,
+                currentDisplayUrl,
+                viewportMode: batchViewportMode,
+                enhancedResults: cloneData(batchEnhancedResults),
+                aiResults: cloneData(batchAIResults),
+                aiTokenLimitedMap: cloneData(batchAITokenLimitedMap),
+                aiIssueMap: cloneData(batchAIIssueMap),
+                improvementPlans: cloneData(batchImprovementPlans),
+                playResults: cloneData(batchPlayResults),
+                extResults: cloneData(batchExtResults),
+                mobileResultsData: cloneData(batchMobileResultsData),
+                mobileEnhancedResults: cloneData(batchMobileEnhancedResults),
+                mobileAIResults: cloneData(batchMobileAIResults),
+                mobileAITokenLimitedMap: cloneData(batchMobileAITokenLimitedMap),
+                mobileAIIssueMap: cloneData(batchMobileAIIssueMap),
+                mobileImprovementPlans: cloneData(batchMobileImprovementPlans),
+                mobilePlayResults: cloneData(batchMobilePlayResults),
+                mobileExtResults: cloneData(batchMobileExtResults),
+                mobileNavConsistency: cloneData(batchMobileNavConsistency),
+                userDeclarations: cloneData(batchUserDeclarations)
+            };
         }
 
         function buildScanStatePayload() {
@@ -1548,13 +1587,14 @@
                 improvementPlan: cloneData(lastImprovementPlan),
                 navConsistency: cloneData(batchNavConsistency),
                 mobileSnapshot: cloneData(lastMobileScanSnapshot),
+                batch: buildBatchScanStatePayload(),
                 manualDecisions: Array.from(manualDecisions.entries()),
                 manualImpacts: Array.from(manualImpacts.entries())
             };
         }
 
         function exportScanStateJson() {
-            if (!lastResults && !lastMobileScanSnapshot?.basic) {
+            if (!lastResults && !lastMobileScanSnapshot?.basic && batchResultsData.length === 0 && batchMobileResultsData.length === 0) {
                 alert('保存できるスキャン結果がありません');
                 return;
             }
@@ -1594,56 +1634,135 @@
             if (!payload || typeof payload !== 'object') {
                 throw new Error('JSONの形式が正しくありません');
             }
+            const batchState = cloneData(payload.batch || payload.batchState || null);
+            const hasBatchState = !!(batchState && (batchState.resultsData || batchState.batchResultsData));
             const mobileSnapshot = cloneData(payload.mobileSnapshot || payload.lastMobileScanSnapshot || null);
             const basic = cloneData(payload.basic || payload.lastResults || mobileSnapshot?.basic || null);
-            if (!basic) {
+            if (!basic && !hasBatchState) {
                 throw new Error('BASIC結果を含むスキャン状態JSONではありません');
             }
-            const url = getScanStateUrl({ url: payload.url || basic.url || mobileSnapshot?.basic?.url });
+            const url = getScanStateUrl({
+                url: payload.url || basic?.url || mobileSnapshot?.basic?.url,
+                batch: batchState
+            });
             if (url) {
-                basic.url = basic.url || url;
+                if (basic) basic.url = basic.url || url;
                 const urlInput = $('urlInput');
                 if (urlInput) urlInput.value = url;
             }
 
-            lastResults = basic;
-            lastEnhancedResults = cloneData(payload.deep || payload.lastEnhancedResults || mobileSnapshot?.deep || null);
-            lastPlayResults = cloneData(payload.play || payload.lastPlayResults || mobileSnapshot?.play || null);
-            lastExtResults = cloneData(payload.ext || payload.lastExtResults || mobileSnapshot?.ext || null);
-            const importedMulti = payload.multi || payload.aiResults || mobileSnapshot?.multi || {};
-            aiResults = importedMulti && typeof importedMulti === 'object' && !Array.isArray(importedMulti)
-                ? cloneData(importedMulti)
-                : {};
-            lastMultiTokenLimited = !!(payload.multiTokenLimited || mobileSnapshot?.multiTokenLimited);
-            lastMultiIssue = cloneData(payload.multiIssue || mobileSnapshot?.multiIssue || null);
-            lastImprovementPlan = cloneData(payload.improvementPlan || mobileSnapshot?.improvementPlan || null);
-            lastMobileScanSnapshot = mobileSnapshot;
-            batchNavConsistency = cloneData(payload.navConsistency || null);
             restoreStateMap(manualDecisions, payload.manualDecisions);
             restoreStateMap(manualImpacts, payload.manualImpacts);
 
-            setTargetLevel(payload.targetLevel || basic.level || targetLevel);
+            setTargetLevel(payload.targetLevel || basic?.level || targetLevel);
             setViewportModeFromState(payload.viewportMode);
             scanExecuted = false;
-            setMode(payload.currentMode || 'single');
-
             $('errorMessage').classList.remove('visible');
-            $('results').classList.add('visible');
-            $('exportArea').classList.add('visible');
-            refreshScoreTable();
-            renderAllTabs('pc');
-            if (lastMobileScanSnapshot?.basic) {
-                renderAllTabs(
-                    'sp',
-                    lastMobileScanSnapshot.basic,
-                    lastMobileScanSnapshot.deep || null,
-                    lastMobileScanSnapshot.multi || {},
-                    lastMobileScanSnapshot.play || null,
-                    lastMobileScanSnapshot.ext || null
-                );
+            const batchResultsEl = $('batchResults');
+            if (hasBatchState && (payload.currentMode === 'batch' || (batchState.resultsData || batchState.batchResultsData || []).length > 0)) {
+                lastResults = null;
+                lastEnhancedResults = null;
+                lastPlayResults = null;
+                lastExtResults = null;
+                aiResults = {};
+                lastMultiTokenLimited = false;
+                lastMultiIssue = null;
+                lastImprovementPlan = null;
+                batchResultsData = cloneData(batchState.resultsData || batchState.batchResultsData || []);
+                batchNavConsistency = cloneData(batchState.navConsistency || null);
+                currentBatchIdx = Number.isInteger(batchState.currentBatchIdx) ? batchState.currentBatchIdx : 0;
+                currentDisplayUrl = batchState.currentDisplayUrl || null;
+                batchViewportMode = batchState.viewportMode || payload.viewportMode || 'desktop';
+                batchEnhancedResults = cloneData(batchState.enhancedResults || {});
+                batchAIResults = cloneData(batchState.aiResults || {});
+                batchAITokenLimitedMap = cloneData(batchState.aiTokenLimitedMap || {});
+                batchAIIssueMap = cloneData(batchState.aiIssueMap || {});
+                batchImprovementPlans = cloneData(batchState.improvementPlans || {});
+                batchPlayResults = cloneData(batchState.playResults || {});
+                batchExtResults = cloneData(batchState.extResults || {});
+                batchMobileResultsData = cloneData(batchState.mobileResultsData || []);
+                batchMobileEnhancedResults = cloneData(batchState.mobileEnhancedResults || {});
+                batchMobileAIResults = cloneData(batchState.mobileAIResults || {});
+                batchMobileAITokenLimitedMap = cloneData(batchState.mobileAITokenLimitedMap || {});
+                batchMobileAIIssueMap = cloneData(batchState.mobileAIIssueMap || {});
+                batchMobileImprovementPlans = cloneData(batchState.mobileImprovementPlans || {});
+                batchMobilePlayResults = cloneData(batchState.mobilePlayResults || {});
+                batchMobileExtResults = cloneData(batchState.mobileExtResults || {});
+                batchMobileNavConsistency = cloneData(batchState.mobileNavConsistency || null);
+                batchUserDeclarations = cloneData(batchState.userDeclarations || batchState.batchUserDeclarations || {});
+
+                lastMobileScanSnapshot = null;
+                setMode('batch');
+                const batchUrls = $('batchUrls');
+                if (batchUrls) batchUrls.value = batchResultsData.map(r => r.url).filter(Boolean).join('\n');
+                updateBatchCount();
+                if (batchResultsEl) batchResultsEl.style.display = batchResultsData.length > 0 ? 'block' : 'none';
+                $('results').classList.add('visible');
+                $('exportArea').classList.add('visible');
+                renderBatchSummary();
+
+                const fallbackIdx = batchResultsData.findIndex(r => r.success);
+                const detailIdx = currentBatchIdx >= 0 && currentBatchIdx < batchResultsData.length
+                    ? currentBatchIdx
+                    : (fallbackIdx >= 0 ? fallbackIdx : 0);
+                currentBatchIdx = detailIdx;
+                renderBatchNav(detailIdx);
+                if (batchResultsData.length > 0) showBatchDetail(detailIdx);
+            } else {
+                lastResults = basic;
+                lastEnhancedResults = cloneData(payload.deep || payload.lastEnhancedResults || mobileSnapshot?.deep || null);
+                lastPlayResults = cloneData(payload.play || payload.lastPlayResults || mobileSnapshot?.play || null);
+                lastExtResults = cloneData(payload.ext || payload.lastExtResults || mobileSnapshot?.ext || null);
+                const importedMulti = payload.multi || payload.aiResults || mobileSnapshot?.multi || {};
+                aiResults = importedMulti && typeof importedMulti === 'object' && !Array.isArray(importedMulti)
+                    ? cloneData(importedMulti)
+                    : {};
+                lastMultiTokenLimited = !!(payload.multiTokenLimited || mobileSnapshot?.multiTokenLimited);
+                lastMultiIssue = cloneData(payload.multiIssue || mobileSnapshot?.multiIssue || null);
+                lastImprovementPlan = cloneData(payload.improvementPlan || mobileSnapshot?.improvementPlan || null);
+                lastMobileScanSnapshot = mobileSnapshot;
+                batchResultsData = [];
+                batchNavConsistency = null;
+                currentBatchIdx = null;
+                currentDisplayUrl = null;
+                batchUserDeclarations = {};
+                batchEnhancedResults = {};
+                batchAIResults = {};
+                batchAITokenLimitedMap = {};
+                batchAIIssueMap = {};
+                batchImprovementPlans = {};
+                batchPlayResults = {};
+                batchExtResults = {};
+                batchMobileResultsData = [];
+                batchMobileEnhancedResults = {};
+                batchMobileAIResults = {};
+                batchMobileAITokenLimitedMap = {};
+                batchMobileAIIssueMap = {};
+                batchMobileImprovementPlans = {};
+                batchMobilePlayResults = {};
+                batchMobileExtResults = {};
+                batchMobileNavConsistency = null;
+                batchViewportMode = 'desktop';
+                setMode(payload.currentMode || 'single');
+                if (batchResultsEl) batchResultsEl.style.display = 'none';
+                $('results').classList.add('visible');
+                $('exportArea').classList.add('visible');
+                refreshScoreTable();
+                renderAllTabs('pc');
+                if (lastMobileScanSnapshot?.basic) {
+                    renderAllTabs(
+                        'sp',
+                        lastMobileScanSnapshot.basic,
+                        lastMobileScanSnapshot.deep || null,
+                        lastMobileScanSnapshot.multi || {},
+                        lastMobileScanSnapshot.play || null,
+                        lastMobileScanSnapshot.ext || null
+                    );
+                }
             }
             renderImprovementPlanPanel();
             renderScanEstimate();
+            lockScanUI();
         }
 
         function importScanStateJsonFile(input) {
@@ -2027,6 +2146,21 @@
             renderScanEstimate();
         }));
 
+        function setPrimaryInputSectionLocked(locked) {
+            const setLockedStyle = el => {
+                if (!el) return;
+                el.style.pointerEvents = locked ? 'none' : '';
+                el.style.opacity = locked ? '0.4' : '';
+            };
+            ['singleInput', 'batchInput', 'singleScanControls', 'batchScanControls'].forEach(id => {
+                setLockedStyle($(id));
+            });
+            const importBtn = $('scanStateImportBtn');
+            if (importBtn) importBtn.disabled = !!locked;
+            const importInput = $('scanStateImportInput');
+            if (importInput) importInput.disabled = !!locked;
+        }
+
         // スキャン実行後に全UI入力要素をロック
         function lockScanUI() {
             scanExecuted = true;
@@ -2048,6 +2182,7 @@
             document.querySelectorAll('input[name="viewportMode"]').forEach(el => { el.disabled = true; });
             const viewportWrap = $('viewportModeWrap');
             if (viewportWrap) { viewportWrap.style.opacity = '0.4'; viewportWrap.style.pointerEvents = 'none'; }
+            setPrimaryInputSectionLocked(true);
         }
 
         // スキャン結果をすべてリセットして再検査可能な状態に戻す
@@ -2147,6 +2282,7 @@
                 const el = $(id);
                 if (el) { el.disabled = false; el.checked = true; }
             });
+            setPrimaryInputSectionLocked(false);
             checkSheetsStatusFn(); // Gemini/Sheets状態を再チェックしてMULTI等を適切に有効化
             setMode(currentMode);
         }
@@ -2313,13 +2449,14 @@
             el.innerHTML = `<div class="pre-check-panel">
                 <span class="pre-check-panel-label">事前申告（このURLの該当なし項目）</span>
                 ${chk('noMedia',     d.noMedia,     '音声・動画なし',           '1.2.1-1.2.5 / 1.4.2')}
-                ${chk('noForm',      d.noForm,      'フォームなし',             '3.3.1 / 3.3.3-4 / 3.3.7-8')}
+                ${chk('noForm',      d.noForm,      'フォームなし',             '3.3.1 / 3.3.3-4 / 3.3.7')}
+                ${chk('noAuth',      d.noAuth,      '認証機能なし',             '3.3.8')}
                 ${chk('noMoving',    d.noMoving,    '動くコンテンツなし',       '2.2.2 / 2.3.1')}
                 ${chk('noTimelimit', d.noTimelimit, 'タイムリミットなし',       '2.2.1')}
                 ${chk('noGesture',   d.noGesture,   'ジェスチャ・ドラッグなし', '2.5.1 / 2.5.2 / 2.5.4 / 2.5.7')}
                 ${chk('noPartialLanguage', d.noPartialLanguage, '他言語記述なし', '3.1.2')}
             </div>`;
-            ['noMedia','noForm','noMoving','noTimelimit','noGesture','noPartialLanguage'].forEach(key => {
+            ['noMedia','noForm','noAuth','noMoving','noTimelimit','noGesture','noPartialLanguage'].forEach(key => {
                 const cb = document.getElementById(`bpc_${key}_${encodeURIComponent(url)}`);
                 if (!cb) return;
                 cb.addEventListener('change', () => {
@@ -3284,6 +3421,7 @@
             userDeclarations = {
                 noMedia:     !!$('preCheckNoMedia')?.checked,
                 noForm:      !!$('preCheckNoForm')?.checked,
+                noAuth:      !!$('preCheckNoAuth')?.checked,
                 noMoving:    !!$('preCheckNoMoving')?.checked,
                 noTimelimit: !!$('preCheckNoTimelimit')?.checked,
                 noGesture:   !!$('preCheckNoGesture')?.checked,
@@ -3299,7 +3437,7 @@
                 if (getViewportMode() !== 'desktop') renderAllTabs('sp');
             }
         }
-        ['preCheckNoMedia', 'preCheckNoForm', 'preCheckNoMoving', 'preCheckNoTimelimit', 'preCheckNoGesture', 'preCheckNoPartialLanguage'].forEach(id => {
+        ['preCheckNoMedia', 'preCheckNoForm', 'preCheckNoAuth', 'preCheckNoMoving', 'preCheckNoTimelimit', 'preCheckNoGesture', 'preCheckNoPartialLanguage'].forEach(id => {
             const el = $(id);
             if (el) el.addEventListener('change', onPreCheckChange);
         });
@@ -3773,6 +3911,8 @@
             const lo = { 'A': 1, 'AA': 2, 'AAA': 3 };
             const lim = lo[targetLevel] || 2;
             const scSet = new Set(getTargetScList());
+            const MULTI_SUPPLEMENTAL_FAIL_SC = new Set(['1.1.1', '1.4.1']);
+            const autoPassRefs = getAutoDetectedPassRefs(basicResults);
 
             // キーボード操作SCはPLAY、アクセシビリティ名/ロールSCはEXTが権威スキャン
             const SC_AUTHORITY = {
@@ -3794,8 +3934,14 @@
                     return;
                 }
 
-                // MULTIはunverifiedのSCのみ補完する（他スキャンの確定結果を上書きしない）
-                if (source === 'MULTI' && cur && cur.result !== 'unverified') return;
+                // MULTIは原則 unverified のSCのみ補完する。
+                // ただし 1.4.1 は DEEP が視覚差分、MULTI が意味依存を補うため、MULTI fail を補足的に反映する。
+                const allowSupplementalMultiFail = source === 'MULTI'
+                    && MULTI_SUPPLEMENTAL_FAIL_SC.has(sc)
+                    && result === 'fail'
+                    && cur
+                    && cur.result === 'pass';
+                if (source === 'MULTI' && cur && cur.result !== 'unverified' && !allowSupplementalMultiFail) return;
                 const authority = SC_AUTHORITY[sc];
                 if (!cur) {
                     scMap[sc] = { result, impact: impact || null, source, dkey: renderDkey };
@@ -3871,6 +4017,7 @@
                 manualCheckItems.forEach((item, i) => {
                     if ((lo[item.level] || 2) > lim) return;
                     if (!item.aiTarget) return;
+                    if (autoPassRefs.has(item.ref)) return;
                     const r = multiAiData[i];
                     if (!r) return;
                     const rawStatus = !r ? 'unverified' : r.status === 'pass' ? 'pass'
@@ -4000,6 +4147,8 @@
 
         function buildScUnifiedMap(basic, multi, deep, play, ext, scSet, lim, lo, navConsistency = null, decisionScope = null) {
             const STATUS_RANK = { fail: 0, pass: 1, unverified: 2, na: 3 };
+            const MULTI_SUPPLEMENTAL_FAIL_SC = new Set(['1.1.1', '1.4.1']);
+            const autoPassRefs = getAutoDetectedPassRefs(basic);
             const SC_AUTHORITY = {
                 '2.1.1':'PLAY','2.1.2':'PLAY','2.1.4':'PLAY',
                 '2.4.3':'PLAY','2.4.7':'PLAY','2.4.11':'PLAY','2.4.12':'PLAY',
@@ -4029,7 +4178,12 @@
                 let selected = null;
                 const authority = SC_AUTHORITY[entry.sc];
                 entry.sources.forEach(sourceEntry => {
-                    if (sourceEntry.src === 'MULTI' && selected && selected.status !== 'unverified') return;
+                    const allowSupplementalMultiFail = sourceEntry.src === 'MULTI'
+                        && MULTI_SUPPLEMENTAL_FAIL_SC.has(entry.sc)
+                        && sourceEntry.status === 'fail'
+                        && selected
+                        && selected.status === 'pass';
+                    if (sourceEntry.src === 'MULTI' && selected && selected.status !== 'unverified' && !allowSupplementalMultiFail) return;
                     if (!selected) {
                         selected = sourceEntry;
                         return;
@@ -4094,6 +4248,7 @@
                 manualCheckItems.forEach((item, i) => {
                     if ((lo[item.level] || 2) > lim) return;
                     if (!item.aiTarget) return;
+                    if (autoPassRefs.has(item.ref)) return;
                     const r = multi[i];
                     if (!r || !item.ref || !scSet.has(item.ref)) return;
                     const st = r.status === 'fail' ? 'fail'
@@ -5198,7 +5353,7 @@
 	            const autoPassMap = getAutoDetectedPassMap(results);
 	            manualCheckItems.forEach((item, i) => {
 	                if ((levelOrder[item.level] || 2) > targetLevelNum) return;
-	                const ai = aiData[i];
+	                const ai = item.aiTarget ? aiData[i] : null;
 	                const auto = autoPassMap.get(item.ref) || null;
 	                let result = '未検証', location = '', detail = '', suggestion = '';
 	                if (auto) {
@@ -5256,7 +5411,7 @@
                 Object.entries({ A: WCAG_SC.A || [], AA: WCAG_SC.AA || [], AAA: WCAG_SC.AAA || [] }).forEach(([lv, list]) => {
                     list.forEach(sc => { scLevelMap[sc] = lv; });
                 });
-                const playStatusMap = { pass: '合格', fail: '不合格', error: 'エラー', not_applicable: '対象外', unverified: '判定不能' };
+                const playStatusMap = { pass: '合格', fail: '不合格', error: 'エラー', not_applicable: '対象外', unverified: '判定不能', manual_required: '要手動確認' };
                 playData.forEach(r => {
                     if (!splitCompositeSc(r.sc).some(sc => reportScSet.has(sc))) return;
                     const level = scLevelMap[r.sc] || 'A';
@@ -5636,7 +5791,7 @@
             // Phase別のSC分類
             const phase1SCs = new Set(['1.4.10','2.5.8','2.1.2','2.4.1','2.3.3','1.4.12','2.4.11','2.4.12','3.2.1/3.2.2','3.3.1']);
             const phase2SCs = new Set(['2.1.1','2.4.7','2.4.13','2.4.3','1.4.4','1.2.x','1.2.3','2.2.2','3.3.8','2.3.1']);
-            const phase3SCs = new Set(['1.4.13','1.4.1','1.4.5','2.2.1','3.3.3','2.5.1/2.5.7']);
+            const phase3SCs = new Set(['1.4.13','1.4.1','1.4.5','1.3.2','1.3.3','2.2.1','3.3.3','2.5.1/2.5.7']);
             const sectionASCs = new Set(['2.5.3','1.3.4','1.3.5','2.5.2','2.5.4','3.2.6','3.3.7','2.4.4']);
 
             const getPhase = sc => {
