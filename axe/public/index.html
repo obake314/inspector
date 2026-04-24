@@ -2291,7 +2291,7 @@
         function renderBatchPreCheckPanel(url) {
             const el = $('batchDetailArea');
             if (!el) return;
-            if (!batchUserDeclarations[url]) batchUserDeclarations[url] = { noMedia: false, noForm: false, noMoving: false, noTimelimit: false, noGesture: false };
+            if (!batchUserDeclarations[url]) batchUserDeclarations[url] = { ...userDeclarations };
             const d = batchUserDeclarations[url];
             const chk = (id, val, label, sc) =>
                 `<label class="pre-check-panel-item"><input type="checkbox" id="bpc_${id}_${encodeURIComponent(url)}" ${val ? 'checked' : ''}><span>${label}</span><small style="color:var(--navy-400);font-size:11px;margin-left:4px;">${sc}</small></label>`;
