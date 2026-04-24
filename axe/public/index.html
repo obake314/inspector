@@ -5278,203 +5278,164 @@
             if (extData === undefined) extData = lastExtResults;
             if (improvementPlan === undefined) improvementPlan = lastImprovementPlan;
             const impactJa = { critical: '緊急', serious: '重大', moderate: '中程度', minor: '軽微' };
+            const resultJa = { fail: '不合格', pass: '合格', unverified: '未検証', na: '該当なし' };
+            const scanTypeJa = { BASIC: '自動', AUTO: '自動', MULTI: 'AI', DEEP: '高精度', PLAY: 'PLAY', EXT: 'EXT', BATCH: '一括', MANUAL: '手動' };
             const levelOrder = { 'A': 1, 'AA': 2, 'AAA': 3 };
             const targetLevelNum = levelOrder[targetLevel] || 2;
             const rows = [];
             let itemNo = 1;
             const reportScope = getDecisionScope(results, /SP/i.test(viewLabel) ? 'sp' : 'pc');
-            const reportDecision = (rawKey, scText = null) => {
-                const direct = getManualDecision(rawKey, reportScope);
-                if (direct) return direct;
-                if (!scText) return null;
-                return splitCompositeSc(scText)
-                    .map(sc => getManualDecision(`${rawKey}:SC:${sc}`, reportScope))
-                    .find(Boolean) || null;
-            };
+            const reportScSet = new Set(getTargetScList());
+            const hasMultiResults = Object.keys(aiData || {}).length > 0;
+            const autoPassMap = getAutoDetectedPassMap(results);
+            const totalScMap = buildTotalScMap(
+                results,
+                enhancedData || null,
+                hasMultiResults ? aiData : null,
+                playData || null,
+                extData || null,
+                navConsistency || null,
+                reportScope
+            );
+            const scUnifiedMap = buildScUnifiedMap(
+                results,
+                hasMultiResults ? aiData : null,
+                enhancedData || null,
+                playData || null,
+                extData || null,
+                reportScSet,
+                targetLevelNum,
+                levelOrder,
+                navConsistency || null,
+                reportScope
+            );
             const NOT_APPLICABLE_REMARK = '該当箇所なし';
-            const withNotApplicableRemark = (detail, shouldMark) => {
-                const text = String(detail || '');
-                if (!shouldMark) return text;
-                if (text.includes(NOT_APPLICABLE_REMARK)) return text;
-                return text ? `${text}\n${NOT_APPLICABLE_REMARK}` : NOT_APPLICABLE_REMARK;
-            };
 
-            // --- 自動検査: violations → 不合格 ---
-            (results.violations || []).forEach(v => {
-                if ((levelOrder[getWcagLevelFromTags(v.tags)] || 1) > targetLevelNum) return;
-                const targets = v.nodes.slice(0, 5).map(n =>
-                    Array.isArray(n.target) ? n.target.join(' > ') : n.target
-                );
-                const locationStr = targets.join('\n') + (v.nodes.length > 5 ? '\n他' + (v.nodes.length - 5) + '件' : '');
+            function uniq(list) {
+                return [...new Set((list || []).map(v => String(v || '').trim()).filter(Boolean))];
+            }
+
+            function getUnifiedFallback(sc) {
+                const d = applyDecisionToStatus(`UNCOVERED:${sc}`, 'unverified', null, reportScope);
+                return {
+                    result: d.status,
+                    impact: d.impact || null,
+                    source: hasManualDecision(`UNCOVERED:${sc}`, reportScope) ? 'MANUAL' : null,
+                    dkey: scopedDecisionKey(`UNCOVERED:${sc}`, reportScope)
+                };
+            }
+
+            function buildSourceEvidence(sourceEntry, sc) {
+                const { src, type, data, status } = sourceEntry || {};
+                const info = { source: src, detail: '', locations: [], suggestions: [], count: '' };
+                if (type === 'violation' || type === 'incomplete' || type === 'pass') {
+                    const title = getJaRuleName(data.id);
+                    const desc = getJaRuleDesc(data.id, data.description || data.help);
+                    info.detail = [title, desc].filter(Boolean).join('：');
+                    info.locations = (data.nodes || []).slice(0, 8).map(n => {
+                        const target = Array.isArray(n.target) ? n.target.join(' > ') : (n.target || '');
+                        const failure = n.failureSummary ? ` / ${translateFailureSummary(n.failureSummary)}` : '';
+                        return `${target}${failure}`;
+                    }).filter(Boolean);
+                    info.count = data.nodes?.length ? String(data.nodes.length) : '';
+                    return info;
+                }
+                if (type === 'multi') {
+                    const aiResult = data.aiResult || {};
+                    const confidence = typeof aiResult.confidence === 'number'
+                        ? `（信頼度: ${Math.round(aiResult.confidence * 100)}%）`
+                        : '';
+                    info.detail = [aiResult.reason || data.text || '', confidence].filter(Boolean).join(' ');
+                    info.locations = [
+                        aiResult.selector ? `セレクタ: ${aiResult.selector}` : '',
+                        aiResult.evidence ? `根拠: ${aiResult.evidence}` : ''
+                    ].filter(Boolean);
+                    info.suggestions = aiResult.suggestion ? [aiResult.suggestion] : [];
+                    return info;
+                }
+                if (type === 'deep' || type === 'play' || type === 'ext') {
+                    info.detail = data.message || data.name || `SC ${sc}`;
+                    info.locations = (data.violations || []).slice(0, 8).map(v => String(v)).filter(Boolean);
+                    info.count = data.violations?.length ? String(data.violations.length) : '';
+                    return info;
+                }
+                if (type === 'auto') {
+                    info.detail = data.detail || data.reason || data.text || NOT_APPLICABLE_REMARK;
+                    return info;
+                }
+                if (type === 'nav') {
+                    const compared = data.comparedUrls || [];
+                    const issues = data.issues || [];
+                    info.detail = status === 'pass'
+                        ? '全ページでナビゲーション構造が一致しています'
+                        : (issues[0]?.message || data.message || 'ナビゲーション構造に差分があります');
+                    info.locations = (issues.flatMap(iss => [
+                        iss.urls?.length ? `対象URL: ${iss.urls.join(' ↔ ')}` : '',
+                        iss.missing?.length ? `消えたリンク: ${iss.missing.join(', ')}` : '',
+                        iss.added?.length ? `追加リンク: ${iss.added.join(', ')}` : ''
+                    ]).filter(Boolean).length
+                        ? issues.flatMap(iss => [
+                            iss.urls?.length ? `対象URL: ${iss.urls.join(' ↔ ')}` : '',
+                            iss.missing?.length ? `消えたリンク: ${iss.missing.join(', ')}` : '',
+                            iss.added?.length ? `追加リンク: ${iss.added.join(', ')}` : ''
+                        ]).filter(Boolean)
+                        : compared.map(u => `比較URL: ${u}`))
+                        .slice(0, 8);
+                    info.count = issues.length ? String(issues.length) : '';
+                    return info;
+                }
+                if (src === 'MANUAL') {
+                    info.detail = '手動判定で結果を更新';
+                    return info;
+                }
+                info.detail = `SC ${sc}`;
+                return info;
+            }
+
+            getTargetScList().forEach(sc => {
+                const level = getScLevelFromList(sc);
+                if ((levelOrder[level] || 2) > targetLevelNum) return;
+                const totalEntry = totalScMap[sc] || getUnifiedFallback(sc);
+                const unifiedEntry = scUnifiedMap.get(sc);
+                const sourceEntries = unifiedEntry?.sources || [];
+                const sourceInfos = sourceEntries.map(sourceEntry => buildSourceEvidence(sourceEntry, sc));
+                if (!sourceInfos.length && totalEntry.source === 'MANUAL') {
+                    sourceInfos.push(buildSourceEvidence({ src: 'MANUAL' }, sc));
+                }
+
+                const scanType = uniq(
+                    (sourceInfos.length ? sourceInfos.map(info => scanTypeJa[info.source] || info.source) : ['手動'])
+                ).join('/');
+                const detailSections = sourceInfos.length
+                    ? sourceInfos.map(info => {
+                        const label = scanTypeJa[info.source] || info.source;
+                        return `[${label}] ${info.detail || ''}`.trim();
+                    })
+                    : ['現時点で自動・AI検査結果がありません。必要に応じて個別再スキャンまたは手動確認を実施してください。'];
+                const detail = uniq(detailSections).join('\n\n');
+                const locations = uniq(sourceInfos.flatMap(info => info.locations)).slice(0, 8).join('\n');
+                const countValues = uniq(sourceInfos.map(info => info.count).filter(Boolean));
+                const suggestion = uniq(sourceInfos.flatMap(info => info.suggestions)).join('\n');
+                const isAutoPass = autoPassMap.has(sc);
+                const isNotApplicable = totalEntry.result === 'na' || isAutoPass;
+                const finalDetail = isNotApplicable && !detail.includes(NOT_APPLICABLE_REMARK)
+                    ? `${detail}\n${NOT_APPLICABLE_REMARK}`.trim()
+                    : detail;
+
                 rows.push([
-                    String(itemNo++), '自動', extractSCFromTags(v.tags),
-                    `${getJaRuleName(v.id)}（${v.id}）`,
-                    getWcagLevelFromTags(v.tags), '不合格',
-                    locationStr, String(v.nodes.length),
-                    impactJa[v.impact] || v.impact || '',
-                    getJaRuleDesc(v.id, v.description || v.help),
-                    translateFailureSummary(v.nodes[0]?.failureSummary || '')
+                    String(itemNo++),
+                    scanType,
+                    sc,
+                    getScName(sc) || `SC ${sc}`,
+                    level,
+                    resultJa[totalEntry.result] || '未検証',
+                    locations,
+                    countValues.length === 1 ? countValues[0] : '',
+                    totalEntry.result === 'fail' ? (impactJa[totalEntry.impact] || impactJa.serious) : '',
+                    finalDetail,
+                    suggestion
                 ]);
             });
-
-            // --- 自動検査: incomplete → 判定不能（手動決定で上書き可） ---
-            (results.incomplete || []).forEach(v => {
-                if ((levelOrder[getWcagLevelFromTags(v.tags)] || 1) > targetLevelNum) return;
-                const targets = v.nodes.slice(0, 5).map(n =>
-                    Array.isArray(n.target) ? n.target.join(' > ') : n.target
-                );
-                const locationStr = targets.join('\n') + (v.nodes.length > 5 ? '\n他' + (v.nodes.length - 5) + '件' : '');
-                const decB = reportDecision(`BASIC:${v.id}`);
-                const resultB = decB ? (decB === 'ok' ? '合格' : decB === 'ng' ? '不合格' : '判定不能') : '判定不能';
-                rows.push([
-                    String(itemNo++), '自動', extractSCFromTags(v.tags),
-                    `${getJaRuleName(v.id)}（${v.id}）`,
-                    getWcagLevelFromTags(v.tags), resultB,
-                    locationStr, String(v.nodes.length),
-                    impactJa[v.impact] || v.impact || '',
-                    getJaRuleDesc(v.id, v.description || v.help), ''
-                ]);
-            });
-
-            // --- 自動検査: passes → 合格 ---
-            (results.passes || []).forEach(v => {
-                if ((levelOrder[getWcagLevelFromTags(v.tags)] || 1) > targetLevelNum) return;
-                rows.push([
-                    String(itemNo++), '自動', extractSCFromTags(v.tags),
-                    `${getJaRuleName(v.id)}（${v.id}）`,
-                    getWcagLevelFromTags(v.tags), '合格',
-                    '', '', '',
-                    getJaRuleDesc(v.id, v.description || v.help), ''
-                ]);
-            });
-
-	            // --- 手動/AIチェック項目（targetLevel以上のみ）---
-	            const statusMap = { pass: '合格', fail: '不合格', manual_required: '判定不能', not_applicable: '該当なし' };
-	            const autoPassMap = getAutoDetectedPassMap(results);
-	            manualCheckItems.forEach((item, i) => {
-	                if ((levelOrder[item.level] || 2) > targetLevelNum) return;
-	                const ai = item.aiTarget ? aiData[i] : null;
-	                const auto = autoPassMap.get(item.ref) || null;
-	                let result = '未検証', location = '', detail = '', suggestion = '';
-	                if (auto) {
-	                    result = '合格';
-	                    location = '（事前検出）';
-	                    detail = auto.detail || auto.reason || '';
-	                } else if (ai) {
-	                    result = statusMap[ai.status] || '未検証';
-	                    detail = ai.reason || '';
-	                    suggestion = ai.suggestion || '';
-	                    if (ai.status === 'fail' || ai.status === 'manual_required') location = '（AI評価による検出）';
-	                }
-	                // 手動決定（OK/NG/保留）があれば上書き
-	                const dec = reportDecision(auto ? `AUTO:${item.ref}` : `MULTI:${i}`, item.ref);
-	                if (dec) result = dec === 'ok' ? '合格' : dec === 'ng' ? '不合格' : '未検証';
-	                detail = withNotApplicableRemark(detail, result === '合格' && (auto || ai?.status === 'not_applicable'));
-	                rows.push([
-	                    String(itemNo++), auto ? '自動' : ai ? 'AI' : '手動', item.ref,
-	                    item.text, item.level, result,
-	                    location, '', '', detail, suggestion
-	                ]);
-	            });
-
-            // --- 高精度検査（Puppeteer）結果 ---
-            if (enhancedData && enhancedData.length > 0) {
-                const reportScSet = new Set(getTargetScList());
-                const scLevelMap = {};
-                Object.entries({ A: WCAG_SC.A || [], AA: WCAG_SC.AA || [], AAA: WCAG_SC.AAA || [] }).forEach(([lv, list]) => {
-                    list.forEach(sc => { scLevelMap[sc] = lv; });
-                });
-                const enhancedStatusMap = { pass: '合格', fail: '不合格', error: 'エラー', not_applicable: '対象外', manual_required: '要手動確認' };
-                enhancedData.forEach(r => {
-                    if (!splitCompositeSc(r.sc).some(sc => reportScSet.has(sc))) return;
-                    const level = scLevelMap[r.sc] || (splitCompositeSc(r.sc).map(sc => scLevelMap[sc]).find(Boolean) || 'AA');
-                    const violations = r.violations || [];
-                    // 手動決定（未検証タブでのOK/NG/保留）で上書き
-                    const decD = reportDecision(`DEEP:${r.sc}`, r.sc);
-                    const resultD = decD ? (decD === 'ok' ? '合格' : decD === 'ng' ? '不合格' : enhancedStatusMap[r.status] || r.status)
-                                        : enhancedStatusMap[r.status] || r.status;
-                    const detailD = withNotApplicableRemark(r.message || '', resultD === '合格' && r.status === 'not_applicable');
-                    rows.push([
-                        String(itemNo++), '高精度', r.sc, r.name, level,
-                        resultD,
-                        violations.slice(0, 3).join('\n'),
-                        violations.length > 0 ? String(violations.length) : '',
-                        '', detailD, ''
-                    ]);
-                });
-            }
-
-            // --- PLAY（Playwright）検査結果 ---
-            if (playData && playData.length > 0) {
-                const reportScSet = new Set(getTargetScList());
-                const scLevelMap = {};
-                Object.entries({ A: WCAG_SC.A || [], AA: WCAG_SC.AA || [], AAA: WCAG_SC.AAA || [] }).forEach(([lv, list]) => {
-                    list.forEach(sc => { scLevelMap[sc] = lv; });
-                });
-                const playStatusMap = { pass: '合格', fail: '不合格', error: 'エラー', not_applicable: '対象外', unverified: '判定不能', manual_required: '要手動確認' };
-                playData.forEach(r => {
-                    if (!splitCompositeSc(r.sc).some(sc => reportScSet.has(sc))) return;
-                    const level = scLevelMap[r.sc] || 'A';
-                    const violations = r.violations || [];
-                    const decP = reportDecision(`PLAY:${r.sc}`, r.sc);
-                    const resultP = decP ? (decP === 'ok' ? '合格' : decP === 'ng' ? '不合格' : playStatusMap[r.status] || r.status)
-                                        : playStatusMap[r.status] || r.status;
-                    const detailP = withNotApplicableRemark(r.message || '', resultP === '合格' && r.status === 'not_applicable');
-                    rows.push([
-                        String(itemNo++), 'PLAY', r.sc, r.name || `SC ${r.sc}`, level,
-                        resultP,
-                        violations.slice(0, 3).join('\n'),
-                        violations.length > 0 ? String(violations.length) : '',
-                        '', detailP, ''
-                    ]);
-                });
-            }
-
-            // --- EXT（拡張）検査結果 ---
-            if (extData && extData.length > 0) {
-                const reportScSet = new Set(getTargetScList());
-                const scLevelMap = {};
-                Object.entries({ A: WCAG_SC.A || [], AA: WCAG_SC.AA || [], AAA: WCAG_SC.AAA || [] }).forEach(([lv, list]) => {
-                    list.forEach(sc => { scLevelMap[sc] = lv; });
-                });
-                const extStatusMap = { pass: '合格', fail: '不合格', error: 'エラー', not_applicable: '対象外', unverified: '判定不能' };
-                extData.forEach(r => {
-                    if (!r.sc) return;
-                    if (!splitCompositeSc(r.sc).some(sc => reportScSet.has(sc))) return;
-                    const level = scLevelMap[r.sc] || 'A';
-                    const violations = r.violations || [];
-                    const decE = reportDecision(`EXT:${r.sc}`, r.sc);
-                    const resultE = decE ? (decE === 'ok' ? '合格' : decE === 'ng' ? '不合格' : extStatusMap[r.status] || r.status)
-                                        : extStatusMap[r.status] || r.status;
-                    const detailE = withNotApplicableRemark(r.message || '', resultE === '合格' && r.status === 'not_applicable');
-                    rows.push([
-                        String(itemNo++), 'EXT', r.sc, r.name || `SC ${r.sc}`, level,
-                        resultE,
-                        violations.slice(0, 3).join('\n'),
-                        violations.length > 0 ? String(violations.length) : '',
-                        '', detailE, ''
-                    ]);
-                });
-            }
-
-            // --- SC 3.2.3/3.2.4 ナビゲーション一貫性（一括検査のみ）---
-            if (navConsistency) {
-                const nc = navConsistency;
-                const issueDetails = (nc.issues || []).map(iss => [
-                    iss.message || '',
-                    iss.urls?.length ? `対象URL: ${iss.urls.join(' ↔ ')}` : '',
-                    iss.missing?.length ? `消えたリンク: ${iss.missing.join(', ')}` : '',
-                    iss.added?.length ? `追加リンク: ${iss.added.join(', ')}` : ''
-                ].filter(Boolean).join('\n')).filter(Boolean).join('\n\n');
-                rows.push([
-                    String(itemNo++), '一括', nc.sc, nc.title, 'AA',
-                    nc.result === 'pass' ? '合格' : nc.result === 'not_applicable' ? '対象外' : '不合格',
-                    (nc.comparedUrls || []).join('\n'),
-                    String((nc.issues || []).length) || '', '',
-                    issueDetails || (nc.result === 'pass' ? 'ナビゲーション構造は一貫しています' : ''),
-                    ''
-                ]);
-            }
 
             itemNo = appendImprovementPlanRows(rows, improvementPlan, itemNo, viewLabel);
 
