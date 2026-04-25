@@ -1434,14 +1434,14 @@ async function check_2_4_11_12_focus_obscured(page) {
         const ctx = !el.id && parentEl && parentEl !== document.body ? ` in ${parentEl.tagName.toLowerCase()}${parentEl.id ? '#'+parentEl.id : ''}` : '';
         const label = `${tag}${id}${cls}${text ? ' "'+text+'"' : ''}${ctx}`.slice(0, 80);
         const selfStyle = getComputedStyle(el);
+        // 2.4.11 の対象は sticky/fixed 要素による遮蔽。
+        // フォーカス時に非表示の要素（スキップリンクなど show-on-focus パターン含む）はスキップ。
         const hiddenOnFocus = rect.width === 0
           || rect.height === 0
           || selfStyle.display === 'none'
           || selfStyle.visibility === 'hidden'
-          || Number(selfStyle.opacity) === 0
-          || selfStyle.clipPath === 'inset(50%)'
-          || selfStyle.clip === 'rect(0px, 0px, 0px, 0px)';
-        if (hiddenOnFocus) return { label, fullyObscured: true, partiallyObscured: false, hiddenOnFocus: true };
+          || Number(selfStyle.opacity) === 0;
+        if (hiddenOnFocus) return null;
         const centerX = rect.left + rect.width / 2;
         const centerY = rect.top + rect.height / 2;
         const topEls = document.elementsFromPoint(centerX, centerY) || [];
@@ -1676,14 +1676,25 @@ async function check_2_1_1_keyboard_operable(page) {
 async function check_2_4_7_focus_visible(page) {
   try {
     const results = await page.evaluate(() => {
+      // :focus-visible を正しく評価するためキーボードナビゲーションモードへ切替
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+
       const violations27 = [];
       const violations213 = [];
       const focusables = Array.from(document.querySelectorAll(
         'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-      )).slice(0, 25);
+      )).filter(el => {
+        const s = window.getComputedStyle(el);
+        return s.display !== 'none' && s.visibility !== 'hidden';
+      }).slice(0, 25);
+
+      function isTransparentColor(c) {
+        return !c || c === 'transparent' || /rgba?\(\s*\d+,\s*\d+,\s*\d+,\s*0\s*\)/.test(c);
+      }
 
       for (const el of focusables) {
-        el.blur();
+        // 非フォーカス時のスタイルを取得
+        if (document.activeElement === el) el.blur();
         const before = window.getComputedStyle(el);
         const bOutlineW   = parseFloat(before.outlineWidth) || 0;
         const bOutlineS   = before.outlineStyle;
@@ -1692,10 +1703,13 @@ async function check_2_4_7_focus_visible(page) {
         const bBorderW    = parseFloat(before.borderWidth) || 0;
         const bBorderColor= before.borderColor;
 
+        // キーボードナビゲーションモードで再トリガー（ループ内で毎回確保）
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
         el.focus({ preventScroll: true });
         const after = window.getComputedStyle(el);
         const aOutlineW   = parseFloat(after.outlineWidth) || 0;
         const aOutlineS   = after.outlineStyle;
+        const aOutlineC   = after.outlineColor;
         const aBoxShadow  = after.boxShadow;
         const aBg         = after.backgroundColor;
         const aBorderW    = parseFloat(after.borderWidth) || 0;
@@ -1710,8 +1724,8 @@ async function check_2_4_7_focus_visible(page) {
         const parentCtx = !el.id && parentEl && parentEl !== document.body ? ` in ${parentEl.tagName.toLowerCase()}${parentEl.id ? '#'+parentEl.id : ''}` : '';
         const label = `${tag}${id}${cls}${text ? ' "'+text+'"' : ''}${parentCtx}`.slice(0, 80);
 
-        // フォーカス時にいずれかのプロパティが変化したか
-        const hasOutline    = aOutlineS !== 'none' && aOutlineW > 0;
+        // フォーカス時にいずれかのプロパティが変化したか（transparent outline は除外）
+        const hasOutline    = aOutlineS !== 'none' && aOutlineW > 0 && !isTransparentColor(aOutlineC);
         const hasBoxShadow  = aBoxShadow && aBoxShadow !== 'none' && aBoxShadow !== bBoxShadow;
         const bgChanged     = aBg !== bBg;
         const borderChanged = aBorderW !== bBorderW || aBorderColor !== bBorderColor;
@@ -4955,6 +4969,13 @@ async function pw_check_1_3_1_info_relationships(page) {
  */
 async function pw_check_2_4_7_focus_visible_all(page) {
   const issues = await page.evaluate(() => {
+    // :focus-visible を正しく評価するためキーボードナビゲーションモードへ切替
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+
+    function isTransparentColor(c) {
+      return !c || c === 'transparent' || /rgba?\(\s*\d+,\s*\d+,\s*\d+,\s*0\s*\)/.test(c);
+    }
+
     const focusable = Array.from(document.querySelectorAll(
       'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
     )).filter(el => {
@@ -4963,14 +4984,28 @@ async function pw_check_2_4_7_focus_visible_all(page) {
     }).slice(0, 40);
     const noFocus = [];
     focusable.forEach(el => {
-      el.focus();
+      // 非フォーカス時のスタイルを先に取得
+      if (document.activeElement === el) el.blur();
+      const before = getComputedStyle(el);
+      const bOutlineW = parseFloat(before.outlineWidth) || 0;
+      const bBoxShadow = before.boxShadow;
+      const bBg = before.backgroundColor;
+      const bBorderColor = before.borderColor;
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+      el.focus({ preventScroll: true });
       const doc = el.ownerDocument;
       if (doc.activeElement !== el) return;
       const s = getComputedStyle(el);
-      const outlineOk = parseFloat(s.outlineWidth) > 0 && s.outlineStyle !== 'none';
-      const shadowOk = s.boxShadow && s.boxShadow !== 'none';
-      const borderOk = s.borderStyle !== 'none' && parseFloat(s.borderWidth) > 0 && s.borderColor !== 'transparent';
-      if (!outlineOk && !shadowOk && !borderOk) {
+      const aOutlineW = parseFloat(s.outlineWidth) || 0;
+      const aOutlineC = s.outlineColor;
+      const outlineOk = aOutlineW > 0 && s.outlineStyle !== 'none' && !isTransparentColor(aOutlineC);
+      const shadowOk = s.boxShadow && s.boxShadow !== 'none' && s.boxShadow !== bBoxShadow;
+      const bgChanged = s.backgroundColor !== bBg;
+      const borderChanged = s.borderColor !== bBorderColor;
+      el.blur();
+
+      if (!outlineOk && !shadowOk && !bgChanged && !borderChanged) {
         const tag2 = el.tagName.toLowerCase();
         const id2 = el.id ? '#'+el.id : '';
         const cls2 = el.className ? '.'+String(el.className).split(' ').slice(0,2).join('.') : '';
@@ -5351,14 +5386,13 @@ async function pw_check_2_4_11_focus_obscured(page) {
         const ctx = !el.id && parentEl && parentEl !== document.body ? ` in ${parentEl.tagName.toLowerCase()}${parentEl.id ? '#'+parentEl.id : ''}` : '';
         const label = `${tag}${id}${cls}${text ? ' "'+text+'"' : ''}${ctx}`.slice(0, 80);
         const selfStyle = getComputedStyle(el);
+        // 2.4.11 の対象は sticky/fixed 要素による遮蔽のみ。フォーカス時に非表示の要素はスキップ。
         const hiddenOnFocus = rect.width === 0
           || rect.height === 0
           || selfStyle.display === 'none'
           || selfStyle.visibility === 'hidden'
-          || Number(selfStyle.opacity) === 0
-          || selfStyle.clipPath === 'inset(50%)'
-          || selfStyle.clip === 'rect(0px, 0px, 0px, 0px)';
-        if (hiddenOnFocus) return { label, hiddenOnFocus: true };
+          || Number(selfStyle.opacity) === 0;
+        if (hiddenOnFocus) return null;
         const centerX = rect.left + rect.width / 2;
         const centerY = rect.top + rect.height / 2;
         const topEls = document.elementsFromPoint(centerX, centerY) || [];
@@ -5376,8 +5410,7 @@ async function pw_check_2_4_11_focus_obscured(page) {
         }
         return null;
       });
-      if (info?.hiddenOnFocus) violations.push(`フォーカス時にも表示されない: ${info.label}`);
-      else if (info?.fully) violations.push(`フォーカスが完全に隠れる: ${info.label}`);
+      if (info?.fully) violations.push(`フォーカスが完全に隠れる: ${info.label}`);
     }
     return {
       sc: '2.4.11',

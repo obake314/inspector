@@ -1091,6 +1091,7 @@
 
         let timeoutRetryQueue = [];
         let scanInProgress = false;
+        let _retryMergeState = null; // 再スキャン時に保存する完了済み結果
 
         function isTimeoutLike(error, message = '') {
             const text = [message, error?.name, error?.message]
@@ -1189,6 +1190,36 @@
             if (urls.length === 0) return;
             timeoutRetryQueue = [];
             renderTimeoutRetryPanel();
+
+            // 完了済みURLの結果を保存してからクリア
+            const retryUrlSet = new Set(urls);
+            if (batchResultsData.length > 0) {
+                const preserved = batchResultsData.filter(r => !retryUrlSet.has(r.url));
+                if (preserved.length > 0) {
+                    _retryMergeState = {
+                        originalOrder: batchResultsData.map(r => r.url),
+                        resultsData: preserved,
+                        enhancedResults: Object.assign({}, batchEnhancedResults),
+                        aiResults: Object.assign({}, batchAIResults),
+                        aiTokenLimitedMap: Object.assign({}, batchAITokenLimitedMap),
+                        aiIssueMap: Object.assign({}, batchAIIssueMap),
+                        improvementPlans: Object.assign({}, batchImprovementPlans),
+                        playResults: Object.assign({}, batchPlayResults),
+                        extResults: Object.assign({}, batchExtResults),
+                        mobileResultsData: batchMobileResultsData.filter(r => !retryUrlSet.has(r.url)),
+                        mobileEnhancedResults: Object.assign({}, batchMobileEnhancedResults),
+                        mobileAIResults: Object.assign({}, batchMobileAIResults),
+                        mobileAITokenLimitedMap: Object.assign({}, batchMobileAITokenLimitedMap),
+                        mobileAIIssueMap: Object.assign({}, batchMobileAIIssueMap),
+                        mobileImprovementPlans: Object.assign({}, batchMobileImprovementPlans),
+                        mobilePlayResults: Object.assign({}, batchMobilePlayResults),
+                        mobileExtResults: Object.assign({}, batchMobileExtResults),
+                        navConsistency: batchNavConsistency,
+                        mobileNavConsistency: batchMobileNavConsistency
+                    };
+                }
+            }
+
             clearScan();
 
             const shouldUseBatch = urls.length > 1 || retryItems.some(item => item.mode === 'batch');
@@ -1472,6 +1503,104 @@
         }
 
         // 11列形式の buildReportRows 出力をサンプル形式（10列）に変換
+        // 11列形式の行リスト群から表紙シート用 AOA を生成
+        // pageDataList = [{ url, rows }] rows は buildReportRows の 11列出力
+        function buildCoverSheetData(pageDataList, topUrl) {
+            const urls = pageDataList.map(p => p.url);
+            const fmt = v => v !== null && v !== undefined ? `${v}%` : '—';
+
+            // --- ページ別スタッツ ---
+            const pageStats = pageDataList.map(({ url, rows }) => {
+                let pass = 0, fail = 0, na = 0, unverified = 0;
+                let passA = 0, failA = 0, passAA = 0, failAA = 0;
+                rows.forEach(row => {
+                    const result = row[5], level = row[4];
+                    const isPass = result === '合格';
+                    const isFail = result === '不合格';
+                    const isNa = result === '該当なし' || result === '対象外';
+                    if (isPass) pass++;
+                    else if (isFail) fail++;
+                    else if (isNa) na++;
+                    else unverified++;
+                    if (level === 'A') { if (isPass) passA++; else if (isFail) failA++; }
+                    if (level === 'AA') { if (isPass) passAA++; else if (isFail) failAA++; }
+                });
+                const rate = (pass + fail) > 0 ? Math.round(pass / (pass + fail) * 100) : null;
+                const rateA = (passA + failA) > 0 ? Math.round(passA / (passA + failA) * 100) : null;
+                const rateAA = (passAA + failAA) > 0 ? Math.round(passAA / (passAA + failAA) * 100) : null;
+                return { url, pass, fail, na, unverified, rate, rateA, rateAA };
+            });
+
+            // --- SC ごとに全ページを横断集計 ---
+            const scInfo = {};
+            pageDataList.forEach(({ url, rows }) => {
+                rows.forEach(row => {
+                    const sc = row[2], name = row[3], level = row[4], result = row[5];
+                    if (!sc) return;
+                    if (!scInfo[sc]) scInfo[sc] = { sc, name, level, pr: {} };
+                    const rank = r => r === '不合格' ? 0 : (r === '合格' || r === '該当なし' || r === '対象外') ? 2 : 1;
+                    if (scInfo[sc].pr[url] === undefined || rank(result) < rank(scInfo[sc].pr[url])) {
+                        scInfo[sc].pr[url] = result;
+                    }
+                });
+            });
+
+            let totalPass = 0, totalFail = 0, aPass = 0, aFail = 0, aaPass = 0, aaFail = 0;
+            const summaryData = Object.values(scInfo)
+                .sort((a, b) => {
+                    const p = s => s.sc.split('.').map(n => parseInt(n, 10) || 0);
+                    const pa = p(a), pb = p(b);
+                    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+                        if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0);
+                    }
+                    return 0;
+                })
+                .map(({ sc, name, level, pr }) => {
+                    const results = urls.map(u => pr[u] || '未検証');
+                    const failCount = urls.filter(u => pr[u] === '不合格').length;
+                    const naCount = urls.filter(u => pr[u] === '該当なし' || pr[u] === '対象外').length;
+                    let finalResult, biko;
+                    if (failCount > 0) {
+                        finalResult = '不合格';
+                        biko = failCount === urls.length ? '全ページ共通' : `${failCount}/${urls.length}ページで不合格`;
+                        totalFail++;
+                        if (level === 'A') aFail++; else if (level === 'AA') aaFail++;
+                    } else if (naCount === urls.length) {
+                        finalResult = '合格'; biko = '該当なし';
+                        totalPass++;
+                        if (level === 'A') aPass++; else if (level === 'AA') aaPass++;
+                    } else if (results.every(r => r === '合格' || r === '該当なし' || r === '対象外')) {
+                        finalResult = '合格'; biko = '';
+                        totalPass++;
+                        if (level === 'A') aPass++; else if (level === 'AA') aaPass++;
+                    } else {
+                        finalResult = '未検証'; biko = '';
+                    }
+                    return [sc, name, level, finalResult, biko];
+                });
+
+            const totalRate = (totalPass + totalFail) > 0 ? Math.round(totalPass / (totalPass + totalFail) * 100) : null;
+            const rateA  = (aPass + aFail)   > 0 ? Math.round(aPass  / (aPass  + aFail)  * 100) : null;
+            const rateAA = (aaPass + aaFail)  > 0 ? Math.round(aaPass / (aaPass + aaFail) * 100) : null;
+
+            return [
+                ['評価報告詳細サマリー'],
+                ['対象URL', topUrl || ''],
+                [],
+                ['▼ 全体スコア'],
+                ['', '達成率', 'Level A達成率', 'Level AA達成率'],
+                ['全体', fmt(totalRate), fmt(rateA), fmt(rateAA)],
+                [],
+                ['▼ ページ別スコア'],
+                ['ページURL', '達成率', 'Level A', 'Level AA', '合格', '不合格', '未検証', '該当なし'],
+                ...pageStats.map(p => [p.url, fmt(p.rate), fmt(p.rateA), fmt(p.rateAA), p.pass, p.fail, p.unverified, p.na]),
+                [],
+                ['▼ 総合サマリー（SC別 全ページ集計）'],
+                ['SC', '項目', '適合レベル', '結果', '備考'],
+                ...summaryData
+            ];
+        }
+
         function buildSampleSheetData(reportRows, url) {
             const HEADER = ['SC', '項目', '合否', '検出数', '検出箇所', '指摘内容', '改善方法', '検査機関記入欄', 'お客様記入欄', '再検査'];
             let pass = 0, fail = 0;
@@ -1502,8 +1631,22 @@
             const wb = XLSX.utils.book_new();
             const url = lastResults.url;
             const COL_WIDTHS = [8, 36, 8, 6, 22, 36, 28, 16, 16, 10].map(w => ({ wch: w }));
+            const COVER_WIDTHS = [8, 50, 12, 12, 16, 8, 10, 10].map(w => ({ wch: w }));
 
             const pcRows = buildReportRows(lastResults, url, aiResults, lastEnhancedResults, batchNavConsistency, lastPlayResults, lastExtResults, lastImprovementPlan, 'PC VIEW');
+            const pageDataList = [{ url, rows: pcRows }];
+            if (lastMobileScanSnapshot) {
+                const sp = lastMobileScanSnapshot;
+                const spRows = buildReportRows(sp.basic, url, sp.multi || {}, sp.deep || null, null, sp.play || null, sp.ext || null, sp.improvementPlan || null, 'SP VIEW');
+                pageDataList.push({ url: url + ' (SP)', rows: spRows });
+            }
+
+            // 表紙シートを先頭に追加
+            const coverWs = XLSX.utils.aoa_to_sheet(buildCoverSheetData(pageDataList, url));
+            coverWs['!cols'] = COVER_WIDTHS;
+            XLSX.utils.book_append_sheet(wb, coverWs, '表紙');
+
+            // ページ別シート
             const pcSheet = buildSampleSheetData(pcRows, url);
             const pcWs = XLSX.utils.aoa_to_sheet(pcSheet.sheetRows);
             pcWs['!cols'] = COL_WIDTHS;
@@ -1528,7 +1671,12 @@
             const wb = XLSX.utils.book_new();
             const hasMobile = batchMobileResultsData.length > 0;
             const COL_WIDTHS = [8, 36, 8, 6, 22, 36, 28, 16, 16, 10].map(w => ({ wch: w }));
+            const COVER_WIDTHS = [8, 50, 12, 12, 16, 8, 10, 10].map(w => ({ wch: w }));
             const sheetNames = new Set();
+
+            // ページ別データを先に構築（表紙の集計に使う）
+            const pageDataList = [];
+            const pageSheets = [];
 
             batchResultsData.filter(r => r.success).forEach((r, i) => {
                 const url = r.url;
@@ -1540,25 +1688,35 @@
                 const uniqueName = n => { let s = n, k = 2; while (sheetNames.has(s)) s = n.substring(0, 25) + '_' + k++; sheetNames.add(s); return s; };
 
                 const pcRows = buildReportRows(r.results, url, batchAIResults[url] || {}, batchEnhancedResults[url] || null, batchNavConsistency, batchPlayResults[url] || null, batchExtResults[url] || null, batchImprovementPlans[url] || null, 'PC VIEW');
-                const mobileR = hasMobile ? batchMobileResultsData[i] : null;
+                pageDataList.push({ url, rows: pcRows });
 
+                const mobileR = hasMobile ? batchMobileResultsData[i] : null;
                 if (mobileR?.success) {
                     const spUrl = mobileR.url;
                     const spRows = buildReportRows(mobileR.results, spUrl, batchMobileAIResults[spUrl] || {}, batchMobileEnhancedResults[spUrl] || null, batchMobileNavConsistency, batchMobilePlayResults[spUrl] || null, batchMobileExtResults[spUrl] || null, batchMobileImprovementPlans[spUrl] || null, 'SP VIEW');
-                    const pcWs = XLSX.utils.aoa_to_sheet(buildSampleSheetData(pcRows, url).sheetRows);
-                    pcWs['!cols'] = COL_WIDTHS;
-                    XLSX.utils.book_append_sheet(wb, pcWs, uniqueName(base + '_PC'));
-                    const spWs = XLSX.utils.aoa_to_sheet(buildSampleSheetData(spRows, spUrl).sheetRows);
-                    spWs['!cols'] = COL_WIDTHS;
-                    XLSX.utils.book_append_sheet(wb, spWs, uniqueName(base + '_SP'));
+                    pageDataList.push({ url: spUrl + ' (SP)', rows: spRows });
+                    pageSheets.push({ rows: buildSampleSheetData(pcRows, url).sheetRows, name: uniqueName(base + '_PC') });
+                    pageSheets.push({ rows: buildSampleSheetData(spRows, spUrl).sheetRows, name: uniqueName(base + '_SP') });
                 } else {
-                    const ws = XLSX.utils.aoa_to_sheet(buildSampleSheetData(pcRows, url).sheetRows);
-                    ws['!cols'] = COL_WIDTHS;
-                    XLSX.utils.book_append_sheet(wb, ws, uniqueName(base));
+                    pageSheets.push({ rows: buildSampleSheetData(pcRows, url).sheetRows, name: uniqueName(base) });
                 }
             });
 
-            if (wb.SheetNames.length === 0) { alert('成功した検査結果がありません'); return; }
+            if (pageSheets.length === 0) { alert('成功した検査結果がありません'); return; }
+
+            // 表紙シートを先頭に追加
+            const topUrl = batchResultsData.find(r => r.success)?.url || '';
+            const coverWs = XLSX.utils.aoa_to_sheet(buildCoverSheetData(pageDataList, topUrl));
+            coverWs['!cols'] = COVER_WIDTHS;
+            XLSX.utils.book_append_sheet(wb, coverWs, '表紙');
+
+            // ページ別シートを追加
+            pageSheets.forEach(({ rows, name }) => {
+                const ws = XLSX.utils.aoa_to_sheet(rows);
+                ws['!cols'] = COL_WIDTHS;
+                XLSX.utils.book_append_sheet(wb, ws, name);
+            });
+
             const date = new Date().toISOString().split('T')[0];
             XLSX.writeFile(wb, `wcag-batch-report-${date}.xlsx`);
         }
@@ -2269,6 +2427,7 @@
             batchViewportMode = 'desktop';
             lastMobileScanSnapshot = null;
             timeoutRetryQueue = [];
+            _retryMergeState = null;
             scanExecuted = false;
 
             // --- UI非表示 ---
@@ -3020,18 +3179,39 @@
                     return { resultsData, navConsistency, enhancedResults, aiResultsMap, aiTokenLimitedMap, aiIssueMap, improvementPlanMap, playResultsMap, extResultsMap, succeededCount };
                 }
 
+                // 再スキャン時: 完了済み結果と新結果をマージする内部ヘルパー
+                function mergeRetryResults(newResultsData, isMobile) {
+                    if (!_retryMergeState) return newResultsData;
+                    const saved = isMobile ? _retryMergeState.mobileResultsData : _retryMergeState.resultsData;
+                    const order = _retryMergeState.originalOrder;
+                    const newByUrl = Object.fromEntries(newResultsData.map(r => [r.url, r]));
+                    const savedByUrl = Object.fromEntries(saved.map(r => [r.url, r]));
+                    // 元の順序を維持しながら新旧をマージ
+                    const seen = new Set();
+                    const merged = order
+                        .map(url => { seen.add(url); return newByUrl[url] || savedByUrl[url]; })
+                        .filter(Boolean);
+                    // 元の順序にない新URLを末尾に追加
+                    newResultsData.forEach(r => { if (!seen.has(r.url)) merged.push(r); });
+                    return merged;
+                }
+
+                function mergeRetryMaps(newMap, savedMap) {
+                    return _retryMergeState ? Object.assign({}, savedMap, newMap) : newMap;
+                }
+
                 // --- PC（デスクトップ） ---
                 if (runDesktop) {
                     const pc = await runBatchViewport('desktop', runMobile ? 'PC' : '', 0);
-                    batchResultsData         = pc.resultsData;
+                    batchResultsData         = mergeRetryResults(pc.resultsData, false);
                     batchNavConsistency      = pc.navConsistency;
-                    batchEnhancedResults     = pc.enhancedResults;
-                    batchAIResults           = pc.aiResultsMap;
-                    batchAITokenLimitedMap   = pc.aiTokenLimitedMap;
-                    batchAIIssueMap          = pc.aiIssueMap;
-                    batchImprovementPlans    = pc.improvementPlanMap;
-                    batchPlayResults         = pc.playResultsMap;
-                    batchExtResults          = pc.extResultsMap;
+                    batchEnhancedResults     = mergeRetryMaps(pc.enhancedResults, _retryMergeState?.enhancedResults || {});
+                    batchAIResults           = mergeRetryMaps(pc.aiResultsMap, _retryMergeState?.aiResults || {});
+                    batchAITokenLimitedMap   = mergeRetryMaps(pc.aiTokenLimitedMap, _retryMergeState?.aiTokenLimitedMap || {});
+                    batchAIIssueMap          = mergeRetryMaps(pc.aiIssueMap, _retryMergeState?.aiIssueMap || {});
+                    batchImprovementPlans    = mergeRetryMaps(pc.improvementPlanMap, _retryMergeState?.improvementPlans || {});
+                    batchPlayResults         = mergeRetryMaps(pc.playResultsMap, _retryMergeState?.playResults || {});
+                    batchExtResults          = mergeRetryMaps(pc.extResultsMap, _retryMergeState?.extResults || {});
                     renderBatchSummary();
                     renderBatchNav(0);
                     $('batchResults').style.display = 'block';
@@ -3043,32 +3223,35 @@
                     const sp = await runBatchViewport('mobile', runDesktop ? 'SP' : '', spOffset);
                     if (runDesktop) {
                         // PC+SP両方: SPデータを専用変数に格納
-                        batchMobileResultsData          = sp.resultsData;
-                        batchMobileEnhancedResults      = sp.enhancedResults;
-                        batchMobileAIResults            = sp.aiResultsMap;
-                        batchMobileAITokenLimitedMap    = sp.aiTokenLimitedMap;
-                        batchMobileAIIssueMap           = sp.aiIssueMap;
-                        batchMobileImprovementPlans      = sp.improvementPlanMap;
-                        batchMobilePlayResults          = sp.playResultsMap;
-                        batchMobileExtResults           = sp.extResultsMap;
+                        batchMobileResultsData          = mergeRetryResults(sp.resultsData, true);
+                        batchMobileEnhancedResults      = mergeRetryMaps(sp.enhancedResults, _retryMergeState?.mobileEnhancedResults || {});
+                        batchMobileAIResults            = mergeRetryMaps(sp.aiResultsMap, _retryMergeState?.mobileAIResults || {});
+                        batchMobileAITokenLimitedMap    = mergeRetryMaps(sp.aiTokenLimitedMap, _retryMergeState?.mobileAITokenLimitedMap || {});
+                        batchMobileAIIssueMap           = mergeRetryMaps(sp.aiIssueMap, _retryMergeState?.mobileAIIssueMap || {});
+                        batchMobileImprovementPlans     = mergeRetryMaps(sp.improvementPlanMap, _retryMergeState?.mobileImprovementPlans || {});
+                        batchMobilePlayResults          = mergeRetryMaps(sp.playResultsMap, _retryMergeState?.mobilePlayResults || {});
+                        batchMobileExtResults           = mergeRetryMaps(sp.extResultsMap, _retryMergeState?.mobileExtResults || {});
                         batchMobileNavConsistency       = sp.navConsistency;
                     } else {
                         // SPのみ: メイン変数として扱う
-                        batchResultsData         = sp.resultsData;
+                        batchResultsData         = mergeRetryResults(sp.resultsData, false);
                         batchNavConsistency      = sp.navConsistency;
-                        batchEnhancedResults     = sp.enhancedResults;
-                        batchAIResults           = sp.aiResultsMap;
-                        batchAITokenLimitedMap   = sp.aiTokenLimitedMap;
-                        batchAIIssueMap          = sp.aiIssueMap;
-                        batchImprovementPlans    = sp.improvementPlanMap;
-                        batchPlayResults         = sp.playResultsMap;
-                        batchExtResults          = sp.extResultsMap;
+                        batchEnhancedResults     = mergeRetryMaps(sp.enhancedResults, _retryMergeState?.enhancedResults || {});
+                        batchAIResults           = mergeRetryMaps(sp.aiResultsMap, _retryMergeState?.aiResults || {});
+                        batchAITokenLimitedMap   = mergeRetryMaps(sp.aiTokenLimitedMap, _retryMergeState?.aiTokenLimitedMap || {});
+                        batchAIIssueMap          = mergeRetryMaps(sp.aiIssueMap, _retryMergeState?.aiIssueMap || {});
+                        batchImprovementPlans    = mergeRetryMaps(sp.improvementPlanMap, _retryMergeState?.improvementPlans || {});
+                        batchPlayResults         = mergeRetryMaps(sp.playResultsMap, _retryMergeState?.playResults || {});
+                        batchExtResults          = mergeRetryMaps(sp.extResultsMap, _retryMergeState?.extResults || {});
                         batchMobileNavConsistency = null;
                         renderBatchSummary();
                         renderBatchNav(0);
                         $('batchResults').style.display = 'block';
                     }
                 }
+
+                // マージ完了後にリセット
+                _retryMergeState = null;
 
                 progressFill.style.width = '100%';
                 const phasesDone = [doEnhanced ? 'DEEP' : null, doAI ? 'MULTI' : null, doPlayBatch ? 'PLAY' : null, doExtBatch ? 'EXT' : null].filter(Boolean).join('/');
