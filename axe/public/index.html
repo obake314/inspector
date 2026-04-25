@@ -374,6 +374,7 @@
         <div class="results" id="batchResults">
             <div class="batch-results-header">
                 <h2>一括検査結果</h2>
+                <button class="export-btn" id="batchExcelBtn" onclick="exportBatchExcel()">Excel</button>
                 <button class="export-btn" id="batchReportBtn" onclick="exportBatchReport()">GoogleSheet</button>
             </div>
             <div id="batchSummaryArea"></div>
@@ -643,8 +644,8 @@
             return '';
         }
 
-        function calculateAchievementRate(pass, total, na) {
-            const applicable = Math.max(0, (total || 0) - (na || 0));
+        function calculateAchievementRate(pass, fail) {
+            const applicable = (pass || 0) + (fail || 0);
             return applicable > 0 ? Math.round((pass || 0) / applicable * 100) : null;
         }
 
@@ -665,7 +666,7 @@
                 else s.unverified++;
             });
             s.total = rows.length;
-            s.passRate = calculateAchievementRate(s.pass, s.total, s.na);
+            s.passRate = calculateAchievementRate(s.pass, s.fail);
             return s;
         }
 
@@ -1470,50 +1471,96 @@
             }
         }
 
+        // 11列形式の buildReportRows 出力をサンプル形式（10列）に変換
+        function buildSampleSheetData(reportRows, url) {
+            const HEADER = ['SC', '項目', '合否', '検出数', '検出箇所', '指摘内容', '改善方法', '検査機関記入欄', 'お客様記入欄', '再検査'];
+            let pass = 0, fail = 0;
+            const dataRows = reportRows.map(row => {
+                // row = [No, 検査種別, SC, 検査項目, 適合レベル, 結果, 場所, 検出数, 重要度, 詳細, 改善案]
+                const result = row[5];
+                let gaihi, siteki;
+                if (result === '合格') {
+                    gaihi = '合格'; siteki = ''; pass++;
+                } else if (result === '不合格') {
+                    gaihi = '不合格'; siteki = row[9]; fail++;
+                } else if (result === '該当なし' || result === '対象外') {
+                    gaihi = '合格'; siteki = '該当なし'; pass++;
+                } else {
+                    gaihi = '未検証'; siteki = row[9];
+                }
+                return [row[2], row[3], gaihi, row[7], row[6], siteki, row[10], '', '', ''];
+            });
+            const applicable = pass + fail;
+            const rate = applicable > 0 ? pass / applicable : 0;
+            return {
+                sheetRows: [['URL', url || ''], ['達成率', rate], [], HEADER, ...dataRows]
+            };
+        }
+
         function exportExcel() {
             if (!lastResults) return;
-            const header = ['No', '検査種別', 'SC', '検査項目', '適合レベル', '結果', '場所', '検出数', '重要度', '詳細', '改善案'];
-
             const wb = XLSX.utils.book_new();
+            const url = lastResults.url;
+            const COL_WIDTHS = [8, 36, 8, 6, 22, 36, 28, 16, 16, 10].map(w => ({ wch: w }));
 
-            // PC シート
-            const pcRows = buildReportRows(lastResults, lastResults.url, aiResults, lastEnhancedResults, batchNavConsistency, lastPlayResults, lastExtResults, lastImprovementPlan, 'PC VIEW');
-            const pcStats = buildStats(lastResults, lastEnhancedResults, aiResults, lastPlayResults, lastExtResults, batchNavConsistency);
-            const pcMeta = [
-                ['URL', lastResults.url],
-                ['検査日時', new Date().toLocaleString('ja-JP')],
-                ['スコア', `${pcStats.passRate ?? '—'}% （全${pcStats.total}項目）`],
-                ['内訳', `緊急:${pcStats.critical} 重大:${pcStats.serious} 中程度:${pcStats.moderate} 軽微:${pcStats.minor} 合格:${pcStats.pass} 該当なし:${pcStats.na} 未検証:${pcStats.unverified}`],
-                [],
-                header,
-                ...pcRows
-            ];
-            const pcWs = XLSX.utils.aoa_to_sheet(pcMeta);
-            pcWs['!cols'] = [4,8,6,30,6,8,20,6,8,30,20].map(w => ({ wch: w }));
+            const pcRows = buildReportRows(lastResults, url, aiResults, lastEnhancedResults, batchNavConsistency, lastPlayResults, lastExtResults, lastImprovementPlan, 'PC VIEW');
+            const pcSheet = buildSampleSheetData(pcRows, url);
+            const pcWs = XLSX.utils.aoa_to_sheet(pcSheet.sheetRows);
+            pcWs['!cols'] = COL_WIDTHS;
             XLSX.utils.book_append_sheet(wb, pcWs, 'PC VIEW');
 
-            // SP シート（存在する場合）
             if (lastMobileScanSnapshot) {
                 const sp = lastMobileScanSnapshot;
-                const spRows = buildReportRows(sp.basic, lastResults.url, sp.multi || {}, sp.deep || null, null, sp.play || null, sp.ext || null, sp.improvementPlan || null, 'SP VIEW');
-                const spStats = buildStats(sp.basic, sp.deep || null, sp.multi || {}, sp.play || null, sp.ext || null);
-                const spMeta = [
-                    ['URL', lastResults.url],
-                    ['検査日時', new Date().toLocaleString('ja-JP')],
-                    ['ビュー', 'SP VIEW（iPhone SE）'],
-                    ['スコア', `${spStats.passRate ?? '—'}% （全${spStats.total}項目）`],
-                    ['内訳', `緊急:${spStats.critical} 重大:${spStats.serious} 中程度:${spStats.moderate} 軽微:${spStats.minor} 合格:${spStats.pass} 該当なし:${spStats.na} 未検証:${spStats.unverified}`],
-                    [],
-                    header,
-                    ...spRows
-                ];
-                const spWs = XLSX.utils.aoa_to_sheet(spMeta);
-                spWs['!cols'] = [4,8,6,30,6,8,20,6,8,30,20].map(w => ({ wch: w }));
+                const spRows = buildReportRows(sp.basic, url, sp.multi || {}, sp.deep || null, null, sp.play || null, sp.ext || null, sp.improvementPlan || null, 'SP VIEW');
+                const spSheet = buildSampleSheetData(spRows, url);
+                const spWs = XLSX.utils.aoa_to_sheet(spSheet.sheetRows);
+                spWs['!cols'] = COL_WIDTHS;
                 XLSX.utils.book_append_sheet(wb, spWs, 'SP VIEW');
             }
 
             const date = new Date().toISOString().split('T')[0];
             XLSX.writeFile(wb, `wcag-report-${date}.xlsx`);
+        }
+
+        // BATCHスキャン用Excelエクスポート（サンプル形式）
+        function exportBatchExcel() {
+            if (batchResultsData.length === 0) return;
+            const wb = XLSX.utils.book_new();
+            const hasMobile = batchMobileResultsData.length > 0;
+            const COL_WIDTHS = [8, 36, 8, 6, 22, 36, 28, 16, 16, 10].map(w => ({ wch: w }));
+            const sheetNames = new Set();
+
+            batchResultsData.filter(r => r.success).forEach((r, i) => {
+                const url = r.url;
+                let base;
+                try {
+                    const u = new URL(url);
+                    base = (u.hostname + u.pathname).replace(/[\/\\?*[\]:]/g, '_').replace(/_+/g, '_').replace(/_$/, '').substring(0, 28);
+                } catch { base = String(i + 1); }
+                const uniqueName = n => { let s = n, k = 2; while (sheetNames.has(s)) s = n.substring(0, 25) + '_' + k++; sheetNames.add(s); return s; };
+
+                const pcRows = buildReportRows(r.results, url, batchAIResults[url] || {}, batchEnhancedResults[url] || null, batchNavConsistency, batchPlayResults[url] || null, batchExtResults[url] || null, batchImprovementPlans[url] || null, 'PC VIEW');
+                const mobileR = hasMobile ? batchMobileResultsData[i] : null;
+
+                if (mobileR?.success) {
+                    const spUrl = mobileR.url;
+                    const spRows = buildReportRows(mobileR.results, spUrl, batchMobileAIResults[spUrl] || {}, batchMobileEnhancedResults[spUrl] || null, batchMobileNavConsistency, batchMobilePlayResults[spUrl] || null, batchMobileExtResults[spUrl] || null, batchMobileImprovementPlans[spUrl] || null, 'SP VIEW');
+                    const pcWs = XLSX.utils.aoa_to_sheet(buildSampleSheetData(pcRows, url).sheetRows);
+                    pcWs['!cols'] = COL_WIDTHS;
+                    XLSX.utils.book_append_sheet(wb, pcWs, uniqueName(base + '_PC'));
+                    const spWs = XLSX.utils.aoa_to_sheet(buildSampleSheetData(spRows, spUrl).sheetRows);
+                    spWs['!cols'] = COL_WIDTHS;
+                    XLSX.utils.book_append_sheet(wb, spWs, uniqueName(base + '_SP'));
+                } else {
+                    const ws = XLSX.utils.aoa_to_sheet(buildSampleSheetData(pcRows, url).sheetRows);
+                    ws['!cols'] = COL_WIDTHS;
+                    XLSX.utils.book_append_sheet(wb, ws, uniqueName(base));
+                }
+            });
+
+            if (wb.SheetNames.length === 0) { alert('成功した検査結果がありません'); return; }
+            const date = new Date().toISOString().split('T')[0];
+            XLSX.writeFile(wb, `wcag-batch-report-${date}.xlsx`);
         }
 
         // AI評価結果を保存
@@ -3660,7 +3707,7 @@
                     pass,
                     na,
                     unverified: score.unverified ?? Math.max(0, ownTotal - covered),
-                    score: score.score ?? calculateAchievementRate(pass, ownTotal, na)
+                    score: score.score ?? calculateAchievementRate(pass, critical + serious + moderate + minor)
                 };
             }
             return {
@@ -3674,7 +3721,7 @@
                 pass,
                 na,
                 unverified: Math.max(0, fixedTotal - covered),
-                score: calculateAchievementRate(pass, fixedTotal, na)
+                score: calculateAchievementRate(pass, critical + serious + moderate + minor)
             };
         }
 
@@ -4059,7 +4106,7 @@
             });
             return { total: fail+pass+na+unverified,
                      critical: imp.critical, serious: imp.serious, moderate: imp.moderate, minor: imp.minor,
-                     pass, na, unverified, score: calculateAchievementRate(pass, getTargetScList().length, na) };
+                     pass, na, unverified, score: calculateAchievementRate(pass, fail) };
         }
 
         // ============================================================
@@ -5458,7 +5505,7 @@
                 else s.unverified++;
             });
             s.fail = s.critical + s.serious + s.moderate + s.minor;
-            s.passRate = calculateAchievementRate(s.pass, s.total, s.na);
+            s.passRate = calculateAchievementRate(s.pass, s.fail);
             return s;
         }
 

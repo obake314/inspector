@@ -307,9 +307,8 @@ function appendBullets_(body, items) {
 
 function appendSummaryTable_(body, totalScore) {
   var review = totalScore.unknown + totalScore.unverified;
-  var passWithNa = totalScore.pass + totalScore.na;
-  var total = passWithNa + totalScore.fail + review;
-  var rate = total > 0 ? Math.round(passWithNa / total * 100) : 0;
+  var applicable = totalScore.pass + totalScore.fail;
+  var rate = applicable > 0 ? Math.round(totalScore.pass / applicable * 100) : 0;
   var table = body.appendTable([
     ['合格', '不合格', '要確認', '対象外（該当なし）', '達成率'],
     [
@@ -331,36 +330,36 @@ function appendSummaryTable_(body, totalScore) {
   for (var c = 0; c < table.getRow(1).getNumCells(); c++) {
     table.getRow(1).getCell(c).editAsText().setFontSize(12);
   }
-  if (totalScore.na > 0) {
-    body.appendParagraph('※ 達成率は「対象外（該当なし）」' + totalScore.na + '件を合格として算入しています。WCAG 上、該当箇所が存在しない基準は適用外のため合格扱いとします。')
-      .editAsText().setFontSize(10).setForegroundColor('#6b7280');
-  }
+  body.appendParagraph('※ 達成率は「合格数 ÷ (合格数 + 不合格数)」で算出しています。未検証・該当なし（対象外）の項目は分母・分子から除外されます。')
+    .editAsText().setFontSize(10).setForegroundColor('#6b7280');
 }
 
 function appendPieChart_(body, totalScore) {
-  var passWithNa = totalScore.pass + totalScore.na;
+  var passCount   = totalScore.pass;
   var failCount   = totalScore.fail;
+  var naCount     = totalScore.na;
   var reviewCount = totalScore.unknown + totalScore.unverified;
-  var total = passWithNa + failCount + reviewCount;
-  if (total === 0) return;
+  var applicable  = passCount + failCount;
+  if (applicable + naCount + reviewCount === 0) return;
 
-  var rate = (passWithNa / total * 100).toFixed(1);
-  var naLabel = totalScore.na > 0
-    ? '合格（該当なし ' + totalScore.na + '件含む）'
+  var rate = applicable > 0 ? (passCount / applicable * 100).toFixed(1) : '0.0';
+  var naLabel = naCount > 0
+    ? '合格（該当なし ' + naCount + '件を除く）'
     : '合格';
 
   var dataTable = Charts.newDataTable()
     .addColumn(Charts.ColumnType.STRING, 'カテゴリ')
     .addColumn(Charts.ColumnType.NUMBER, '件数')
-    .addRow([naLabel,    passWithNa])
-    .addRow(['不合格',   failCount])
-    .addRow(['要確認',   reviewCount])
+    .addRow([naLabel,      passCount])
+    .addRow(['不合格',     failCount])
+    .addRow(['要確認',     reviewCount])
+    .addRow(['該当なし',   naCount])
     .build();
 
   var chart = Charts.newPieChart()
     .setDataTable(dataTable)
     .setOption('title', '達成率: ' + rate + '%')
-    .setOption('colors', ['#22c55e', '#ef4444', '#f59e0b'])
+    .setOption('colors', ['#22c55e', '#ef4444', '#f59e0b', '#d1d5db'])
     .setOption('pieHole', 0.4)
     .setOption('is3D', false)
     .setOption('width', 480)
@@ -595,7 +594,9 @@ function calcTotalScore_(pages) {
     total.total += s.total;
     total.applicable += s.applicable;
   });
-  total.rate = total.total > 0 ? Math.round((total.pass + total.na) / total.total * 100) : 0;
+  var totalApplicable = total.pass + total.fail;
+  total.applicable = totalApplicable;
+  total.rate = totalApplicable > 0 ? Math.round(total.pass / totalApplicable * 100) : 0;
   return total;
 }
 
@@ -1064,9 +1065,9 @@ function calcScore_(pg) {
       default:           s.unverified++; break;
     }
   });
-  // 達成率: 「該当なし」は WCAG 適用外のため合格として算入（分母にも含む）
-  s.applicable = s.total;
-  s.rate = s.total > 0 ? Math.round((s.pass + s.na) / s.total * 100) : 0;
+  // 達成率: 合格数 / (合格数 + 不合格数)。未検証・該当なしは分母・分子から除外
+  s.applicable = s.pass + s.fail;
+  s.rate = s.applicable > 0 ? Math.round(s.pass / s.applicable * 100) : 0;
   return s;
 }
 
