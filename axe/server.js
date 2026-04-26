@@ -4946,9 +4946,19 @@ async function pw_check_4_1_2_accessible_names(page) {
       for (const el of document.querySelectorAll(sel)) {
         if (seen.has(el)) continue;
         seen.add(el);
+        // aria-hidden 子要素を除いたテキストを取得（aria-hidden SVG + span 構成の誤検出防止）
+        function getAccessibleText(node) {
+          if (node.getAttribute && node.getAttribute('aria-hidden') === 'true') return '';
+          let text = '';
+          for (const child of node.childNodes) {
+            if (child.nodeType === Node.TEXT_NODE) text += child.textContent;
+            else if (child.nodeType === Node.ELEMENT_NODE) text += getAccessibleText(child);
+          }
+          return text;
+        }
         const label = el.getAttribute('aria-label') || el.getAttribute('aria-labelledby')
           ? (el.getAttribute('aria-label') || document.getElementById(el.getAttribute('aria-labelledby'))?.textContent)
-          : el.textContent?.trim() || el.getAttribute('title') || el.getAttribute('placeholder') || el.getAttribute('alt');
+          : getAccessibleText(el).trim() || el.getAttribute('title') || el.getAttribute('placeholder') || el.getAttribute('alt');
         if (!label || !label.trim()) {
           const tag = el.tagName.toLowerCase();
           const id = el.id ? `#${el.id}` : '';
@@ -5604,9 +5614,20 @@ async function ext_check_ibm_ace(page) {
 
     // SC別に集約
     const scMap = {};
+    // aria-hidden="true" が付いた要素は AT から除外されているため
+    // alt/名前チェック系の FAIL / POTENTIAL は誤検出として除外する
+    const ARIA_HIDDEN_IMAGE_RULES = new Set([
+      'WCAG20_Img_HasAlt', 'WCAG20_Img_TitleEmptyWhenAltNull',
+      'WCAG20_Img_PresentationImgHasNonNullAlt', 'WCAG20_Object_HasText',
+      'WCAG20_Img_LinkTextNotEmpty', 'RPT_Img_UsemapAlt',
+    ]);
     raw.forEach(r => {
       const sc = ibmRuleToSC(r.ruleId);
       if (!sc) return;
+
+      // aria-hidden="true" の要素に対する代替テキスト系チェックはスキップ
+      if (ARIA_HIDDEN_IMAGE_RULES.has(r.ruleId) && r.snippet
+        && /aria-hidden\s*=\s*["']true["']/i.test(r.snippet)) return;
 
       const isFail = Array.isArray(r.value) && r.value[1] === 'FAIL' && r.value[0] !== 'PASS';
       const isPass = Array.isArray(r.value) && r.value[1] === 'PASS';
