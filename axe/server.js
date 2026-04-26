@@ -18,6 +18,13 @@ const APP_UPDATE_TARGETS = [
 ];
 
 function getAppUpdatedAt() {
+  // git log から最終コミット日時を取得（デプロイ方法に依存しない）
+  try {
+    const { execSync } = require('child_process');
+    const dateStr = execSync('git log -1 --format=%ci', { cwd: __dirname, timeout: 3000 }).toString().trim();
+    if (dateStr) return new Date(dateStr);
+  } catch (_) {}
+  // fallback: ファイルの mtime
   let latest = null;
   APP_UPDATE_TARGETS.forEach(filePath => {
     try {

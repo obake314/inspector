@@ -4308,9 +4308,12 @@
                     scMap[sc] = { result, impact: impact || null, source, dkey: renderDkey };
                     return;
                 }
-                // 権威スキャンの結果は他のfail/passより優先
+                // 権威スキャンの結果は他のfail/passより優先（ただしimpactは最も深刻な値を保持）
                 if (authority && source === authority) {
-                    scMap[sc] = { result, impact: impact || cur.impact || null, source, dkey: renderDkey };
+                    const impRank = { critical: 0, serious: 1, moderate: 2, minor: 3 };
+                    const bestImpact = (cur.impact && (impRank[cur.impact] ?? 99) < (impRank[impact] ?? 99))
+                        ? cur.impact : (impact || cur.impact || null);
+                    scMap[sc] = { result, impact: bestImpact, source, dkey: renderDkey };
                     return;
                 }
                 // 現在の結果が権威スキャン由来なら上書き不可
