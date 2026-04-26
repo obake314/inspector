@@ -1687,8 +1687,49 @@ async function check_2_1_1_keyboard_operable(page) {
 async function check_2_4_7_focus_visible(page) {
   try {
     const results = await page.evaluate(() => {
-      // :focus-visible を正しく評価するためキーボードナビゲーションモードへ切替
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+
+      // ===== カラーユーティリティ =====
+      function parseRgb(c) {
+        if (!c) return null;
+        const m = c.match(/rgba?\(\s*(\d+\.?\d*),\s*(\d+\.?\d*),\s*(\d+\.?\d*)/);
+        return m ? [parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3])] : null;
+      }
+      function luminance([r, g, b]) {
+        return [r, g, b].map((v, i) => {
+          v /= 255;
+          v = v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+          return v * [0.2126, 0.7152, 0.0722][i];
+        }).reduce((a, b) => a + b, 0);
+      }
+      function contrastRatio(c1, c2) {
+        if (!c1 || !c2) return 0;
+        const l1 = luminance(c1), l2 = luminance(c2);
+        return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+      }
+      function isTransparent(c) {
+        return !c || c === 'transparent' || /rgba?\(\s*\d+,\s*\d+,\s*\d+,\s*0\s*\)/.test(c);
+      }
+      // 透明要素は親を辿って実効背景色を取得
+      function effectiveBg(el) {
+        let node = el;
+        while (node && node !== document.documentElement) {
+          const bg = window.getComputedStyle(node).backgroundColor;
+          if (!isTransparent(bg)) return bg;
+          node = node.parentElement;
+        }
+        return 'rgb(255,255,255)';
+      }
+      // box-shadow の最初の層からスプレッド半径と色を抽出
+      function parseShadow(s) {
+        if (!s || s === 'none') return null;
+        const colorMatch = s.match(/rgba?\([^)]+\)/);
+        const color = colorMatch ? colorMatch[0] : null;
+        const noColor = s.replace(/rgba?\([^)]+\)/, '').trim();
+        const nums = (noColor.match(/(-?\d+\.?\d*)px/g) || []).map(parseFloat);
+        const spread = nums.length >= 4 ? nums[3] : (nums.length === 3 ? 0 : null);
+        return spread !== null ? { spread, color } : null;
+      }
 
       const violations27 = [];
       const violations213 = [];
@@ -1699,64 +1740,98 @@ async function check_2_4_7_focus_visible(page) {
         return s.display !== 'none' && s.visibility !== 'hidden';
       }).slice(0, 25);
 
-      function isTransparentColor(c) {
-        return !c || c === 'transparent' || /rgba?\(\s*\d+,\s*\d+,\s*\d+,\s*0\s*\)/.test(c);
-      }
-
       for (const el of focusables) {
-        // 非フォーカス時のスタイルを取得
         if (document.activeElement === el) el.blur();
         const before = window.getComputedStyle(el);
-        const bOutlineW   = parseFloat(before.outlineWidth) || 0;
-        const bOutlineS   = before.outlineStyle;
-        const bBoxShadow  = before.boxShadow;
-        const bBg         = before.backgroundColor;
-        const bBorderW    = parseFloat(before.borderWidth) || 0;
-        const bBorderColor= before.borderColor;
+        const bOutlineW    = parseFloat(before.outlineWidth) || 0;
+        const bOutlineS    = before.outlineStyle;
+        const bBoxShadow   = before.boxShadow;
+        const bBg          = before.backgroundColor;
+        const bBorderW     = parseFloat(before.borderWidth) || 0;
+        const bBorderColor = before.borderColor;
 
-        // キーボードナビゲーションモードで再トリガー（ループ内で毎回確保）
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
         el.focus({ preventScroll: true });
         const after = window.getComputedStyle(el);
-        const aOutlineW   = parseFloat(after.outlineWidth) || 0;
-        const aOutlineS   = after.outlineStyle;
-        const aOutlineC   = after.outlineColor;
-        const aBoxShadow  = after.boxShadow;
-        const aBg         = after.backgroundColor;
-        const aBorderW    = parseFloat(after.borderWidth) || 0;
-        const aBorderColor= after.borderColor;
+        const aOutlineW    = parseFloat(after.outlineWidth) || 0;
+        const aOutlineS    = after.outlineStyle;
+        const aOutlineC    = after.outlineColor;
+        const aBoxShadow   = after.boxShadow;
+        const aBg          = after.backgroundColor;
+        const aBorderW     = parseFloat(after.borderWidth) || 0;
+        const aBorderColor = after.borderColor;
         el.blur();
 
-        const tag   = el.tagName.toLowerCase();
-        const id    = el.id ? `#${el.id}` : '';
-        const cls   = el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
-        const text  = (el.getAttribute('aria-label') || el.textContent || el.value || '').trim().slice(0, 25);
-        const parentEl = el.parentElement;
-        const parentCtx = !el.id && parentEl && parentEl !== document.body ? ` in ${parentEl.tagName.toLowerCase()}${parentEl.id ? '#'+parentEl.id : ''}` : '';
-        const label = `${tag}${id}${cls}${text ? ' "'+text+'"' : ''}${parentCtx}`.slice(0, 80);
+        const tag    = el.tagName.toLowerCase();
+        const id     = el.id ? `#${el.id}` : '';
+        const cls    = el.className && typeof el.className === 'string'
+          ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+        const text   = (el.getAttribute('aria-label') || el.textContent || el.value || '').trim().slice(0, 25);
+        const parentEl  = el.parentElement;
+        const parentCtx = !el.id && parentEl && parentEl !== document.body
+          ? ` in ${parentEl.tagName.toLowerCase()}${parentEl.id ? '#' + parentEl.id : ''}` : '';
+        const label = `${tag}${id}${cls}${text ? ' "' + text + '"' : ''}${parentCtx}`.slice(0, 80);
 
-        // フォーカス時にいずれかのプロパティが変化したか（transparent outline は除外）
-        const hasOutline    = aOutlineS !== 'none' && aOutlineW > 0 && !isTransparentColor(aOutlineC);
+        // --- SC 2.4.7: インジケーター存在確認 ---
+        const hasOutline    = aOutlineS !== 'none' && aOutlineW > 0 && !isTransparent(aOutlineC);
         const hasBoxShadow  = aBoxShadow && aBoxShadow !== 'none' && aBoxShadow !== bBoxShadow;
-        const bgChanged     = aBg !== bBg;
+        const bgChanged     = aBg !== bBg && !isTransparent(aBg);
         const borderChanged = aBorderW !== bBorderW || aBorderColor !== bBorderColor;
         const hasFocusIndicator = hasOutline || hasBoxShadow || bgChanged || borderChanged;
 
-        // SC 2.4.13: インジケータ不在（2.4.7 fail と同条件）のみ fail。
-        // インジケータが存在する場合は面積・コントラスト比（≥3:1）の自動検証が困難なため
-        // manual_required とし、誤 false / 誤 pass を回避する。
         if (!hasFocusIndicator) {
           violations27.push(`${label} (outline:${aOutlineW}px, bg変化:${bgChanged}, shadow:${hasBoxShadow})`);
-          violations213.push(`${label} (フォーカスインジケーター未検出)`);
+          violations213.push(`${label} ／ インジケーター未検出`);
+          continue;
+        }
+
+        // --- SC 2.4.13: 面積（≥2px）+ コントラスト比（≥3:1）の自動判定 ---
+        const adjBg = effectiveBg(el.parentElement || el);
+        let areaOk = false, crOk = false, areaNote = '', crNote = '';
+
+        if (hasOutline) {
+          areaOk  = aOutlineW >= 2;
+          areaNote = `outline-width:${aOutlineW}px`;
+          const cr = contrastRatio(parseRgb(aOutlineC), parseRgb(adjBg));
+          crOk    = cr >= 3;
+          crNote  = `コントラスト:${cr.toFixed(1)}:1`;
+        } else if (hasBoxShadow) {
+          const sh = parseShadow(aBoxShadow);
+          if (sh) {
+            areaOk  = sh.spread >= 2;
+            areaNote = `box-shadow spread:${sh.spread}px`;
+            const cr = contrastRatio(parseRgb(sh.color || adjBg), parseRgb(adjBg));
+            crOk    = cr >= 3;
+            crNote  = `コントラスト:${cr.toFixed(1)}:1`;
+          } else {
+            areaOk = true; crOk = true; // パース不能は手動確認対象としてスルー
+          }
+        } else if (bgChanged) {
+          areaOk  = true; // 背景全体変化なので面積は十分
+          const cr = contrastRatio(parseRgb(aBg), parseRgb(adjBg));
+          crOk    = cr >= 3;
+          crNote  = `背景コントラスト:${cr.toFixed(1)}:1`;
+        } else if (borderChanged) {
+          const bwDiff = aBorderW - bBorderW;
+          areaOk  = bwDiff >= 2;
+          areaNote = `border増分:${bwDiff.toFixed(1)}px`;
+          const cr = contrastRatio(parseRgb(aBorderColor), parseRgb(adjBg));
+          crOk    = cr >= 3;
+          crNote  = `コントラスト:${cr.toFixed(1)}:1`;
+        }
+
+        if (!areaOk || !crOk) {
+          const reasons = [];
+          if (!areaOk) reasons.push(`面積不足(${areaNote}、≥2px必要)`);
+          if (!crOk)   reasons.push(`${crNote}（≥3:1必要）`);
+          violations213.push(`${label} ／ ${reasons.join('、')}`);
         }
       }
       return { violations27, violations213 };
     });
 
     const has247Fail = results.violations27.length > 0;
-    // 2.4.13: インジケータ不在要素があれば fail、全要素にインジケータあれば
-    // 面積・コントラストの手動確認が必要なため manual_required
-    const status213 = results.violations213.length > 0 ? 'fail' : 'manual_required';
+    const has213Fail = results.violations213.length > 0;
     return [
       {
         sc: '2.4.7', name: 'フォーカス可視（AA）',
@@ -1768,16 +1843,16 @@ async function check_2_4_7_focus_visible(page) {
       },
       {
         sc: '2.4.13', name: 'フォーカスの外観（AA）',
-        status: status213,
-        message: results.violations213.length > 0
-          ? `${results.violations213.length}個の要素でフォーカスインジケーター未検出（2.4.13 fail）`
-          : 'フォーカスインジケーターは検出済み。面積・コントラスト比（≥3:1）は目視で確認してください',
+        status: has213Fail ? 'fail' : 'pass',
+        message: has213Fail
+          ? `${results.violations213.length}個の要素が面積またはコントラスト比の要件を未達`
+          : '検出した全フォーカスインジケーターが面積（≥2px）・コントラスト比（≥3:1）を満たしています',
         violations: results.violations213
       }
     ];
   } catch (e) {
     return [
-      { sc: '2.4.7', name: 'フォーカス可視（AA）', status: 'error', message: e.message, violations: [] },
+      { sc: '2.4.7',  name: 'フォーカス可視（AA）',   status: 'error', message: e.message, violations: [] },
       { sc: '2.4.13', name: 'フォーカスの外観（AA）', status: 'error', message: e.message, violations: [] }
     ];
   }
