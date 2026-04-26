@@ -92,6 +92,12 @@ h1 {
   border-bottom: 1px solid var(--navy-200);
 }
 
+.section-column:last-child{
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
 .section-headline {
   font-size: var(--font-size-s);
   font-weight: 500;
@@ -297,11 +303,10 @@ h1 {
 }
 
 .scan-estimate {
-  font-family: var(--font-basic);
-  font-size: var(--font-size-s);
-  color: var(--navy-400);
-  margin-bottom: 10px;
-  min-height: 18px;
+    font-family: var(--font-latin);
+    font-size: var(--font-size-s);
+    color: var(--navy-400);
+    letter-spacing: 0.05em;
 }
 
 .scan-state-actions {
@@ -689,28 +694,32 @@ h1 {
   background: var(--color-white)
 }
 .scoretable-title {
-  font-family: var(--font-latin);
-  padding: var(--space-m) 0;
-  font-size:20px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: var(--navy-700);
-  background: var(--navy-200);
-  border-bottom: 1px solid var(--navy-200);
+    font-family: var(--font-latin);
+    padding: var(--space-m) 0;
+    font-size: var(--font-size-m);
+    font-weight: 400;
+    color: var(--navy-700);
+    background: var(--navy-200);
+    border-bottom: 1px solid var(--navy-200);
 }
 .scoretable {
   overflow-x: auto;
 }
 
 .scoretable thead th{
-  width:calc(100% / 9);
-  padding: 15px 0;
-  line-height: 1.4;
+    font-size: var(--font-size-s);
+    color: var(--color-white);
+    font-weight: normal;
+    background: var(--navy-700);
+      font-weight: normal;
+
 }
 
 .scoretable thead th.label-all span{
-  font-size: var(--font-size-s);
+  font-size: var(--font-size-xs);
   font-weight: normal;
+margin-bottom: 6px;
+    display: block;
 }
 .scoretable tbody td{
   padding: var(--space-m);
@@ -750,6 +759,8 @@ h1 {
 
 .score-label-title {
   min-width: 0;
+    font-size: var(--font-size-l);
+    font-weight: 100;
 }
 
 .score-rescan-btn {
@@ -758,9 +769,8 @@ h1 {
   background: var(--color-white);
   color: inherit;
   cursor: pointer;
-  font-family: var(--font-basic);
-  font-size: var(--font-size-s);
-  font-weight: 700;
+  font-size: var(--font-size-xs);
+  font-weight: 100;
   line-height: 1;
   padding: 6px 8px;
   white-space: nowrap;
@@ -807,7 +817,7 @@ h1 {
 .score-row-sub {
     font-family: var(--font-basic);
     display: block;
-    font-size: var(--font-size-m);
+    font-size: var(--font-size-s);
     font-weight: 400;
     letter-spacing: 0;
     margin-top: 2px;
@@ -947,6 +957,7 @@ h1 {
   font-size: var(--font-size-s);
   color: var(--navy-400);
   margin-bottom: 4px;
+  font-family: var(--font-latin);
 }
 .improvement-action p,
 .improvement-action li,
@@ -978,10 +989,13 @@ h1 {
 .score-total{
   font-family: var(--font-latin);
   font-size: var(--font-size-s);
+  line-height: 1;
+margin-bottom: 6px;
 }
 .score-chip{
   font-family: var(--font-latin);
   font-size: var(--font-size-l);
+    line-height: 1;
 }
 .score-num,
 .score-dash {
@@ -1117,15 +1131,18 @@ h1 {
   gap: var(--space-s);
   flex-shrink: 0;
 }
+
 .badge {
-  padding: 2px var(--space-s);
-  font-size: var(--font-size-m);
-  font-weight: 500;
+  font-size: var(--font-size-s);
+  font-family: var(--font-latin);
+  font-weight: 100;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
   background: var(--navy-200);
   color: var(--color-white);
+  width: 65px;
+  text-align: center;
 }
+
 .badge-basic{
   background: var(--color-basic);
 }
@@ -1296,17 +1313,19 @@ h1 {
   font-size: var(--font-size-s);
   color: var(--navy-400);
   background: var(--navy-200);
-  padding: 1px var(--space-s);
   flex-shrink: 0;
+  width: 65px;
+  text-align: center;
 }
 .item-level {
   font-family: var(--font-latin);
   font-size: var(--font-size-s);
-  font-weight: 600;
+  font-weight: 100;
   color: var(--navy-400);
   background: var(--navy-200);
-  padding: 1px var(--space-s);
   flex-shrink: 0;
+  width: 35px;
+  text-align: center;
 }
 .item-title {
   flex: 1;
@@ -1375,7 +1394,8 @@ h1 {
 }
 .item-source-section .item-locations {
   display: none;
-  padding-left: var(--space-m);
+  padding-left: 0;
+  padding-right: 0;
 }
 .item-card.expanded .item-source-section .item-locations {
   display: block;
@@ -1419,7 +1439,7 @@ h1 {
   background: var(--color-white);
   padding: 3px 9px;
   font-size: var(--font-size-s);
-  font-weight: 600;
+  font-weight: 100;
   cursor: pointer;
   letter-spacing: 0.03em;
 }
@@ -1544,6 +1564,8 @@ h1 {
 
 #exportArea {
   font-family: var(--font-latin);
+  font-size:var(--font-size-m);
+  margin-right: 16px;
 }
 #clearBtn {
   font-family: var(--font-basic);
@@ -1701,7 +1723,6 @@ h1 {
 .batch-results-header {
   display: flex;
   align-items:flex-start;
-  justify-content: space-between;
   gap: var(--space-m);
   margin-bottom: var(--space-m);
 }
@@ -1797,7 +1818,7 @@ h1 {
 .batchsum-th-score {
   min-width: 88px;
   line-height: 1.3;
-  font-size: var(--font-size-l);
+  font-size: var(--font-size-xs);
 }
 .batchsum-th-sub {
   font-size: var(--font-size-s);
@@ -1870,7 +1891,7 @@ h1 {
   font-family: var(--font-latin);
   display: inline-block;
   font-size: var(--font-size-l);
-  font-weight: 500;
+  font-weight: 400;
   min-width: 24px;
   line-height: 1;
 }
