@@ -714,11 +714,16 @@ h1 {
 .scoretable thead th{
     font-size: var(--font-size-s);
     color: var(--color-white);
-    font-weight: normal;
+    line-height: 1;
     background: var(--navy-700);
-      font-weight: normal;
-
+    font-weight: normal;
+    padding: 12px 0;
 }
+
+..scoretable thead th;:first-child{
+  width: 130px;
+}
+
 
 .scoretable thead th.label-all span{
   font-size: var(--font-size-xs);
@@ -2146,18 +2151,20 @@ footer small {
 .help-section-title {
     margin-top: 28px;
     margin-bottom: 16px;
-  font-size: var(--font-size-xs);
+    font-size: var(--font-size-s);
     font-weight: 600;
+    line-height: 1;
     border-bottom: 1px solid #e5e7eb;
     padding-bottom: 8px;
 }
 .help-scan-list dt {
     font-weight: 600;
-    margin-bottom: 6px;
+    margin-bottom: 12px;
+    line-height: 1;
 }
 .help-scan-list dd {
     margin-left: 0;
-    margin-bottom: 16px;
+    margin-bottom: 24px;
     font-size: var(--font-size-s);
     color: #374151;
 }
