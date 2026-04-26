@@ -711,6 +711,7 @@ h1 {
   overflow-x: auto;
 }
 
+.batchsum-th,
 .scoretable thead th{
     font-size: var(--font-size-s);
     color: var(--color-white);
@@ -720,7 +721,7 @@ h1 {
     padding: 12px 0;
 }
 
-..scoretable thead th;:first-child{
+.scoretable thead th;:first-child{
   width: 130px;
 }
 
@@ -769,7 +770,7 @@ margin-bottom: 6px;
 
 .score-label-title {
   min-width: 0;
-    font-size: var(--font-size-l);
+    font-size: var(--font-size-m);
     font-weight: 100;
 }
 
@@ -827,7 +828,7 @@ margin-bottom: 6px;
 .score-row-sub {
     font-family: var(--font-basic);
     display: block;
-    font-size: var(--font-size-s);
+    font-size: var(--font-size-xs);
     font-weight: 400;
     letter-spacing: 0;
     margin-top: 2px;
@@ -1808,6 +1809,7 @@ margin-bottom: 6px;
 }
 
 /* ヘッダー */
+/*
 .batchsum-th {
   background: var(--navy-200);
   border: 1px solid #d0d5e0;
@@ -1819,7 +1821,7 @@ margin-bottom: 6px;
   color: var(--navy-700);
   text-align: center;
   white-space: nowrap;
-}
+}*/
 .batchsum-th-url {
   text-align: left;
   width: 35%;
@@ -1837,13 +1839,14 @@ margin-bottom: 6px;
 }
 
 /* ヘッダー列のトーン色 */
+/*
 .batchsum-th.tone-critical { color: var(--color-crilical); }
 .batchsum-th.tone-serious  { color: var(--color-serious);  }
 .batchsum-th.tone-moderate { color: var(--color-moderate); }
 .batchsum-th.tone-minor    { color: var(--color-minor);    }
 .batchsum-th.tone-pass     { color: var(--color-multi);    }
 .batchsum-th.tone-neutral  { color: var(--navy-400);       }
-
+*/
 /* 行 */
 .batchsum-row {
   cursor: pointer;
@@ -1852,9 +1855,7 @@ margin-bottom: 6px;
 .batchsum-row:hover td {
   background: #f4f6fb;
 }
-.batchsum-row.has-violations .batchsum-url {
-  border-left: 3px solid var(--color-serious);
-}
+
 
 /* セル共通 */
 .batchsum-td {
@@ -1892,10 +1893,11 @@ margin-bottom: 6px;
   font-size: var(--font-size-l);
   letter-spacing: -0.02em;
 }
+/*
 .batchsum-score-value.is-high { color: var(--color-multi);    }
 .batchsum-score-value.is-mid  { color: var(--color-moderate); }
 .batchsum-score-value.is-low  { color: var(--color-serious);  }
-
+*/
 /* 数値セル */
 .batchsum-num {
   font-family: var(--font-latin);
