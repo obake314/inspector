@@ -775,7 +775,7 @@ h1 {
   line-height: 1;
 }
 .score-label:after{
-  content: 総合スコア（合計値ではありません）;
+  content: "総合スコア（合計値ではありません）";
   display: block;
   font-size: var(--font-size-xs);
   color: var(--navy-400);
