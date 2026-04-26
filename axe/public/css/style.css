@@ -20,9 +20,12 @@
   --space-s:8px;
   --space-l:24px;
   --space-xl:48px;
+
+  --font-size-xs:13px;  
   --font-size-s:16px;
   --font-size-m:19px;
-  --font-size-l:36px;
+  --font-size-l:26px;
+  --font-size-xl:36px;
 }
 
 * {
@@ -48,18 +51,14 @@ header {
   align-items: flex-start; 
   justify-content: space-between;
 }
-
-
-
 .header_container{
   display: flex;
   align-items: center;
   gap: var(--space-m);  
 }
-
 h1 {
   font-family: var(--font-latin);
-  font-size: 30px;
+  font-size: var(--font-size-xl);
   font-weight: 600;
   letter-spacing: 0.02em;
   margin-bottom: 4px;
@@ -620,7 +619,7 @@ h1 {
 
 .pre-check-panel-item small {
   color: var(--navy-400);
-  font-size: 16px;
+  font-size:  var(--font-size-s);
   margin-left: 4px;
   font-family: var(--font-latin);
 }
@@ -651,7 +650,7 @@ h1 {
 }
 .summary-item .count {
   font-family: var(--font-latin);
-  font-size: 26px;
+  font-size: var(--font-size-l)
   font-weight: 600;
   color: var(--navy-700);
 }
@@ -721,7 +720,7 @@ h1 {
 }
 .score-label {
   font-family: var(--font-latin);
-  font-size: 20px;
+  font-size: var(--font-size-l);
   line-height: 1;
   font-weight: 500;
 }
@@ -859,7 +858,7 @@ h1 {
   line-height: 1.2;
 }
 .improvement-plan-head h2 {
-  font-size: 24px;
+  font-size: var(--font-size-l);
 }
 .improvement-plan-view {
   border-top: 1px solid var(--navy-200);
@@ -966,12 +965,12 @@ h1 {
 }
 .score-chip{
   font-family: var(--font-latin);
-  font-size: 25px;
+  font-size: var(--font-size-l);
 }
 .score-num,
 .score-dash {
   font-family: var(--font-latin);
-  font-size: 24px;
+  font-size: var(--font-size-l);
 }
 
 .tabs {
@@ -1302,13 +1301,13 @@ h1 {
 .item-summary {
   padding: 0 var(--space-m) 5px var(--space-m);
   margin-left: var(--space-l);
-  font-size: 15px;
+  font-size: var(--font-size-s);
   color: var(--navy-400);
 }
 .item-count {
   padding: 0 var(--space-m) var(--space-s) var(--space-m);
   margin-left: var(--space-l);
-  font-size: 15px;
+  font-size: var(--font-size-s);
   color: var(--navy-400);
 }
 .item-locations {
@@ -1322,7 +1321,7 @@ h1 {
   opacity: 0.7;
 }
 .item-uncovered-note {
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   color: #94a3b8;
   background: #f1f5f9;
   border: 1px solid #e2e8f0;
@@ -1346,7 +1345,7 @@ h1 {
 }
 .item-source-tool {
   font-family: var(--font-basic);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--navy-400);
   opacity: 0.8;
 }
@@ -1372,13 +1371,13 @@ h1 {
   border-left: 3px solid var(--color-multi);
 }
 .item-advice-title {
-  font-size: 12px;
+  font-size: var(--font-size-s);
   font-weight: 700;
   color: var(--color-multi);
   margin-bottom: 2px;
 }
 .item-advice-text {
-  font-size: 14px;
+  font-size: var(--font-size-s);
   color: var(--navy-700);
   line-height: 1.6;
 }
@@ -1386,7 +1385,7 @@ h1 {
   transform: rotate(180deg);
 }
 .location-row {
-  font-size: 15px;
+  font-size: var(--font-size-s);
   padding: 5px var(--space-s);
   background: var(--navy-200);
   margin-bottom: 3px;
@@ -1659,7 +1658,7 @@ h1 {
 }
 
 .batch-progress-label {
-    font-size: 17px;
+    font-size: var(--font-size-m);
     margin-bottom: var(--space-s);
     line-height: 1;
     letter-spacing: 0.05em;
@@ -1766,7 +1765,7 @@ h1 {
   background: var(--navy-200);
   border: 1px solid #d0d5e0;
   padding: 10px 12px;
-  font-size: 15px;
+  font-size: var(--font-size-s);
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -1782,10 +1781,10 @@ h1 {
 .batchsum-th-score {
   min-width: 88px;
   line-height: 1.3;
-  font-size: 20px;
+  font-size: var(--font-size-l);
 }
 .batchsum-th-sub {
-  font-size: 13px;
+  font-size: var(--font-size-s);
   font-weight: 400;
   letter-spacing: 0.03em;
 }
@@ -1817,7 +1816,7 @@ h1 {
   text-align: center;
   background: var(--color-white);
   vertical-align: middle;
-  font-size: 14px;
+  font-size: var(--font-size-s);
 }
 
 /* URL セル */
@@ -1827,7 +1826,7 @@ h1 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
+  font-size: var(--font-size-s);
   color: var(--navy-700);
 }
 
@@ -1838,12 +1837,12 @@ h1 {
 }
 .batchsum-total {
   font-family: var(--font-latin);
-  font-size: 12px;
+  font-size: var(--font-size-s);
   color: var(--navy-400);
 }
 .batchsum-score-value {
   font-family: var(--font-latin);
-  font-size: 24px;
+  font-size: var(--font-size-l);
   letter-spacing: -0.02em;
 }
 .batchsum-score-value.is-high { color: var(--color-multi);    }
@@ -1854,7 +1853,7 @@ h1 {
 .batchsum-num {
   font-family: var(--font-latin);
   display: inline-block;
-  font-size: 20px;
+  font-size: var(--font-size-l);
   font-weight: 500;
   min-width: 24px;
   line-height: 1;
@@ -1863,7 +1862,7 @@ h1 {
 .batchsum-num.is-zero {
   color: var(--navy-400);
   font-weight: 400;
-  font-size: 13px;
+  font-size: var(--font-size-s);
 }
 .batchsum-num.tone-critical { color: var(--color-crilical); }
 .batchsum-num.tone-serious  { color: var(--color-serious);  }
@@ -1876,7 +1875,7 @@ h1 {
 .batchsum-error {
   text-align: left;
   color: var(--color-serious);
-  font-size: 14px;
+  font-size: var(--font-size-s);
 }
 
 footer {
@@ -1921,7 +1920,7 @@ footer small {
 }
 .login-box h2 {
   font-family: var(--font-latin);
-  font-size: 26px;
+  font-size: var(--font-size-l);
   font-weight: 600;
   margin-bottom: var(--space-s);
   line-height: 1;
@@ -2008,7 +2007,7 @@ footer small {
 .settings-box h2 button {
   background: none;
   border: none;
-  font-size: 22px;
+  font-size: var(--font-size-l);
   cursor: pointer;
   color: var(--navy-400);
 }
@@ -2104,7 +2103,7 @@ footer small {
 .help-section-title {
     margin-top: 28px;
     margin-bottom: 16px;
-    font-size: 1.1rem;
+  font-size: var(--font-size-xs);
     font-weight: 600;
     border-bottom: 1px solid #e5e7eb;
     padding-bottom: 8px;
@@ -2136,7 +2135,7 @@ footer small {
     justify-content: center;
     cursor: pointer;
     color: var(--navy-400);
-    font-size: 30px;
+    font-size: var(--font-size-xl);
     font-weight: 700;
     line-height: 1;
 }
@@ -2160,7 +2159,7 @@ footer small {
 .help-model-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: var(--font-size-s);
 }
 .help-model-table th,
 .help-model-table td {
@@ -2188,7 +2187,7 @@ footer small {
 }
 .config-status-item {
   font-family: var(--font-latin);
-  font-size: 15px;
+  font-size: var(--font-size-s);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -2227,7 +2226,7 @@ footer small {
 }
 .config-status-ai .st-label {
   font-family: var(--font-latin);
-  font-size: 14px;
+  font-size: var(--font-size-s);
   letter-spacing: 0.05em;
   line-height: 1;
 }
@@ -2240,7 +2239,7 @@ footer small {
 }
 .config-status-ai .st-key {
   font-family: var(--font-latin);
-  font-size: 13px;
+  font-size: var(--font-size-s);
   font-weight: 700;
   letter-spacing: 0.04em;
   line-height: 1;
