@@ -746,7 +746,7 @@ h1 {
 
 .batchsum-td,
 .scoretable tbody td{
-  padding: var(--space-s);
+  padding:var(--space-m) var(--space-s);
   text-align:center;
   border-right:1px solid var(--navy-200);
   background: var(--color-white)
@@ -769,8 +769,15 @@ h1 {
 }
 .score-label {
   font-family: var(--font-latin);
-  font-size: var(--font-size-l);
+  font-size: var(--font-size-m);
   line-height: 1;
+}
+.score-label:after{
+  content: 総合スコア（合計値ではありません）;
+  display: block;
+  font-size: var(--font-size-xs);
+  color: var(--navy-400);
+  margin-top: 4px;
 }
 
 .score-label-content {
