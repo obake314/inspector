@@ -16,10 +16,11 @@
   --color-minor: #6b7280;
   --font-basic:"Noto Sans JP", sans-serif;
   --font-latin:"Roboto Condensed", sans-serif;
-  --space-m:16px;
+  
   --space-s:8px;
-  --space-l:24px;
-  --space-xl:48px;
+  --space-m:16px;
+  --space-l:32px;
+  --space-xl:64px;
 
   --font-size-xs:13px;  
   --font-size-s:16px;
@@ -66,7 +67,7 @@ h1 {
   font-size: var(--font-size-xl);
   font-weight: 600;
   letter-spacing: 0.02em;
-  margin-bottom: 4px;
+  margin-bottom: var();
   line-height: 1;
 }
 .subtitle {
@@ -658,6 +659,7 @@ h1 {
 
 .results {
   display: none;
+  margin-top: 36px;
 }
 .results.visible {
   display: block;
@@ -939,9 +941,14 @@ h1 {
   font-weight: 700;
   border: 1px solid var(--navy-200);
   background: var(--navy-200);
-  color: var(--navy-700);
+  color: var(--color-white);
   padding: 2px 6px;
 }
+
+.improvement-action.priority-low .improvement-priority {background: var(--color-minor);}
+.improvement-action.priority-medium .improvement-priority {background: var(--color-moderate);}
+.improvement-action.priority-high .improvement-priority {background: var(--color-serious);}
+
 .improvement-plan-summary {
   color: var(--navy-700);
   margin-bottom: var(--space-m);
