@@ -3929,6 +3929,37 @@
             return [...WCAG_SC.A, ...WCAG_SC.AA];
         }
 
+        // WCAG SC → impact 影響度マップ（PLAY / EXT / DEEP など axe-core 以外のスキャン用）
+        const SC_IMPACT_MAP = {
+            // critical — 完全にアクセスを阻害
+            '1.1.1': 'critical', '2.1.1': 'critical', '2.1.2': 'critical',
+            // serious — 深刻な障壁
+            '1.2.1': 'serious', '1.2.2': 'serious',
+            '1.3.1': 'serious', '1.4.1': 'serious', '1.4.3': 'serious',
+            '2.4.1': 'serious', '2.4.3': 'serious', '2.4.4': 'serious',
+            '3.3.1': 'serious', '3.3.2': 'serious',
+            '4.1.1': 'serious', '4.1.2': 'serious',
+            // moderate — 中程度の障壁
+            '1.2.3': 'moderate', '1.2.4': 'moderate', '1.2.5': 'moderate',
+            '1.3.2': 'moderate', '1.3.3': 'moderate', '1.3.4': 'moderate', '1.3.5': 'moderate',
+            '1.4.4': 'moderate', '1.4.5': 'moderate', '1.4.10': 'moderate',
+            '1.4.11': 'moderate', '1.4.12': 'moderate', '1.4.13': 'moderate',
+            '2.4.2': 'moderate', '2.4.5': 'moderate', '2.4.6': 'moderate',
+            '2.4.7': 'moderate', '2.4.11': 'moderate', '2.4.12': 'moderate', '2.4.13': 'moderate',
+            '2.5.3': 'moderate', '2.5.7': 'moderate', '2.5.8': 'moderate',
+            '3.1.1': 'moderate', '3.1.2': 'moderate',
+            '3.2.1': 'moderate', '3.2.2': 'moderate', '3.2.3': 'moderate',
+            '3.2.4': 'moderate', '3.2.6': 'moderate',
+            '3.3.3': 'moderate', '3.3.4': 'moderate', '3.3.7': 'moderate', '3.3.8': 'moderate',
+            '4.1.3': 'moderate',
+            // minor — 軽微
+            '2.1.4': 'minor', '2.2.1': 'minor', '2.2.2': 'minor',
+            '2.3.1': 'minor', '2.5.1': 'minor', '2.5.2': 'minor',
+        };
+        function getScImpact(sc) {
+            return SC_IMPACT_MAP[sc] || 'serious';
+        }
+
         function splitCompositeSc(scText) {
             if (!scText) return [];
             const targetScList = getTargetScList();
@@ -4122,7 +4153,7 @@
                     : r.status === 'not_applicable' ? 'na' : 'unverified';
                 splitCompositeSc(r.sc).forEach(sc => {
                     const dkey = `DEEP:${r.sc}:SC:${sc}`;
-                    const d = applyDecisionToStatus(dkey, rawStatus, 'serious', decisionScope);
+                    const d = applyDecisionToStatus(dkey, rawStatus, getScImpact(sc), decisionScope);
                     merge(sc, d.status, d.impact, dkey);
                 });
             });
@@ -4148,16 +4179,16 @@
             const scSet = new Set(getTargetScList());
             const rank = { fail: 0, pass: 1, unverified: 2, na: 3 };
             const scMap = {};
-            function merge(sc, status, dkey) {
+            function merge(sc, status, impact, dkey) {
                 if (!sc || !scSet.has(sc)) return;
                 const cur = scMap[sc];
                 const isManual = dkey && hasManualDecision(dkey, decisionScope);
                 if (cur && cur.isManual && !isManual) return;
                 if (isManual) {
-                    scMap[sc] = { status, isManual: true };
+                    scMap[sc] = { status, impact, isManual: true };
                     return;
                 }
-                if (!cur || rank[status] < rank[cur.status]) scMap[sc] = { status };
+                if (!cur || rank[status] < rank[cur.status]) scMap[sc] = { status, impact };
             }
             playData.forEach(r => {
                 const rawStatus = r.status === 'fail' ? 'fail'
@@ -4165,20 +4196,21 @@
                     : r.status === 'not_applicable' ? 'na' : 'unverified';
                 splitCompositeSc(r.sc).forEach(sc => {
                     const dkey = `PLAY:${r.sc}:SC:${sc}`;
-                    const d = applyDecisionToStatus(dkey, rawStatus, 'serious', decisionScope);
-                    merge(sc, d.status, dkey);
+                    const d = applyDecisionToStatus(dkey, rawStatus, getScImpact(sc), decisionScope);
+                    merge(sc, d.status, d.impact, dkey);
                 });
             });
             let fail = 0, pass = 0, na = 0, unverified = 0;
-            Object.values(scMap).forEach(({ status }) => {
-                if (status === 'fail') fail++;
+            const imp = { critical: 0, serious: 0, moderate: 0, minor: 0 };
+            Object.values(scMap).forEach(({ status, impact }) => {
+                if (status === 'fail') { fail++; if (imp[impact] !== undefined) imp[impact]++; else imp.serious++; }
                 else if (status === 'pass') pass++;
                 else if (status === 'na') na++;
                 else unverified++;
             });
             const total = fail + pass + na + unverified;
             return { total,
-                     critical: 0, serious: fail, moderate: 0, minor: 0,
+                     critical: imp.critical, serious: imp.serious, moderate: imp.moderate, minor: imp.minor,
                      pass, na, unverified,
                      score: calculateScanAchievementRate(pass, total, unverified) };
         }
@@ -4188,16 +4220,16 @@
             const scSet = new Set(getTargetScList());
             const rank = { fail: 0, pass: 1, unverified: 2, na: 3 };
             const scMap = {};
-            function merge(sc, status, dkey) {
+            function merge(sc, status, impact, dkey) {
                 if (!sc || !scSet.has(sc)) return;
                 const cur = scMap[sc];
                 const isManual = dkey && hasManualDecision(dkey, decisionScope);
                 if (cur && cur.isManual && !isManual) return;
                 if (isManual) {
-                    scMap[sc] = { status, isManual: true };
+                    scMap[sc] = { status, impact, isManual: true };
                     return;
                 }
-                if (!cur || rank[status] < rank[cur.status]) scMap[sc] = { status };
+                if (!cur || rank[status] < rank[cur.status]) scMap[sc] = { status, impact };
             }
             extData.forEach(r => {
                 const rawStatus = r.status === 'fail' ? 'fail'
@@ -4205,20 +4237,21 @@
                     : r.status === 'not_applicable' ? 'na' : 'unverified';
                 splitCompositeSc(r.sc).forEach(sc => {
                     const dkey = `EXT:${r.sc}:SC:${sc}`;
-                    const d = applyDecisionToStatus(dkey, rawStatus, 'serious', decisionScope);
-                    merge(sc, d.status, dkey);
+                    const d = applyDecisionToStatus(dkey, rawStatus, getScImpact(sc), decisionScope);
+                    merge(sc, d.status, d.impact, dkey);
                 });
             });
             let fail = 0, pass = 0, na = 0, unverified = 0;
-            Object.values(scMap).forEach(({ status }) => {
-                if (status === 'fail') fail++;
+            const imp = { critical: 0, serious: 0, moderate: 0, minor: 0 };
+            Object.values(scMap).forEach(({ status, impact }) => {
+                if (status === 'fail') { fail++; if (imp[impact] !== undefined) imp[impact]++; else imp.serious++; }
                 else if (status === 'pass') pass++;
                 else if (status === 'na') na++;
                 else unverified++;
             });
             const total = fail + pass + na + unverified;
             return { total,
-                     critical: 0, serious: fail, moderate: 0, minor: 0,
+                     critical: imp.critical, serious: imp.serious, moderate: imp.moderate, minor: imp.minor,
                      pass, na, unverified,
                      score: calculateScanAchievementRate(pass, total, unverified) };
         }
@@ -4232,22 +4265,23 @@
             const targetItems = manualCheckItems
                 .map((item, i) => ({ item, i }))
                 .filter(({ item }) => (lo[item.level] || 2) <= lim && item.aiTarget && !autoPassRefs.has(item.ref));
+            const imp = { critical: 0, serious: 0, moderate: 0, minor: 0 };
             targetItems.forEach(({ item, i }) => {
                 if ((lo[item.level] || 2) > lim) return;
                 const r = aiData[i];
                 const rawStatus = !r ? 'unverified' : r.status === 'pass' ? 'pass'
                     : r.status === 'fail' ? 'fail'
                     : r.status === 'not_applicable' ? 'na' : 'unverified';
-                const { status } = applyDecisionToStatus(`MULTI:${i}`, rawStatus, 'serious', decisionScope);
-                if (status === 'pass') pass++;
-                else if (status === 'fail') fail++;
-                else if (status === 'na') na++;
+                const d = applyDecisionToStatus(`MULTI:${i}`, rawStatus, getScImpact(item.ref), decisionScope);
+                if (d.status === 'pass') pass++;
+                else if (d.status === 'fail') { fail++; if (imp[d.impact] !== undefined) imp[d.impact]++; else imp.serious++; }
+                else if (d.status === 'na') na++;
                 else unverified++;
             });
             const total = fail + pass + na + unverified;
             return { total,
                      useOwnTotal: true,
-                     critical: 0, serious: fail, moderate: 0, minor: 0,
+                     critical: imp.critical, serious: imp.serious, moderate: imp.moderate, minor: imp.minor,
                      pass, na, unverified,
                      score: calculateScanAchievementRate(pass, total, unverified) };
         }
@@ -4262,7 +4296,7 @@
             return {
                 scs: scs.length ? scs : ['3.2.3', '3.2.4'],
                 rawStatus,
-                impact: rawStatus === 'fail' ? 'serious' : null
+                impact: rawStatus === 'fail' ? getScImpact(scs[0] || '3.2.3') : null
             };
         }
 
@@ -4350,7 +4384,7 @@
                                : r.status === 'not_applicable' ? 'na' : 'unverified';
                     splitCompositeSc(r.sc).forEach(sc => {
                         const dkey = `EXT:${r.sc}:SC:${sc}`;
-                        const d = applyDecisionToStatus(dkey, rawStatus, 'serious', decisionScope);
+                        const d = applyDecisionToStatus(dkey, rawStatus, getScImpact(sc), decisionScope);
                         merge(sc, d.status, d.impact, 'EXT', dkey);
                     });
                 });
@@ -4361,7 +4395,7 @@
                                : r.status === 'not_applicable' ? 'na' : 'unverified';
                     splitCompositeSc(r.sc).forEach(sc => {
                         const dkey = `DEEP:${r.sc}:SC:${sc}`;
-                        const d = applyDecisionToStatus(dkey, rawStatus, 'serious', decisionScope);
+                        const d = applyDecisionToStatus(dkey, rawStatus, getScImpact(sc), decisionScope);
                         merge(sc, d.status, d.impact, 'DEEP', dkey);
                     });
                 });
@@ -4372,7 +4406,7 @@
                                : r.status === 'not_applicable' ? 'na' : 'unverified';
                     splitCompositeSc(r.sc).forEach(sc => {
                         const dkey = `PLAY:${r.sc}:SC:${sc}`;
-                        const d = applyDecisionToStatus(dkey, rawStatus, 'serious', decisionScope);
+                        const d = applyDecisionToStatus(dkey, rawStatus, getScImpact(sc), decisionScope);
                         merge(sc, d.status, d.impact, 'PLAY', dkey);
                     });
                 });
@@ -4387,7 +4421,7 @@
                     const rawStatus = !r ? 'unverified' : r.status === 'pass' ? 'pass'
                                : r.status === 'fail' ? 'fail'
                                : r.status === 'not_applicable' ? 'na' : 'unverified';
-                    const d = applyDecisionToStatus(`MULTI:${i}`, rawStatus, 'serious', decisionScope);
+                    const d = applyDecisionToStatus(`MULTI:${i}`, rawStatus, getScImpact(item.ref), decisionScope);
                     merge(item.ref, d.status, d.impact, 'MULTI', `MULTI:${i}`);
                 });
             }
