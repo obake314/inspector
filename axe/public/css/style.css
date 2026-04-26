@@ -2009,7 +2009,7 @@ footer small {
 }
 .login-error {
   color: var(--color-serious);
-  font-size: var(--font-size-m);
+  font-size: var(--font-size-s);
   margin-bottom: var(--space-m);
   display: none;
 }
