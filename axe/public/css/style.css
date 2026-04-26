@@ -20,8 +20,8 @@
   --space-s:8px;
   --space-l:24px;
   --space-xl:48px;
-  --font-size-s:14px;
-  --font-size-m:16px;
+  --font-size-s:16px;
+  --font-size-m:19px;
   --font-size-l:36px;
 }
 
@@ -178,7 +178,7 @@ h1 {
 }
 .scan-status-text {
   margin-top: var(--space-s);
-  font-size: 15px;
+  font-size: var(--font-size-s);
   color: var(--navy-400);
   display: none;
 }
@@ -484,7 +484,6 @@ h1 {
   padding: 10px 12px;
   border-bottom: 1px solid rgba(0,0,0,0.08);
   cursor: pointer;
-  border-radius: 6px;
   transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .pre-check-item:last-child {
@@ -540,7 +539,7 @@ h1 {
 }
 .pre-check-item small {
   color: var(--navy-400);
-  font-size: 11px;
+  font-size: var(--font-size-s);
   line-height: 1.5;
 }
 .pre-check-panel {
@@ -555,7 +554,7 @@ h1 {
 }
 .pre-check-panel-label {
   color: var(--navy-400);
-  font-size: 12px;
+  font-size: var(--font-size-s);
   width: 100%;
   margin-bottom: 2px;
 }
@@ -617,6 +616,13 @@ h1 {
 .pre-check-panel-item span {
   color: var(--navy-700);
   font-weight: 500;
+}
+
+.pre-check-panel-item small {
+  color: var(--navy-400);
+  font-size: 16px;
+  margin-left: 4px;
+  font-family: var(--font-latin);
 }
 
 .results {
@@ -688,7 +694,7 @@ h1 {
 }
 
 .scoretable thead th.label-all span{
-  font-size: 13px;
+  font-size: var(--font-size-s);
   font-weight: normal;
 }
 .scoretable tbody td{
@@ -738,7 +744,7 @@ h1 {
   color: inherit;
   cursor: pointer;
   font-family: var(--font-basic);
-  font-size: 11px;
+  font-size: var(--font-size-s);
   font-weight: 700;
   line-height: 1;
   padding: 6px 8px;
@@ -777,7 +783,7 @@ h1 {
 .score-rescan-progress-label {
   margin-top: 4px;
   font-family: var(--font-basic);
-  font-size: 10px;
+  font-size: var(--font-size-s);
   font-weight: 600;
   line-height: 1.2;
   white-space: nowrap;
@@ -786,7 +792,7 @@ h1 {
 .score-row-sub {
     font-family: var(--font-basic);
     display: block;
-    font-size: 14px;
+    font-size: var(--font-size-m);
     font-weight: 400;
     letter-spacing: 0;
     margin-top: 2px;
@@ -801,7 +807,6 @@ h1 {
   font-weight: 600;
   color: #fff;
   background: var(--color-multi);
-  border-radius: 3px;
   padding: 1px 4px;
   margin-left: 2px;
   vertical-align: middle;
@@ -812,11 +817,10 @@ h1 {
 .ai-token-warn {
   display: inline-block;
   font-family: var(--font-basic);
-  font-size: 11px;
+  font-size: var(--font-size-s);
   font-weight: 600;
   color: #fff;
   background: #d97706;
-  border-radius: 4px;
   padding: 1px 6px;
   margin-right: 4px;
   vertical-align: middle;
@@ -843,7 +847,7 @@ h1 {
 }
 .improvement-plan-kicker {
   font-family: var(--font-latin);
-  font-size: 11px;
+  font-size: var(--font-size-s);
   font-weight: 700;
   letter-spacing: 0;
   color: var(--color-multi);
@@ -870,14 +874,14 @@ h1 {
   margin-bottom: var(--space-s);
 }
 .improvement-plan-view-head h3 {
-  font-size: 18px;
+  font-size: var(--font-size-m);
 }
 .improvement-plan-status,
 .improvement-priority {
   display: inline-block;
   min-width: 36px;
   text-align: center;
-  font-size: 11px;
+  font-size: var(--font-size-s);
   font-weight: 700;
   border: 1px solid var(--navy-200);
   background: var(--navy-200);
@@ -925,7 +929,7 @@ h1 {
   border-left: 4px solid var(--color-multi);
 }
 .improvement-action-meta {
-  font-size: 12px;
+  font-size: var(--font-size-s);
   color: var(--navy-400);
   margin-bottom: 4px;
 }
@@ -980,7 +984,7 @@ h1 {
   background: none;
   border: none;
   padding: var(--space-m);
-  font-size: 14px;
+  font-size: var(--font-size-s);
   color: var(--navy-400);
   cursor: pointer;
   border-bottom: 2px solid transparent;
@@ -1323,7 +1327,6 @@ h1 {
   background: #f1f5f9;
   border: 1px solid #e2e8f0;
   padding: 1px 6px;
-  border-radius: 3px;
   margin-left: 4px;
   white-space: nowrap;
 }
@@ -1642,6 +1645,7 @@ h1 {
 .batch-progress {
   margin-top: 16px;
   display: none;
+  font-family: var(--font-latin);
 }
 .batch-progress.visible {
   display: block;
@@ -1655,10 +1659,13 @@ h1 {
 }
 
 .batch-progress-label {
-  font-size: var(--font-size-m);
-  color: var(--navy-400);
-  margin-bottom: var(--space-s);
+    font-size: 17px;
+    margin-bottom: var(--space-s);
+    line-height: 1;
+    letter-spacing: 0.05em;
+    font-weight: normal;
 }
+
 .batch-progress-track {
   height: var(--space-s);
   background: var(--navy-200);
@@ -2191,6 +2198,7 @@ footer small {
   flex-direction: column;
   width: 90px;
   justify-content: center;
+  line-height: 1;
 }
 
 .config-status-item .st {
@@ -2219,9 +2227,8 @@ footer small {
 }
 .config-status-ai .st-label {
   font-family: var(--font-latin);
-  font-size: 13px;
+  font-size: 14px;
   letter-spacing: 0.05em;
-  opacity: 0.7;
   line-height: 1;
 }
 .config-status-ai .st-model {

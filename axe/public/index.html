@@ -2782,7 +2782,7 @@
             if (!batchUserDeclarations[url]) batchUserDeclarations[url] = { ...userDeclarations };
             const d = batchUserDeclarations[url];
             const chk = (id, val, label, sc) =>
-                `<label class="pre-check-panel-item"><input type="checkbox" id="bpc_${id}_${encodeURIComponent(url)}" ${val ? 'checked' : ''}><span>${label}</span><small style="color:var(--navy-400);font-size:11px;margin-left:4px;">${sc}</small></label>`;
+                `<label class="pre-check-panel-item"><input type="checkbox" id="bpc_${id}_${encodeURIComponent(url)}" ${val ? 'checked' : ''}><span>${label}</span><small>${sc}</small></label>`;
             el.innerHTML = `<div class="pre-check-panel">
                 <span class="pre-check-panel-label">事前申告（このURLの該当なし項目）</span>
                 ${chk('noMedia',     d.noMedia,     '音声・動画なし',           '1.2.1-1.2.5 / 1.4.2')}
