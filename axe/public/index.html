@@ -78,7 +78,7 @@
             </div>
             <div class="settings-group">
                 <label>アプリパスワード変更</label>
-                <input type="password" id="settNewPassword" placeholder="新しいパスワード（変更する場合のみ）">
+                <input type="password" id="settNewPassword" placeholder="新しいパスワード（変更する場合）">
                 <div class="hint">空欄の場合は変更しません</div>
             </div>
             <!-- AAA βは一時停止中。再開時はUIとincludeAAA送信を同時に戻す。
@@ -171,11 +171,11 @@
                         <span class="viewport-mode-title">ビュー</span>
                         <label class="viewport-mode-option">
                             <input type="radio" name="viewportMode" value="desktop" id="viewportModeDesktop" checked>
-                            <span>PCのみ</span>
+                            <span>PC</span>
                         </label>
                         <label class="viewport-mode-option">
                             <input type="radio" name="viewportMode" value="mobile" id="viewportModeMobile">
-                            <span>SPのみ</span>
+                            <span>SP</span>
                         </label>
                         <label class="viewport-mode-option">
                             <input type="radio" name="viewportMode" value="both" id="viewportModeBoth">
@@ -266,37 +266,37 @@
                             <label class="pre-check-item">
                                 <input type="checkbox" id="preCheckNoMedia">
                                 <span>音声・動画コンテンツなし</span>
-                                <small>1.2.1 / 1.2.2 / 1.2.3 / 1.2.4 / 1.2.5 / 1.4.2 を合格扱い</small>
+                                <small>SKIP : 1.2.1 / 1.2.2 / 1.2.3 / 1.2.4 / 1.2.5 / 1.4.2</small>
                             </label>
                             <label class="pre-check-item">
                                 <input type="checkbox" id="preCheckNoForm">
                                 <span>入力フォームなし</span>
-                                <small>3.3.1 / 3.3.3 / 3.3.4 / 3.3.7 を合格扱い</small>
+                                <small>SKIP : 3.3.1 / 3.3.3 / 3.3.4 / 3.3.7</small>
                             </label>
                             <label class="pre-check-item">
                                 <input type="checkbox" id="preCheckNoAuth">
                                 <span>認証機能なし</span>
-                                <small>3.3.8 を合格扱い</small>
+                                <small>SKIP : 3.3.8</small>
                             </label>
                             <label class="pre-check-item">
                                 <input type="checkbox" id="preCheckNoMoving">
                                 <span>動くコンテンツ・点滅なし</span>
-                                <small>2.2.2 / 2.3.1 を合格扱い</small>
+                                <small>SKIP : 2.2.2 / 2.3.1</small>
                             </label>
                             <label class="pre-check-item">
                                 <input type="checkbox" id="preCheckNoTimelimit">
                                 <span>タイムリミットなし</span>
-                                <small>2.2.1 を合格扱い</small>
+                                <small>SKIP : 2.2.1</small>
                             </label>
                             <label class="pre-check-item">
                                 <input type="checkbox" id="preCheckNoGesture">
                                 <span>ジェスチャ・ドラッグ・モーション操作なし</span>
-                                <small>2.5.1 / 2.5.2 / 2.5.4 / 2.5.7 を合格扱い</small>
+                                <small>SKIP : 2.5.1 / 2.5.2 / 2.5.4 / 2.5.7</small>
                             </label>
                             <label class="pre-check-item">
                                 <input type="checkbox" id="preCheckNoPartialLanguage">
                                 <span>一部分の他言語記述なし</span>
-                                <small>3.1.2 を合格扱い</small>
+                                <small>SKIP : 3.1.2</small>
                             </label>
                         </div>
                     </details>
@@ -5020,10 +5020,10 @@
             function buildEstimateText(urlCount, viewportMode, scanTypes, noUrl) {
                 if (noUrl) return '<span style="color:#94a3b8">URLを入力すると予測時間を表示します</span>';
                 const { minTotal, maxTotal } = estimateScanDuration({ urlCount, viewportMode, scanTypes });
-                const fmt = v => v < 1 ? `${Math.round(v * 60)}秒` : `${Math.round(v)}分`;
+                const fmt = v => v < 1 ? `${Math.round(v * 60)} sec` : `${Math.round(v)} min`;
                 const vpLabel = viewportMode === 'both' ? 'PC+SP' : viewportMode === 'sp' ? 'SP' : 'PC';
                 const typeLabel = scanTypes.join('+');
-                return `予測時間: 約${fmt(minTotal)}〜${fmt(maxTotal)} / ${urlCount}ページ / ${vpLabel} / ${typeLabel}`;
+                return `EXPECTED : ${fmt(minTotal)} - ${fmt(maxTotal)} / Pages : ${urlCount} / ${vpLabel} / ${typeLabel}`;
             }
 
             if (singleEl) {
