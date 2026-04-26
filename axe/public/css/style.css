@@ -774,13 +774,7 @@ h1 {
   font-size: var(--font-size-m);
   line-height: 1;
 }
-.score-label:after{
-  content: "総合スコア（合計値ではありません）";
-  display: block;
-  font-size: var(--font-size-xs);
-  color: var(--navy-400);
-  margin-top: 4px;
-}
+
 
 .score-label-content {
   display: flex;
@@ -840,10 +834,11 @@ h1 {
 .score-rescan-progress-label {
   margin-top: 4px;
   font-family: var(--font-basic);
-  font-size: var(--font-size-s);
+  font-size: var(--font-size-xs);
   font-weight: 600;
   line-height: 1.2;
   white-space: nowrap;
+  text-align: center;
 }
 
 .score-row-sub {
