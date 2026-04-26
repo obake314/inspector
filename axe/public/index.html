@@ -8,6 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body>
     <!-- Login overlay -->
@@ -1583,7 +1584,8 @@
             const rateA  = (aPass + aFail)   > 0 ? Math.round(aPass  / (aPass  + aFail)  * 100) : null;
             const rateAA = (aaPass + aaFail)  > 0 ? Math.round(aaPass / (aaPass + aaFail) * 100) : null;
 
-            return [
+            const totalUnverified = summaryData.filter(r => r[3] === '未検証').length;
+            const rows = [
                 ['評価報告詳細サマリー'],
                 ['対象URL', topUrl || ''],
                 [],
@@ -1599,6 +1601,120 @@
                 ['SC', '項目', '適合レベル', '結果', '備考'],
                 ...summaryData
             ];
+            return { rows, stats: { pass: totalPass, fail: totalFail, unverified: totalUnverified } };
+        }
+
+        // 円グラフ PNG を canvas で描画し base64 を返す
+        function drawPieChartPng(slices, size = 300) {
+            const canvas = document.createElement('canvas');
+            canvas.width = size; canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, size, size);
+            const total = slices.reduce((s, x) => s + (x.value || 0), 0);
+            if (total === 0) return null;
+            const cx = size / 2, cy = size * 0.44;
+            const r = size * 0.35, innerR = r * 0.52;
+            let angle = -Math.PI / 2;
+            slices.forEach(({ value, color }) => {
+                if (!value) return;
+                const sweep = (value / total) * 2 * Math.PI;
+                ctx.beginPath(); ctx.moveTo(cx, cy);
+                ctx.arc(cx, cy, r, angle, angle + sweep); ctx.closePath();
+                ctx.fillStyle = color; ctx.fill();
+                angle += sweep;
+            });
+            // ドーナツ穴
+            ctx.beginPath(); ctx.arc(cx, cy, innerR, 0, 2 * Math.PI);
+            ctx.fillStyle = '#ffffff'; ctx.fill();
+            // 中央テキスト（達成率）
+            const passSlice = slices.find(s => s.label === '合格');
+            if (passSlice) {
+                const applicable = slices.filter(s => s.label !== '未検証').reduce((s, x) => s + (x.value || 0), 0);
+                const pct = applicable > 0 ? Math.round(passSlice.value / applicable * 100) : 0;
+                ctx.fillStyle = '#1e293b';
+                ctx.font = `bold ${Math.floor(size * 0.1)}px sans-serif`;
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText(`${pct}%`, cx, cy - size * 0.02);
+                ctx.font = `${Math.floor(size * 0.065)}px sans-serif`;
+                ctx.fillStyle = '#64748b';
+                ctx.fillText('達成率', cx, cy + size * 0.08);
+            }
+            // 凡例
+            const active = slices.filter(s => s.value > 0);
+            const lw = Math.floor((size - size * 0.1) / active.length);
+            const boxS = Math.floor(size * 0.055), ly = size * 0.88;
+            ctx.font = `${Math.floor(size * 0.065)}px sans-serif`;
+            active.forEach((s, i) => {
+                const lx = size * 0.05 + i * lw;
+                ctx.fillStyle = s.color;
+                ctx.fillRect(lx, ly - boxS * 0.9, boxS, boxS);
+                ctx.fillStyle = '#1e293b'; ctx.textAlign = 'left';
+                ctx.fillText(`${s.label}:${s.value}`, lx + boxS + 3, ly);
+            });
+            return canvas.toDataURL('image/png').split(',')[1];
+        }
+
+        // XLSX(Uint8Array)の表紙シート(sheet1)に PNG 画像を埋め込む
+        async function addCoverChartToXlsx(uint8, chartPng, startRow, startCol, endRow, endCol) {
+            if (!window.JSZip || !chartPng) return uint8;
+            try {
+                const zip = await JSZip.loadAsync(uint8);
+                // 画像ファイル
+                zip.file('xl/media/image1.png', chartPng, { base64: true });
+                // drawing XML
+                const drawXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`
+                    + `<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"`
+                    + ` xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"`
+                    + ` xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">`
+                    + `<xdr:twoCellAnchor editAs="oneCell">`
+                    + `<xdr:from><xdr:col>${startCol}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${startRow}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>`
+                    + `<xdr:to><xdr:col>${endCol}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${endRow}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>`
+                    + `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="2" name="PieChart"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>`
+                    + `<xdr:blipFill><a:blip r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>`
+                    + `<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1" cy="1"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>`
+                    + `</xdr:pic><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>`;
+                zip.file('xl/drawings/drawing1.xml', drawXml);
+                // drawing rels
+                const drawRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`
+                    + `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`
+                    + `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/>`
+                    + `</Relationships>`;
+                zip.file('xl/drawings/_rels/drawing1.xml.rels', drawRels);
+                // sheet1.xml に <drawing> 追加
+                const sh = await zip.file('xl/worksheets/sheet1.xml').async('string');
+                const nsR = 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+                let sh2 = sh.includes('xmlns:r=') ? sh : sh.replace('<worksheet ', `<worksheet ${nsR} `);
+                sh2 = sh2.replace('</worksheet>', '<drawing r:id="rId999"/></worksheet>');
+                zip.file('xl/worksheets/sheet1.xml', sh2);
+                // sheet1 rels
+                const relsPath = 'xl/worksheets/_rels/sheet1.xml.rels';
+                const drawRel = `<Relationship Id="rId999" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>`;
+                const existing = zip.file(relsPath);
+                if (existing) {
+                    const txt = await existing.async('string');
+                    zip.file(relsPath, txt.replace('</Relationships>', drawRel + '</Relationships>'));
+                } else {
+                    zip.file(relsPath, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`
+                        + `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`
+                        + drawRel + `</Relationships>`);
+                }
+                // [Content_Types].xml
+                let ct = await zip.file('[Content_Types].xml').async('string');
+                if (!ct.includes('image/png')) ct = ct.replace('</Types>', '<Default Extension="png" ContentType="image/png"/></Types>');
+                if (!ct.includes('drawing+xml')) ct = ct.replace('</Types>', '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>');
+                zip.file('[Content_Types].xml', ct);
+                return await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
+            } catch (e) {
+                console.error('[chart-embed]', e);
+                return uint8;
+            }
+        }
+
+        function downloadXlsx(uint8, filename) {
+            const blob = new Blob([uint8], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob); a.download = filename; a.click();
+            setTimeout(() => URL.revokeObjectURL(a.href), 1000);
         }
 
         function buildSampleSheetData(reportRows, url) {
@@ -1626,7 +1742,11 @@
             };
         }
 
-        function exportExcel() {
+        async function exportExcel() {
+            // BATCHモード時は全ページ対象のバッチ出力に委譲
+            if (currentMode === 'batch' && batchResultsData.length > 0) {
+                return exportBatchExcel();
+            }
             if (!lastResults) return;
             const wb = XLSX.utils.book_new();
             const url = lastResults.url;
@@ -1641,12 +1761,11 @@
                 pageDataList.push({ url: url + ' (SP)', rows: spRows });
             }
 
-            // 表紙シートを先頭に追加
-            const coverWs = XLSX.utils.aoa_to_sheet(buildCoverSheetData(pageDataList, url));
+            const { rows: coverRows, stats } = buildCoverSheetData(pageDataList, url);
+            const coverWs = XLSX.utils.aoa_to_sheet(coverRows);
             coverWs['!cols'] = COVER_WIDTHS;
             XLSX.utils.book_append_sheet(wb, coverWs, '表紙');
 
-            // ページ別シート
             const pcSheet = buildSampleSheetData(pcRows, url);
             const pcWs = XLSX.utils.aoa_to_sheet(pcSheet.sheetRows);
             pcWs['!cols'] = COL_WIDTHS;
@@ -1662,11 +1781,18 @@
             }
 
             const date = new Date().toISOString().split('T')[0];
-            XLSX.writeFile(wb, `wcag-report-${date}.xlsx`);
+            const chartPng = drawPieChartPng([
+                { label: '合格', value: stats.pass, color: '#22c55e' },
+                { label: '不合格', value: stats.fail, color: '#ef4444' },
+                { label: '未検証', value: stats.unverified, color: '#94a3b8' },
+            ]);
+            const uint8 = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+            const patched = await addCoverChartToXlsx(uint8, chartPng, 3, 4, 13, 8);
+            downloadXlsx(patched, `wcag-report-${date}.xlsx`);
         }
 
         // BATCHスキャン用Excelエクスポート（サンプル形式）
-        function exportBatchExcel() {
+        async function exportBatchExcel() {
             if (batchResultsData.length === 0) return;
             const wb = XLSX.utils.book_new();
             const hasMobile = batchMobileResultsData.length > 0;
@@ -1674,7 +1800,6 @@
             const COVER_WIDTHS = [8, 50, 12, 12, 16, 8, 10, 10].map(w => ({ wch: w }));
             const sheetNames = new Set();
 
-            // ページ別データを先に構築（表紙の集計に使う）
             const pageDataList = [];
             const pageSheets = [];
 
@@ -1704,13 +1829,12 @@
 
             if (pageSheets.length === 0) { alert('成功した検査結果がありません'); return; }
 
-            // 表紙シートを先頭に追加
             const topUrl = batchResultsData.find(r => r.success)?.url || '';
-            const coverWs = XLSX.utils.aoa_to_sheet(buildCoverSheetData(pageDataList, topUrl));
+            const { rows: coverRows, stats } = buildCoverSheetData(pageDataList, topUrl);
+            const coverWs = XLSX.utils.aoa_to_sheet(coverRows);
             coverWs['!cols'] = COVER_WIDTHS;
             XLSX.utils.book_append_sheet(wb, coverWs, '表紙');
 
-            // ページ別シートを追加
             pageSheets.forEach(({ rows, name }) => {
                 const ws = XLSX.utils.aoa_to_sheet(rows);
                 ws['!cols'] = COL_WIDTHS;
@@ -1718,7 +1842,14 @@
             });
 
             const date = new Date().toISOString().split('T')[0];
-            XLSX.writeFile(wb, `wcag-batch-report-${date}.xlsx`);
+            const chartPng = drawPieChartPng([
+                { label: '合格', value: stats.pass, color: '#22c55e' },
+                { label: '不合格', value: stats.fail, color: '#ef4444' },
+                { label: '未検証', value: stats.unverified, color: '#94a3b8' },
+            ]);
+            const uint8 = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+            const patched = await addCoverChartToXlsx(uint8, chartPng, 3, 4, 13, 8);
+            downloadXlsx(patched, `wcag-batch-report-${date}.xlsx`);
         }
 
         // AI評価結果を保存
@@ -5693,6 +5824,10 @@
         }
 
         async function exportToSheets() {
+            // BATCHモード時は全ページ対象のバッチ出力に委譲
+            if (currentMode === 'batch' && batchResultsData.length > 0) {
+                return exportBatchReport();
+            }
             if (!lastResults) { alert('先にチェックを実行してください'); return; }
             const btn = $('reportBtn');
             btn.disabled = true;
