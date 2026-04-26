@@ -4526,13 +4526,13 @@ app.post('/api/export-report', async (req, res) => {
     const quoteSheetNameForFormula = (title) => `'${String(title).replace(/'/g, "''")}'`;
     const sheetColumnRange = (title, col) => `${quoteSheetNameForFormula(title)}!${col}2:${col}`;
     const pageStartRow = 11;
-    const pageEndRow = pageStartRow + pageTabInfo.length - 1;
+    const pageEndRow = pageStartRow + pageTabInfo.length; // pageTabInfo.length - 1 is a bug
     const coverSum = (col) => `=SUM(${col}${pageStartRow}:${col}${pageEndRow})`;
-    const coverOverallScoreFormula = '=IFERROR(ROUND(J6/(B6+D6+F6+H6+J6+D7)*100)&"%","—")';
+    const coverOverallScoreFormula = '=IFERROR(ROUND(J6/(B6+D6+F6+H6+J6)*100)&"%","—")';
 
     function buildPageSummaryFormulas(sheetTitle, coverRowNo) {
       const resultRange = sheetColumnRange(sheetTitle, 'F');
-      const impactRange = sheetColumnRange(sheetTitle, 'I');
+      const impactRange = sheetColumnRange(sheetTitle, 'I'); // Note: This seems to be based on the old 11-column format
       return {
         critical: `=COUNTIFS(${resultRange},"不合格",${impactRange},"緊急")`,
         serious: `=COUNTIFS(${resultRange},"不合格",${impactRange},"重大")+COUNTIFS(${resultRange},"不合格",${impactRange},"<>緊急",${impactRange},"<>重大",${impactRange},"<>中程度",${impactRange},"<>軽微")`,
@@ -4540,8 +4540,8 @@ app.post('/api/export-report', async (req, res) => {
         minor: `=COUNTIFS(${resultRange},"不合格",${impactRange},"軽微")`,
         pass: `=COUNTIF(${resultRange},"合格")`,
         na: `=COUNTIF(${resultRange},"該当なし")+COUNTIF(${resultRange},"対象外")`,
-        unverified: `=MAX(0,COUNTA(${resultRange})-COUNTIF(${resultRange},"合格")-COUNTIF(${resultRange},"不合格")-COUNTIF(${resultRange},"該当なし")-COUNTIF(${resultRange},"対象外"))`,
-        score: `=IFERROR(ROUND(G${coverRowNo}/(SUM(C${coverRowNo}:G${coverRowNo})+I${coverRowNo})*100)&"%","—")`
+        unverified: `=COUNTIF(${resultRange},"未検証")+COUNTIF(${resultRange},"判定不能")`,
+        score: `=IFERROR(ROUND(G${coverRowNo}/SUM(C${coverRowNo}:G${coverRowNo})*100)&"%","—")`
       };
     }
 
