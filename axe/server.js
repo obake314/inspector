@@ -1738,41 +1738,43 @@ async function check_2_4_7_focus_visible(page) {
         const borderChanged = aBorderW !== bBorderW || aBorderColor !== bBorderColor;
         const hasFocusIndicator = hasOutline || hasBoxShadow || bgChanged || borderChanged;
 
-        // SC 2.4.13: outline が 2px 以上
-        const meets213 = aOutlineW >= 2;
-
+        // SC 2.4.13: インジケータ不在（2.4.7 fail と同条件）のみ fail。
+        // インジケータが存在する場合は面積・コントラスト比（≥3:1）の自動検証が困難なため
+        // manual_required とし、誤 false / 誤 pass を回避する。
         if (!hasFocusIndicator) {
           violations27.push(`${label} (outline:${aOutlineW}px, bg変化:${bgChanged}, shadow:${hasBoxShadow})`);
-        }
-        if (!meets213) {
-          violations213.push(`${label} (outline-width:${aOutlineW}px < 2px)`);
+          violations213.push(`${label} (フォーカスインジケーター未検出)`);
         }
       }
       return { violations27, violations213 };
     });
 
+    const has247Fail = results.violations27.length > 0;
+    // 2.4.13: インジケータ不在要素があれば fail、全要素にインジケータあれば
+    // 面積・コントラストの手動確認が必要なため manual_required
+    const status213 = results.violations213.length > 0 ? 'fail' : 'manual_required';
     return [
       {
         sc: '2.4.7', name: 'フォーカス可視（AA）',
-        status: results.violations27.length === 0 ? 'pass' : 'fail',
-        message: results.violations27.length === 0
-          ? 'フォーカス時にスタイル変化あり（outline/shadow/background/border）'
-          : `${results.violations27.length}個の要素でフォーカス時にスタイル変化なし`,
+        status: has247Fail ? 'fail' : 'pass',
+        message: has247Fail
+          ? `${results.violations27.length}個の要素でフォーカス時にスタイル変化なし`
+          : 'フォーカス時にスタイル変化あり（outline/shadow/background/border）',
         violations: results.violations27
       },
       {
-        sc: '2.4.13', name: 'フォーカスの外観（AAA）',
-        status: results.violations213.length === 0 ? 'pass' : 'fail',
-        message: results.violations213.length === 0
-          ? 'outline-widthが2px以上'
-          : `${results.violations213.length}個の要素でoutline-widthが2px未満`,
+        sc: '2.4.13', name: 'フォーカスの外観（AA）',
+        status: status213,
+        message: results.violations213.length > 0
+          ? `${results.violations213.length}個の要素でフォーカスインジケーター未検出（2.4.13 fail）`
+          : 'フォーカスインジケーターは検出済み。面積・コントラスト比（≥3:1）は目視で確認してください',
         violations: results.violations213
       }
     ];
   } catch (e) {
     return [
       { sc: '2.4.7', name: 'フォーカス可視（AA）', status: 'error', message: e.message, violations: [] },
-      { sc: '2.4.13', name: 'フォーカスの外観（AAA）', status: 'error', message: e.message, violations: [] }
+      { sc: '2.4.13', name: 'フォーカスの外観（AA）', status: 'error', message: e.message, violations: [] }
     ];
   }
 }
