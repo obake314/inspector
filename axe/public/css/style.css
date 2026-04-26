@@ -261,7 +261,7 @@ h1 {
   border: none;
   padding: var(--space-m) var(--space-l);
   font-size: var(--font-size-m);
-  font-weight: 500;
+  font-weight: 100;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -333,7 +333,7 @@ h1 {
 .scan-option-text {
   font-family: var(--font-latin);
   font-size: var(--font-size-m);
-  font-weight: 600;
+  font-weight: 100;
   letter-spacing: 0.01em;
 }
 .scan-option-text-deep {
@@ -359,6 +359,7 @@ h1 {
   display: inline-grid;
   place-content: center;
   margin: 0;
+  border: 0.5px solid var(--navy-400);
   transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
 }
 .scan-option-checkbox::after {
@@ -374,6 +375,12 @@ h1 {
 .scan-option-checkbox:hover {
   border-color: var(--navy-700);
 }
+
+
+.scan-option:has(#batchEnhancedOp:checked) { border-color:var(--color-deep);}
+.scan-option:has(#batchAIOpt:checked) { border-color:var(--color-multi);}
+.scan-option:has(#batchPlayOpt:checked) { border-color:var(--color-play);}
+.scan-option:has(#batchExtOpt:checked) { border-color:var(--color-ext);}
 
 #batchEnhancedOpt:checked,
 .scan-option-checkbox#deepScanOpt:checked {
@@ -413,25 +420,18 @@ h1 {
   }
 }
 .note {
-  margin-top: 16px;
-  font-size: var(--font-size-s);
-  color: var(--navy-400);
-  border-left: 2px solid var(--navy-400);
-  padding-left: var(--space-m);
+    font-size: var(--font-size-m);
+    color: var(--navy-400);
+    margin-left: var(--space-m);
+    font-family: var(--font-latin);
+    font-weight: 100;
 }
 .skip-rules-section {
   margin-top: 16px;
   font-size: var(--font-size-m);
   color: var(--navy-400);
 }
-.skip-rules-section summary {
-  cursor: pointer;
-  padding: var(--space-s) 0;
-  font-weight: 500;
-}
-.skip-rules-section summary:hover {
-  color: var(--navy-700);
-}
+
 .skip-rules-list {
   padding: var(--space-m);
   background: var(--navy-200);
@@ -467,11 +467,15 @@ h1 {
   font-size: var(--font-size-m);
   color: var(--navy-400);
 }
+.basic-auth-section summary,
+.skip-rules-section summary,
 .pre-check-section summary {
   cursor: pointer;
   padding: var(--space-s) 0;
-  font-weight: 500;
+  font-size:var(--font-size-s);
 }
+.basic-auth-section summary:hover,
+.skip-rules-section summary:hover,
 .pre-check-section summary:hover {
   color: var(--navy-700);
 }
@@ -550,8 +554,9 @@ h1 {
 }
 .skip-rule-item span,
 .pre-check-item span {
-  font-weight: 500;
+  font-weight: 100;
   min-width: 140px;
+  font-size: var(--font-size-s);
   color: var(--navy-700);
 }
 .skip-rule-item small,
