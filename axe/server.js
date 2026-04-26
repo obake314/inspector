@@ -4550,6 +4550,19 @@ app.post('/api/export-report', async (req, res) => {
       { method: 'PUT', headers, body: JSON.stringify({ values: coverRows }) }
     );
 
+    // 円グラフ用ヘルパーデータを M1:N5 に書き込む（セルを参照する動的集計）
+    // Row6(=J6)=合格, Row6(B6+D6+F6+H6)=不合格, Row7(=D7)=未検証, Row7(=B7)=該当なし
+    await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${coverTitle}'!M1`)}?valueInputOption=USER_ENTERED`,
+      { method: 'PUT', headers, body: JSON.stringify({ values: [
+        ['カテゴリ', '件数'],
+        ['合格',     '=J6'],
+        ['不合格',   '=B6+D6+F6+H6'],
+        ['未検証',   '=D7'],
+        ['該当なし', '=B7']
+      ]}) }
+    );
+
     // 表紙の書式
     const coverFormatReqs = [
       // タイトル行（青背景）
@@ -4594,6 +4607,42 @@ app.post('/api/export-report', async (req, res) => {
       { updateSheetProperties: {
         properties: { sheetId: coverSheetId, gridProperties: { frozenRowCount: 10 } },
         fields: 'gridProperties.frozenRowCount'
+      }},
+      // 円グラフ（M2:N5 のデータを参照する動的ドーナツグラフ）
+      { addChart: {
+        chart: {
+          spec: {
+            title: '達成率',
+            titleTextFormat: { bold: true, fontSize: 13, foregroundColor: { red: 0.12, green: 0.16, blue: 0.24 } },
+            backgroundColor: { red: 1, green: 1, blue: 1 },
+            pieChart: {
+              legendPosition: 'RIGHT_LEGEND',
+              threeDimensional: false,
+              pieHole: 0.4,
+              domain: {
+                sourceRange: { sources: [{
+                  sheetId: coverSheetId,
+                  startRowIndex: 1, endRowIndex: 5,
+                  startColumnIndex: 12, endColumnIndex: 13  // M列: ラベル
+                }]}
+              },
+              series: {
+                sourceRange: { sources: [{
+                  sheetId: coverSheetId,
+                  startRowIndex: 1, endRowIndex: 5,
+                  startColumnIndex: 13, endColumnIndex: 14  // N列: 件数
+                }]}
+              }
+            }
+          },
+          position: {
+            overlayPosition: {
+              anchorCell: { sheetId: coverSheetId, rowIndex: 3, columnIndex: 11 },
+              widthPixels: 400,
+              heightPixels: 260
+            }
+          }
+        }
       }}
     ];
 
