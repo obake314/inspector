@@ -2349,7 +2349,7 @@
             }
 
             try {
-                const filteredItems = getFilteredAiItemsForTargetLevel(lastResults);
+                const filteredItems = getFilteredAiItemsForTargetLevel(lastResults, batchNavConsistency);
 
                 if (!silent) status.textContent = `${filteredItems.length}項目 SCORING...（1-2分かかります）`;
 
@@ -3239,7 +3239,7 @@
                                 const aiTimer = setTimeout(() => aiController.abort(), 10 * 60 * 1000);
                                 let ar, ad;
                                 const basicResultsForUrl = resultsData.find(rd => rd.url === successUrls[i])?.results || null;
-                                const filteredItemsForUrl = getFilteredAiItemsForTargetLevel(basicResultsForUrl);
+                                const filteredItemsForUrl = getFilteredAiItemsForTargetLevel(basicResultsForUrl, navConsistency);
                                 try {
                                     const r = await fetchApiJson(apiUrl('/api/ai-evaluate'), {
                                         method: 'POST',
@@ -3290,7 +3290,7 @@
                                     recordTimeoutRetry({ url: successUrls[i], scanType: 'MULTI', mode: 'batch', viewportPreset, message: msg });
                                 }
                                 const basicResultsForUrl = resultsData.find(rd => rd.url === successUrls[i])?.results || null;
-                                const filteredItemsForUrl = getFilteredAiItemsForTargetLevel(basicResultsForUrl);
+                                const filteredItemsForUrl = getFilteredAiItemsForTargetLevel(basicResultsForUrl, navConsistency);
                                 const processed = mapAiResultsByOriginalIndex(makeClientFallbackAiResults(filteredItemsForUrl, msg), filteredItemsForUrl);
                                 aiResultsMap[successUrls[i]] = processed;
                                 aiTokenLimitedMap[successUrls[i]] = true;
@@ -5195,10 +5195,15 @@
             }
         }
 
-        function getFilteredAiItemsForTargetLevel(basicResults = lastResults) {
+        function getFilteredAiItemsForTargetLevel(basicResults = lastResults, navConsistency = null) {
             const levelOrder = { 'A': 1, 'AA': 2, 'AAA': 3 };
             const targetLevelNum = levelOrder[targetLevel] || 2;
             const autoPassRefs = getAutoDetectedPassRefs(basicResults);
+            // navConsistency が pass 済みなら 3.2.3 / 3.2.4 を AI 評価対象から除外
+            if (navConsistency?.result === 'pass') {
+                autoPassRefs.add('3.2.3');
+                autoPassRefs.add('3.2.4');
+            }
             return manualCheckItems
                 .map((item, index) => ({ ...item, index }))
                 .filter(item => levelOrder[item.level] <= targetLevelNum && item.aiTarget && !autoPassRefs.has(item.ref));
@@ -5325,7 +5330,7 @@
             }
 
             if (scanType === 'MULTI') {
-                const filteredItems = getFilteredAiItemsForTargetLevel(ctx.basic);
+                const filteredItems = getFilteredAiItemsForTargetLevel(ctx.basic, batchNavConsistency);
                 const { response, data: rawData } = await postScoreRescanJson('/api/ai-evaluate', {
                     url: ctx.url,
                     checkItems: filteredItems,
