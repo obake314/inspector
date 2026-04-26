@@ -727,6 +727,11 @@ h1 {
     padding: 12px;
 }
 
+.scoretable thead th{
+    width: calc(100% / 9);
+    padding: 12px 24px;
+}
+
 .scoretable thead th;first-child{
   width: 130px;
 }
@@ -1748,17 +1753,19 @@ margin-bottom: 6px;
   margin: 0;
 }
 .batch-page-btn {
-  font-family: var(--font-latin);
-  background: var(--color-white);
-  border: 1px solid var(--navy-200);
-  padding: var(--space-s) var(--space-m);
-  font-size: var(--font-size-m);
-  cursor: pointer;
-  color: var(--navy-700);
-  max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+    font-family: var(--font-latin);
+    background: var(--color-white);
+    border: 1px solid var(--navy-200);
+    padding: var(--space-m) var(--space-s);
+    font-size: var(--font-size-m);
+    cursor: pointer;
+    color: var(--navy-700);
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 40px;
+    line-height: 1;
 }
 .batch-page-btn:hover {
   border-color: var(--navy-400);
