@@ -1108,7 +1108,13 @@ async function check_2_5_8_target_size(page) {
           if (rect.width === 0 && rect.height === 0) continue;
           const tag = el.tagName.toLowerCase();
           const text = (el.textContent || el.value || el.getAttribute('aria-label') || '').trim().slice(0, 30);
-          if (rect.width < 24 || rect.height < 24) {
+          // ナビゲーション項目パターン: <li><a> の場合、親 <li> の高さが実効的なターゲットサイズとなる
+          let effectiveRect = rect;
+          if (el.parentElement && el.parentElement.tagName === 'LI') {
+            const parentRect = el.parentElement.getBoundingClientRect();
+            if (parentRect.height > rect.height) effectiveRect = parentRect;
+          }
+          if (effectiveRect.width < 24 || effectiveRect.height < 24) {
             const id = el.id ? `#${el.id}` : '';
             const cls = el.getAttribute('class')
               ? '.' + el.getAttribute('class').trim().split(/\s+/).slice(0, 2).join('.')
@@ -3287,7 +3293,8 @@ async function check_aria_attributes(page) {
       for (const el of candidates) {
         if (seen.has(el)) continue;
         seen.add(el);
-        if (el.getAttribute('aria-expanded') === null) {
+        // aria-pressed は toggle ボタンの有効な代替実装 (play/pause等) — aria-expanded 要求から除外
+        if (el.getAttribute('aria-expanded') === null && el.getAttribute('aria-pressed') === null) {
           const tag = el.tagName.toLowerCase();
           const id = el.id ? `#${el.id}` : '';
           const cls = (el.className && typeof el.className === 'string')
@@ -3299,15 +3306,25 @@ async function check_aria_attributes(page) {
       }
 
       // --- aria-current ---
+      // HOMEページ（pathname が / または index.*）かつナビにホームへのリンクがない場合は
+      // aria-current="page" が付かないのは自然な実装のためスキップ
+      const isHomePage = /^\/?(index\.(html?|php|asp|aspx))?$/i.test(window.location.pathname);
       const navEls = [...document.querySelectorAll('nav, [role="navigation"]')];
       let navLinksTotal = 0;
       let hasAriaCurrent = false;
+      let hasHomeLink = false;
       for (const nav of navEls) {
         const links = nav.querySelectorAll('a');
         navLinksTotal += links.length;
         if ([...links].some(a => a.hasAttribute('aria-current'))) hasAriaCurrent = true;
+        if ([...links].some(a => {
+          const href = (a.getAttribute('href') || '').trim();
+          return href === '/' || href === '' || /^\/?index\.(html?|php|asp|aspx)$/i.test(href);
+        })) hasHomeLink = true;
       }
-      if (navLinksTotal >= 2 && !hasAriaCurrent) {
+      // ホームページかつナビにホームリンクなし → aria-current 未設定は誤検出とみなす
+      const skipCurrentCheck = isHomePage && !hasHomeLink;
+      if (navLinksTotal >= 2 && !hasAriaCurrent && !skipCurrentCheck) {
         issues.current.push(`navまたは[role=navigation]内の${navLinksTotal}件のリンクにaria-current="page"なし`);
       }
 
