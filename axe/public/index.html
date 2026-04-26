@@ -4829,7 +4829,11 @@
             }
 
             // ソース別エビデンスは同一メッセージ/同一箇所を名寄せして表示する。
-            const evidenceSections = mergeEvidenceRecords(sources.map(buildEvidenceRecord)).map(record => {
+            // 合格タブ以外（影響度タブ）では pass ソースを除外して誤表示を防ぐ
+            const visibleSources = consolidatedStatus !== 'pass'
+                ? sources.filter(s => s.status !== 'pass')
+                : sources;
+            const evidenceSections = mergeEvidenceRecords(visibleSources.map(buildEvidenceRecord)).map(record => {
                 const srcBadges = record.srcLabels.map(src => `<span class="badge ${srcBadgeClasses[src] || ''}">${src}</span>`).join('');
                 const toolText = uniq(record.toolLabels).join(' / ');
                 const statusText = uniq(record.statusLabels).join(' / ');
