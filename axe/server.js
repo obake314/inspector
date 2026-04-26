@@ -601,8 +601,6 @@ app.use((req, res, next) => {
   }
   next();
 });
-app.use(express.static(path.join(__dirname, 'public')));
-
 // 直近のAIレスポンス（デバッグ用）
 let _lastAiDebug = null;
 
@@ -6008,6 +6006,8 @@ app.post('/api/playwright-check', async (req, res) => {
     if (browser) await browser.close();
   }
 });
+
+app.use(express.static(path.join(__dirname, 'public')));
 
 // エラーハンドリング
 app.use((req, res, next) => {
