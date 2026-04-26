@@ -4456,9 +4456,9 @@
                    </div>`;
             return `<div class="item-card ${decisionClass}" data-impact="${impact||''}" data-default-impact="${impact||'serious'}">
                 <div class="item-header" onclick="toggleItemCard(this)">
-                    ${srcBadge}
-                    ${scBadge}${lvBadge}
+                    ${lvBadge}${scBadge}
                     <span class="item-title">${escapeHtml(title)}</span>
+                    ${srcBadge}
                     ${decBtns}
                     <svg class="expand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
                 </div>
@@ -4817,9 +4817,9 @@
 
             return `<div class="item-card ${decisionClass}" data-impact="${impact||''}" data-default-impact="${impact||'serious'}">
                 <div class="item-header" onclick="toggleItemCard(this)">
-                    ${srcBadges}
-                    ${scBadge}${lvBadge}
+                    ${lvBadge}${scBadge}
                     <span class="item-title">${escapeHtml(titleText)}</span>
+                    ${srcBadges}
                     ${decBtns}
                     <svg class="expand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
                 </div>
@@ -5115,7 +5115,7 @@
                     && scoreRescanProgressState.scanType === scanType
                     && scoreRescanProgressState.view === viewScope;
                 const progress = progressActive ? Math.round(scoreRescanProgressState.progress || 0) : 0;
-                const progressLabel = progressActive ? (scoreRescanProgressState.label || '再スキャン中') : '';
+                const progressLabel = progressActive ? (scoreRescanProgressState.label || 'SCANNING') : '';
                 const progressKey = `${viewScope}:${scanType}`;
                 const progressHtml = progressActive ? `<div class="score-rescan-progress"
                         data-score-rescan-indicator="${progressKey}"
