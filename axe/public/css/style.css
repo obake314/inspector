@@ -640,7 +640,8 @@ h1 {
 }
 .pre-check-panel-item span {
   color: var(--navy-700);
-  font-weight: 500;
+  font-weight: 100;
+  font-size: var(--font-size-s);
 }
 
 .pre-check-panel-item small {
@@ -718,10 +719,10 @@ h1 {
     line-height: 1;
     background: var(--navy-700);
     font-weight: normal;
-    padding: 12px 0;
+    padding: 12px;
 }
 
-.scoretable thead th;:first-child{
+.scoretable thead th;first-child{
   width: 130px;
 }
 
@@ -729,11 +730,11 @@ h1 {
 .scoretable thead th.label-all span{
   font-size: var(--font-size-xs);
   font-weight: normal;
-margin-bottom: 6px;
-    display: block;
+  margin-bottom: 6px;
+  display: block;
 }
 .scoretable tbody td{
-  padding: var(--space-m);
+  padding: var(--space-s);
   text-align:center;
   border-right:1px solid var(--navy-200);
   background: var(--color-white)

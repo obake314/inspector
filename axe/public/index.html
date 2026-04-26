@@ -5173,12 +5173,12 @@
             const body = $(scoreBodyId);
             if (!body) return;
             const deepSub = sessionAAABeta ? 'A/AA/AAA β' : 'A/AA';
-            const basicLabel = `BASIC<br><span class="score-row-sub">axe-core 自動検査</span>`;
-            const deepLabel  = `DEEP<br><span class="score-row-sub">ヒューリスティック検査</span>`;
+            const basicLabel = `BASIC<span class="score-row-sub">axe-core 検査</span>`;
+            const deepLabel  = `DEEP<span class="score-row-sub">Puppeteer 検査</span>`;
             const tokenWarnBadge = multiIssue ? ` <span class="score-token-warn">${escapeHtml(multiIssue.label)}</span>` : '';
-            const multiLabel = `MULTI<br><span class="score-row-sub">AI 検査${tokenWarnBadge}</span>`;
-            const playLabel  = `PLAY<br><span class="score-row-sub">Playwright 検査</span>`;
-            const extLabel   = `EXT<br><span class="score-row-sub">IBM ACE + 拡張検査</span>`;
+            const multiLabel = `MULTI<span class="score-row-sub">AI 検査${tokenWarnBadge}</span>`;
+            const playLabel  = `PLAY<span class="score-row-sub">Playwright 検査</span>`;
+            const extLabel   = `EXT<span class="score-row-sub">IBM ACE + 拡張検査</span>`;
             body.innerHTML =
                 row('BASIC', basicLabel, 'label-basic', nb, true, false) +
                 row('DEEP', deepLabel, 'label-deep', nd, deepEnabled, false) +
