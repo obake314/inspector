@@ -432,7 +432,10 @@ h1 {
     font-family: var(--font-latin);
     font-weight: 100;
 }
-.skip-rules-section {
+
+.basic-auth-section,
+.skip-rules-section,
+.pre-check-section {
   margin-top: 16px;
   font-size: var(--font-size-m);
   color: var(--navy-400);
@@ -468,11 +471,7 @@ h1 {
   min-width: 150px;
 }
 */
-.pre-check-section {
-  margin-top: 16px;
-  font-size: var(--font-size-m);
-  color: var(--navy-400);
-}
+
 .basic-auth-section summary,
 .skip-rules-section summary,
 .pre-check-section summary {
