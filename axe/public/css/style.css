@@ -1458,7 +1458,38 @@ margin-bottom: 6px;
   margin-bottom: 3px;
   color: var(--navy-700);
   word-break: break-all;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
 }
+.location-row[data-loc-dec="ok"]   { opacity: 0.5; text-decoration: line-through; }
+.location-row[data-loc-dec="ng"]   { border-left: 3px solid var(--color-serious); }
+.location-row[data-loc-dec="hold"] { border-left: 3px solid var(--color-moderate); }
+.loc-text {
+  flex: 1;
+  min-width: 0;
+  word-break: break-all;
+}
+.loc-decision-btns {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+  align-self: center;
+}
+.loc-decision-btn {
+  border: 1px solid var(--navy-400);
+  background: var(--color-white);
+  padding: 1px 6px;
+  font-size: 10px;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.loc-decision-btn:hover { background: var(--navy-200); }
+.loc-decision-btn.active-ok   { background: var(--color-multi);     color: var(--color-white); border-color: var(--color-multi); }
+.loc-decision-btn.active-ng   { background: var(--color-serious);   color: var(--color-white); border-color: var(--color-serious); }
+.loc-decision-btn.active-hold { background: var(--color-moderate);  color: var(--color-white); border-color: var(--color-moderate); }
 /* ---- 未検証 決定ボタン ---- */
 .decision-btns {
   display: flex;

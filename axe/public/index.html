@@ -867,8 +867,24 @@
         }
 
         let lastResults = null;
-        const manualDecisions = new Map(); // key → 'ok'|'ng'|'hold'
-        const manualImpacts   = new Map(); // key → 'critical'|'serious'|'moderate'|'minor'（NG時の重要度）
+        const manualDecisions   = new Map(); // key → 'ok'|'ng'|'hold'
+        const manualImpacts     = new Map(); // key → 'critical'|'serious'|'moderate'|'minor'（NG時の重要度）
+        const locationDecisions = new Map(); // key → 'ok'|'ng'|'hold'（検出箇所単位）
+
+        window.setLocationDecision = (key, val, btnEl) => {
+            if (locationDecisions.get(key) === val) {
+                locationDecisions.delete(key);
+                val = null;
+            } else {
+                locationDecisions.set(key, val);
+            }
+            const row = btnEl.closest('.location-row');
+            if (row) {
+                row.querySelectorAll('.loc-decision-btn').forEach(b => b.classList.remove('active-ok','active-ng','active-hold'));
+                row.dataset.locDec = val || '';
+                if (val) btnEl.classList.add('active-' + val);
+            }
+        };
 
         window.setDecision = (key, val, btnEl) => {
             // 同じボタン再クリックで解除
@@ -1926,7 +1942,8 @@
                 mobileSnapshot: cloneData(lastMobileScanSnapshot),
                 batch: buildBatchScanStatePayload(),
                 manualDecisions: Array.from(manualDecisions.entries()),
-                manualImpacts: Array.from(manualImpacts.entries())
+                manualImpacts: Array.from(manualImpacts.entries()),
+                locationDecisions: Array.from(locationDecisions.entries())
             };
         }
 
@@ -1990,6 +2007,7 @@
 
             restoreStateMap(manualDecisions, payload.manualDecisions);
             restoreStateMap(manualImpacts, payload.manualImpacts);
+            restoreStateMap(locationDecisions, payload.locationDecisions);
 
             setTargetLevel(payload.targetLevel || basic?.level || targetLevel);
             setViewportModeFromState(payload.viewportMode);
@@ -2534,6 +2552,7 @@
             lastImprovementPlan = null;
             manualDecisions.clear();
             manualImpacts.clear();
+            locationDecisions.clear();
             batchResultsData = [];
             batchNavConsistency = null;
             currentBatchIdx = null;
@@ -4473,14 +4492,26 @@
             BATCH: 'badge-batch'
         };
 
+        function renderLocRow(l, cardKey, idx) {
+            const locKey = `${cardKey}::loc::${idx}`;
+            const locDec = locationDecisions.get(locKey) || '';
+            const btns = `<div class="loc-decision-btns" onclick="event.stopPropagation()">
+                <button class="loc-decision-btn${locDec==='ok'?' active-ok':''}" onclick="setLocationDecision('${escapeHtml(locKey)}','ok',this)">OK</button>
+                <button class="loc-decision-btn${locDec==='ng'?' active-ng':''}" onclick="setLocationDecision('${escapeHtml(locKey)}','ng',this)">NG</button>
+                <button class="loc-decision-btn${locDec==='hold'?' active-hold':''}" onclick="setLocationDecision('${escapeHtml(locKey)}','hold',this)">保留</button>
+            </div>`;
+            return `<div class="location-row" data-loc-dec="${escapeHtml(locDec)}"><span class="loc-text">${escapeHtml(String(l))}</span>${btns}</div>`;
+        }
+
         function renderCardItem(no, src, impact, sc, level, title, summary, countText, locations, decisionKey) {
             const dec = decisionKey ? manualDecisions.get(decisionKey) : null;
             const decisionClass = dec === 'ok' ? 'item-card-dec-ok' : dec === 'ng' ? 'item-card-dec-ng' : dec === 'hold' ? 'item-card-dec-hold' : '';
             const srcBadge = src ? `<span class="badge ${srcBadgeClasses[src] || ''}">${src}</span>` : '';
             const scBadge  = sc  ? `<span class="item-sc">${escapeHtml(sc)}</span>` : '';
             const lvBadge  = level ? `<span class="item-level">${escapeHtml(level)}</span>` : '';
+            const cardKey  = decisionKey || `tmp:${src||''}:${sc||''}:${no}`;
             const locHtml  = locations && locations.length
-                ? `<div class="item-locations"><div class="item-locations-title">検出箇所</div>${locations.map(l => `<div class="location-row">${escapeHtml(String(l))}</div>`).join('')}</div>`
+                ? `<div class="item-locations"><div class="item-locations-title">検出箇所</div>${locations.map((l, i) => renderLocRow(l, cardKey, i)).join('')}</div>`
                 : '';
             // 全カードにボタンを表示。decisionKey がない場合は一時キーを生成
             const dk = decisionKey || `tmp:${src||''}:${sc||''}:${no}`;
@@ -4839,8 +4870,9 @@
                 const statusText = uniq(record.statusLabels).join(' / ');
                 const summaryText = record.summaries.join(' / ');
                 const countText = record.countTexts.join(' / ');
+                const locCardKey = dk || `tmp:unified:${sc}:${no}`;
                 const locHtml = record.locs.length
-                    ? `<div class="item-locations"><div class="item-locations-title">検出箇所</div>${record.locs.map(l => `<div class="location-row">${escapeHtml(String(l))}</div>`).join('')}</div>`
+                    ? `<div class="item-locations"><div class="item-locations-title">検出箇所</div>${record.locs.map((l, i) => renderLocRow(l, `${locCardKey}::src::${record.srcLabels.join('+')}`, i)).join('')}</div>`
                     : '';
                 const adviceHtml = record.suggestions.length
                     ? `<div class="item-advice"><div class="item-advice-title">AI改善案</div>${record.suggestions.map(s => `<div class="item-advice-text">${escapeHtml(s)}</div>`).join('')}</div>`
