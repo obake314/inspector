@@ -931,7 +931,6 @@ h1 {
 .improvement-plan-view-head h3 {
   font-size: var(--font-size-m);
 }
-.improvement-plan-status,
 .improvement-priority {
   display: inline-block;
   min-width: 36px;
