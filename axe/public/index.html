@@ -192,6 +192,7 @@
                     <!-- AAA βは一時停止中
                     <button type="button" class="level-select-btn is-hidden" data-level="AAA" id="levelBtnAAA">AAA</button>
                     -->
+                    <div class="note" id="levelNote">CHECK Level AA : A + AA </div>
                 </div>
             </div>
             <div id="singleInput" class="section-column">
@@ -234,7 +235,6 @@
                             <input type="password" id="basicPass" class="url-input" placeholder="パスワード">
                         </div>
                     </details>
-                    <div class="note" id="levelNote">Level AA: A + AA の基準をチェック（推奨水準）</div>
                     <details class="skip-rules-section">
                         <summary>除外ルール設定</summary>
                         <div class="skip-rules-list">
@@ -1374,9 +1374,9 @@
         });
 
         const levelNotes = {
-            'A': 'Level A: 最低限の基準をチェック',
-            'AA': 'Level AA: A + AA の基準をチェック（推奨水準）',
-            'AAA': 'Level AAA: A + AA + AAA の全基準をチェック（最高水準）'
+            'A': 'CHECK Level A',
+            'AA': 'CHECK Level AA : A + AA',
+            'AAA': 'CHECK Level AAA: A + AA + AAA'
         };
         const impactLabels = {
             'critical': '緊急', 'serious': '重大', 'moderate': '中程度', 'minor': '軽微'
