@@ -4362,6 +4362,25 @@ app.post('/api/export-sheets', async (req, res) => {
  * PC+SP 時は rows に「＜PC VIEW＞」「＜SP VIEW＞」区切り行が含まれる
  * stats は computeRowStats() によるレポート行の実数値（表紙集計と一致）
  */
+async function sheetsApiFetch(url, options, maxRetries = 4) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await fetch(url, options);
+    if (res.ok) return res;
+    const cloned = res.clone();
+    let data = {};
+    try { data = await cloned.json(); } catch (_) {}
+    const errMsg = data.error?.message || '';
+    const isQuota = res.status === 429 || /quota|rate.?limit/i.test(errMsg);
+    if (attempt < maxRetries && isQuota) {
+      const delay = Math.min(1500 * Math.pow(2, attempt), 16000);
+      console.warn(`[Sheets] quota exceeded, retry ${attempt + 1}/${maxRetries} in ${delay}ms`);
+      await new Promise(r => setTimeout(r, delay));
+      continue;
+    }
+    return res;
+  }
+}
+
 app.post('/api/export-report', async (req, res) => {
   const { pages } = req.body;
   if (!pages || pages.length === 0) {
@@ -4409,9 +4428,9 @@ app.post('/api/export-report', async (req, res) => {
       // 同名シートが存在する場合は suffix を付けて回避
       let sheetTitle = `${tabLabel}_${dateStr}_${timeStr}`;
       let addData, addRes;
-      for (let attempt = 0; attempt < 5; attempt++) {
+      for (let attempt = 0; attempt < 8; attempt++) {
         const candidateTitle = attempt === 0 ? sheetTitle : `${sheetTitle}_${attempt + 1}`;
-        addRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+        addRes = await sheetsApiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
           method: 'POST', headers,
           body: JSON.stringify({ requests: [{ addSheet: { properties: { title: candidateTitle } } }] })
         });
@@ -4430,7 +4449,7 @@ app.post('/api/export-report', async (req, res) => {
         ...page.rows
       ];
 
-      const writeRes = await fetch(
+      const writeRes = await sheetsApiFetch(
         `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${sheetTitle}'!A1`)}?valueInputOption=USER_ENTERED`,
         { method: 'PUT', headers, body: JSON.stringify({ values: sheetRows }) }
       );
@@ -4482,7 +4501,7 @@ app.post('/api/export-report', async (req, res) => {
         }}
       ];
 
-      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+      await sheetsApiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
         method: 'POST', headers, body: JSON.stringify({ requests: formatReqs })
       });
 
@@ -4492,7 +4511,7 @@ app.post('/api/export-report', async (req, res) => {
 
     // --- 表紙シート作成 ---
     const coverTitle = `表紙_${dateStr}_${timeStr}`;
-    const addCoverRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+    const addCoverRes = await sheetsApiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
       method: 'POST', headers,
       body: JSON.stringify({ requests: [{ addSheet: { properties: { title: coverTitle } } }] })
     });
@@ -4526,7 +4545,15 @@ app.post('/api/export-report', async (req, res) => {
       };
     }
 
-    const coverRows = [
+    // 円グラフ用ヘルパーデータ（M列=12, N列=13）を1〜5行目に埋め込む
+    const chartHelperData = [
+      ['カテゴリ', '件数'],
+      ['合格',     '=J6'],
+      ['不合格',   '=B6+D6+F6+H6'],
+      ['未検証',   '=D7'],
+      ['該当なし', '=B7']
+    ];
+    const coverBaseRows = [
       ['アクセシビリティ検査レポート', '', '', '', '', '', '', '', '', ''],
       ['作成日時', inspectionTime, '', '', '', '', '', '', '', ''],
       ['', '', '', '', '', '', '', '', '', ''],
@@ -4544,23 +4571,18 @@ app.post('/api/export-report', async (req, res) => {
         return [String(idx + 1), p.url, formulas.critical, formulas.serious, formulas.moderate, formulas.minor, formulas.pass, formulas.na, formulas.unverified, formulas.score, link];
       })
     ];
+    // チャートデータを最初の5行のM・N列（index 12,13）に直接埋め込む
+    const coverRows = coverBaseRows.map((row, idx) => {
+      if (idx >= 5) return row;
+      const extended = [...row];
+      while (extended.length < 12) extended.push('');
+      extended.push(chartHelperData[idx][0], chartHelperData[idx][1]);
+      return extended;
+    });
 
-    await fetch(
+    await sheetsApiFetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${coverTitle}'!A1`)}?valueInputOption=USER_ENTERED`,
       { method: 'PUT', headers, body: JSON.stringify({ values: coverRows }) }
-    );
-
-    // 円グラフ用ヘルパーデータを M1:N5 に書き込む（セルを参照する動的集計）
-    // Row6(=J6)=合格, Row6(B6+D6+F6+H6)=不合格, Row7(=D7)=未検証, Row7(=B7)=該当なし
-    await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${coverTitle}'!M1`)}?valueInputOption=USER_ENTERED`,
-      { method: 'PUT', headers, body: JSON.stringify({ values: [
-        ['カテゴリ', '件数'],
-        ['合格',     '=J6'],
-        ['不合格',   '=B6+D6+F6+H6'],
-        ['未検証',   '=D7'],
-        ['該当なし', '=B7']
-      ]}) }
     );
 
     // 表紙の書式
@@ -4646,7 +4668,7 @@ app.post('/api/export-report', async (req, res) => {
       }}
     ];
 
-    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+    await sheetsApiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
       method: 'POST', headers, body: JSON.stringify({ requests: coverFormatReqs })
     });
 
