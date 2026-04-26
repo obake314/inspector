@@ -93,7 +93,7 @@ h1 {
 }
 
 .section-headline {
-  font-size: var(--font-size-m);
+  font-size: var(--font-size-s);
   font-weight: 500;
   color: var(--navy-400);
   text-transform: uppercase;
@@ -147,7 +147,7 @@ h1 {
   justify-content: center;
   min-width: 74px;
   padding: 7px var(--space-m);
-  font-size: var(--font-size-m);
+  font-size: var(--font-size-s);
   letter-spacing: 0.02em;
   border: 1px solid transparent;
   transition: all 0.2s ease;
@@ -410,7 +410,7 @@ h1 {
 }
 .note {
   margin-top: 16px;
-  font-size: var(--font-size-m);
+  font-size: var(--font-size-s);
   color: var(--navy-400);
   border-left: 2px solid var(--navy-400);
   padding-left: var(--space-m);
@@ -1585,7 +1585,7 @@ h1 {
   background: var(--navy-200);
   border: 1px solid var(--navy-400);
   padding: var(--space-s) var(--space-m);
-  font-size: var(--font-size-m);
+  font-size: var(--font-size-s);
   font-weight: 500;
   cursor: pointer;
   color: var(--navy-400);
@@ -2067,7 +2067,7 @@ footer small {
   resize: vertical;
 }
 .settings-group .hint {
-  font-size: var(--font-size-m);
+  font-size: var(--font-size-s);
   color: var(--navy-400);
   margin-top: var(--space-s);
 }
@@ -2115,8 +2115,7 @@ footer small {
 .help-scan-list dd {
     margin-left: 0;
     margin-bottom: 16px;
-    padding-left: 16px;
-    font-size: 0.9rem;
+    font-size: var(--font-size-s);
     color: #374151;
 }
 .help-btn{
