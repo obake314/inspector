@@ -377,10 +377,10 @@ h1 {
 }
 
 
-.scan-option:has(.scan-option-checkbox#deepScanOpt:checked) { border-color:var(--color-deep);}
-.scan-option:has(.scan-option-checkbox#AIOpt:checked) { border-color:var(--color-multi);}
-.scan-option:has(.scan-option-checkbox#PlayOpt:checked) { border-color:var(--color-play);}
-.scan-option:has(.scan-option-checkbox#ExtOpt:checked) { border-color:var(--color-ext);}
+.scan-option:has(.scan-option-checkbox#deepScanOpt:checked) { border:2px solid var(--color-deep);}
+.scan-option:has(.scan-option-checkbox#multiScanOpt:checked) { border:2px solid var(--color-multi);}
+.scan-option:has(.scan-option-checkbox#PlayScanOpt:checked) { border:2px solid var(--color-play);}
+.scan-option:has(.scan-option-checkbox#ExtScanOpt:checked) { border:2px solid var(--color-ext);}
 
 #batchEnhancedOpt:checked,
 .scan-option-checkbox#deepScanOpt:checked {
