@@ -40,6 +40,11 @@ body {
   min-height: 100vh;
   line-height: 1.6;
 }
+
+table{
+    border-collapse: collapse;
+}
+
 .container {
   max-width: 1200px;
   margin: 0 auto;
@@ -733,6 +738,8 @@ h1 {
   margin-bottom: 6px;
   display: block;
 }
+
+.batchsum-td,
 .scoretable tbody td{
   padding: var(--space-s);
   text-align:center;
@@ -759,7 +766,6 @@ h1 {
   font-family: var(--font-latin);
   font-size: var(--font-size-l);
   line-height: 1;
-  font-weight: 500;
 }
 
 .score-label-content {
@@ -1860,12 +1866,7 @@ margin-bottom: 6px;
 
 /* セル共通 */
 .batchsum-td {
-  border: 1px solid #e2e6ef;
-  padding: 10px 12px;
-  text-align: center;
-  background: var(--color-white);
-  vertical-align: middle;
-  font-size: var(--font-size-s);
+
 }
 
 /* URL セル */
