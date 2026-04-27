@@ -4794,7 +4794,12 @@
         // DEEP/PLAY/EXT 統合カード描画（課題1・課題2）
         function renderUnifiedCard(no, sc, level, entry, applyDecisionFn) {
             const dkey = entry.primaryDkey;
-            const dec = dkey ? manualDecisions.get(dkey) : null;
+
+            // 3.2.3/3.2.4 は navConsistencyBar 専用SC — 詳細カードでは操作不可
+            const isNavSc = sc === '3.2.3' || sc === '3.2.4';
+            const navDecRaw = isNavSc ? (manualDecisions.get('BATCH:NAV_CONSISTENCY:SC:3.2.3') || null) : null;
+            const dec = isNavSc ? navDecRaw : (dkey ? manualDecisions.get(dkey) : null);
+
             const decisionClass = dec === 'ok' ? 'item-card-dec-ok' : dec === 'ng' ? 'item-card-dec-ng' : dec === 'hold' ? 'item-card-dec-hold' : '';
             const { consolidatedStatus, impact, sources } = entry;
 
@@ -4806,7 +4811,10 @@
             const titleText = getScName(sc) || `SC ${sc}`;
 
             const dk = dkey || `tmp:unified:${sc}:${no}`;
-            const decBtns = `<div class="decision-btns" onclick="event.stopPropagation()">
+            // 3.2.3/3.2.4 は navConsistencyBar からのみ操作可能 → カード内にボタンを出さない
+            const decBtns = isNavSc
+                ? `<span class="nav-sc-readonly-note">上部バーで判定</span>`
+                : `<div class="decision-btns" onclick="event.stopPropagation()">
                 <button class="decision-btn${dec==='ok'?' active-ok':''}" onclick="setDecision('${escapeHtml(dk)}','ok',this)">OK</button>
                 <button class="decision-btn${dec==='ng'?' active-ng':''}" onclick="setDecision('${escapeHtml(dk)}','ng',this)">NG</button>
                 <button class="decision-btn${dec==='hold'?' active-hold':''}" onclick="setDecision('${escapeHtml(dk)}','hold',this)">保留</button>

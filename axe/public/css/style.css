@@ -1476,6 +1476,7 @@ margin-bottom: 6px;
 .nav-bar-issue-missing { color: var(--color-serious); margin-left: var(--space-s); }
 .nav-bar-issue-added   { color: var(--color-moderate); margin-left: var(--space-s); }
 .nav-bar-decision-btns { display: flex; gap: 3px; margin-left: auto; }
+.nav-sc-readonly-note { font-size: var(--font-size-s); color: var(--navy-500); font-style: italic; }
 
 .location-row {
   font-size: var(--font-size-s);
