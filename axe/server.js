@@ -1169,8 +1169,14 @@ const KEYBOARD_TRAP_FOCUSABLE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])'
 ].join(', ');
 
+// Tab をウィジェット内で使う正当なロール（キーボードトラップ検査から除外）
+const WIDGET_ROLES_THAT_CAPTURE_TAB = new Set([
+  'grid', 'treegrid', 'tree', 'listbox', 'menu', 'menubar',
+  'tablist', 'spinbutton', 'slider', 'combobox'
+]);
+
 async function getActiveElementSnapshot(page) {
-  return page.evaluate(() => {
+  return page.evaluate((widgetRoles) => {
     const a = document.activeElement;
     if (!a || a === document.body || a === document.documentElement) return null;
     const tag = a.tagName.toLowerCase();
@@ -1180,18 +1186,22 @@ async function getActiveElementSnapshot(page) {
       : '';
     const text = (a.getAttribute('aria-label') || a.textContent || a.value || '').trim().slice(0, 25);
     let inModal = false;
+    let isWidget = false;
     let p = a;
     while (p) {
-      if (p.getAttribute && p.getAttribute('aria-modal') === 'true') {
-        inModal = true;
-        break;
+      if (p.getAttribute) {
+        if (p.getAttribute('aria-modal') === 'true') { inModal = true; break; }
+        const role = p.getAttribute('role') || '';
+        if (widgetRoles.includes(role)) { isWidget = true; break; }
       }
       p = p.parentElement;
     }
+    // contenteditable は Tab でインデントするため除外
+    if (a.isContentEditable) isWidget = true;
     const key = `${tag}${id}${cls}`.slice(0, 60);
     const display = `${key}${text ? ' "' + text + '"' : ''}`.slice(0, 80);
-    return { key, display, inModal };
-  });
+    return { key, display, inModal, isWidget };
+  }, [...WIDGET_ROLES_THAT_CAPTURE_TAB]);
 }
 
 async function pressTabAndCapture(page, { shift = false } = {}) {
@@ -1204,10 +1214,16 @@ async function pressTabAndCapture(page, { shift = false } = {}) {
 
 async function confirmKeyboardTrap(page, suspectKey) {
   const current = await getActiveElementSnapshot(page);
-  if (!current || current.key !== suspectKey || current.inModal) return false;
+  if (!current || current.key !== suspectKey || current.inModal || current.isWidget) return false;
+  // Escape で脱出できれば正当なフォーカス管理（ダイアログ等）→ トラップではない
+  await page.keyboard.press('Escape');
+  await new Promise(r => setTimeout(r, 60));
+  const afterEsc = await getActiveElementSnapshot(page);
+  if (afterEsc && afterEsc.key !== suspectKey) return false;
+  // Shift+Tab → Tab → Tab の3回すべてで同じ要素に留まる場合のみトラップと確定
   const backward = await pressTabAndCapture(page, { shift: true });
   const restored = await pressTabAndCapture(page);
-  const forward = await pressTabAndCapture(page);
+  const forward  = await pressTabAndCapture(page);
   return !!backward && !!restored && !!forward
     && backward.key === suspectKey
     && restored.key === suspectKey
@@ -1232,12 +1248,13 @@ async function detectKeyboardTrapsByTabbing(page) {
     const el = await pressTabAndCapture(page);
     if (!el) continue;
     history.push(el);
-    if (history.length < 3) continue;
-    const last = history[history.length - 1];
-    const prev = history[history.length - 2];
+    if (history.length < 4) continue;
+    const last  = history[history.length - 1];
+    const prev  = history[history.length - 2];
     const prev2 = history[history.length - 3];
-    if (last.inModal) continue;
-    if (last.key !== prev.key || last.key !== prev2.key) continue;
+    const prev3 = history[history.length - 4];
+    if (last.inModal || last.isWidget) continue;
+    if (last.key !== prev.key || last.key !== prev2.key || last.key !== prev3.key) continue;
     if (seenTrapKeys.has(last.key)) continue;
     const confirmed = await confirmKeyboardTrap(page, last.key);
     if (confirmed) {
