@@ -1578,48 +1578,103 @@ async function check_3_2_1_2_unexpected_change(page) {
 }
 
 /** SC 3.3.1 エラー特定
- *  [改善] 全フォームをテスト、aria-errormessage/aria-describedby 関連付けを検証
+ *  必須フィールドを持つフォームのみ空送信し、エラー通知の有無を検査する。
+ *  checkbox/radio は除外し、class*="error" の過検知を抑制。
  */
 async function check_3_3_1_error_identification(page) {
   try {
-    const formCount = await page.evaluate(() => document.querySelectorAll('form').length);
-    if (formCount === 0) {
-      return { sc: '3.3.1', name: 'エラー特定', status: 'not_applicable', message: 'フォームが見つかりません', violations: [] };
+    // 必須フィールドを持つフォームのみ対象にする
+    const targetForms = await page.evaluate(() => {
+      return Array.from(document.querySelectorAll('form')).filter(form =>
+        form.querySelector(
+          'input[required]:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]),' +
+          'textarea[required], select[required],' +
+          'input[aria-required="true"]:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]),' +
+          'textarea[aria-required="true"], select[aria-required="true"]'
+        )
+      ).length;
+    });
+
+    if (targetForms === 0) {
+      // 必須フィールドを持つフォームがない場合は検査不要
+      const totalForms = await page.evaluate(() => document.querySelectorAll('form').length);
+      return {
+        sc: '3.3.1', name: 'エラー特定',
+        status: totalForms > 0 ? 'manual_required' : 'not_applicable',
+        message: totalForms > 0
+          ? `${totalForms}件のフォームは必須フィールドなし。エラー通知は手動確認が必要です`
+          : 'フォームが見つかりません',
+        violations: []
+      };
     }
 
-    // 全フォームを空送信
+    // 必須フィールドを空にして送信（checkbox/radio/file は除外）
     await page.evaluate(() => {
       for (const form of document.querySelectorAll('form')) {
-        const fields = form.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]), textarea');
+        const hasRequired = form.querySelector(
+          'input[required]:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]),' +
+          'textarea[required], select[required],' +
+          'input[aria-required="true"]:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]),' +
+          'textarea[aria-required="true"], select[aria-required="true"]'
+        );
+        if (!hasRequired) continue;
+        const fields = form.querySelectorAll(
+          'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]),' +
+          'textarea, select'
+        );
         for (const f of fields) { f.value = ''; }
         const submitBtn = form.querySelector('[type="submit"], button:not([type="button"]):not([type="reset"])');
         if (submitBtn) submitBtn.click();
       }
     });
-    await new Promise(r => setTimeout(r, 1200));
+    await new Promise(r => setTimeout(r, 1500));
 
     const result = await page.evaluate(() => {
-      const ariaInvalid = document.querySelectorAll('[aria-invalid="true"]');
-      const alerts      = document.querySelectorAll('[role="alert"], [role="alertdialog"]');
-      const errorCls    = document.querySelectorAll('[class*="error" i]:not(form):not(input), [class*="invalid" i]:not(input)');
-      const errorEls    = [...new Set([...ariaInvalid, ...alerts, ...errorCls])].slice(0, 15);
+      const errorEls = new Set();
 
+      // aria-invalid="true" — 最も信頼性の高いシグナル
+      document.querySelectorAll('[aria-invalid="true"]').forEach(el => errorEls.add(el));
+
+      // role="alert" / "alertdialog" でテキストを持つもの
+      document.querySelectorAll('[role="alert"], [role="alertdialog"]').forEach(el => {
+        if ((el.textContent || '').trim()) errorEls.add(el);
+      });
+
+      // HTML5 ネイティブバリデーション (:invalid 状態の入力フィールド)
+      let nativeInvalidCount = 0;
+      document.querySelectorAll('input:invalid, textarea:invalid, select:invalid').forEach(el => {
+        nativeInvalidCount++;
+        errorEls.add(el);
+      });
+
+      // フォーム内に限定した具体的なエラークラスパターン
+      // 「error」単体は広すぎるため、フォームエラーを明示する複合クラスのみ対象
+      const formErrorSelectors = [
+        '[class*="error-message" i]', '[class*="error-text" i]',
+        '[class*="field-error" i]',   '[class*="form-error" i]',
+        '[class*="validation-error" i]', '[class*="input-error" i]',
+        '[class*="error__" i]',       '[class*="__error" i]',
+        '[data-error]', '[data-validate-error]'
+      ].join(',');
+      document.querySelectorAll('form').forEach(form => {
+        form.querySelectorAll(formErrorSelectors).forEach(el => {
+          if ((el.textContent || '').trim()) errorEls.add(el);
+        });
+      });
+
+      const errorArray = [...errorEls].slice(0, 15);
       let associatedCount = 0;
       const violations = [];
-      for (const el of errorEls) {
+      for (const el of errorArray) {
         const text = (el.textContent || '').trim().slice(0, 60);
         if (!text) continue;
-        // aria-describedby / aria-errormessage の関連付け確認
         const refId = el.getAttribute('aria-describedby') || el.getAttribute('aria-errormessage');
         const hasAssociation = !!refId && !!document.getElementById(refId);
         if (hasAssociation) associatedCount++;
         violations.push({ text, hasAssociation });
       }
-      return {
-        errorCount: errorEls.length,
-        associatedCount,
-        violations: violations.map(v => `${v.hasAssociation ? '✓' : '✗関連付けなし'} "${v.text}"`)
-      };
+      return { errorCount: errorArray.length, associatedCount, nativeInvalidCount,
+               violations: violations.map(v => `${v.hasAssociation ? '✓' : '✗関連付けなし'} "${v.text}"`) };
     });
 
     const pass = result.errorCount > 0;
@@ -1627,8 +1682,8 @@ async function check_3_3_1_error_identification(page) {
       sc: '3.3.1', name: 'エラー特定',
       status: pass ? 'pass' : 'fail',
       message: pass
-        ? `${formCount}フォーム検査: エラー${result.errorCount}件 (${result.associatedCount}件が適切に関連付け済み)`
-        : `${formCount}フォームを空送信したがエラーメッセージが検出されませんでした`,
+        ? `${targetForms}フォーム検査: エラー通知${result.errorCount}件検出 (${result.associatedCount}件が適切に関連付け済み)`
+        : `${targetForms}フォームを空送信したがエラーメッセージが検出されませんでした`,
       violations: pass ? result.violations.filter(v => v.startsWith('✗')) : ['エラーメッセージ未表示の可能性']
     };
   } catch (e) {
