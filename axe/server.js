@@ -1106,6 +1106,20 @@ async function check_2_5_8_target_size(page) {
           if (isScreenReaderOnlyElement(el)) continue;
           const rect = el.getBoundingClientRect();
           if (rect.width === 0 && rect.height === 0) continue;
+          // input に label が紐付いている場合はラベルがクリック対象 → label サイズを有効ターゲットとして使用
+          if (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA') {
+            const labelEl = el.id ? document.querySelector(`label[for="${CSS.escape(el.id)}"]`) : null;
+            const wrappingLabel = el.closest('label');
+            const associatedLabel = labelEl || wrappingLabel;
+            if (associatedLabel) {
+              const labelRect = associatedLabel.getBoundingClientRect();
+              if (labelRect.width >= 24 && labelRect.height >= 24) continue;
+            }
+            // 視覚的に隠されている input（カスタムチェックボックス等）は除外
+            const cs = getComputedStyle(el);
+            if (cs.opacity === '0' || cs.visibility === 'hidden' || cs.display === 'none' ||
+                (cs.position === 'absolute' && (parseFloat(cs.width) <= 1 || parseFloat(cs.height) <= 1 || cs.clip !== 'auto' || cs.clipPath !== 'none'))) continue;
+          }
           const tag = el.tagName.toLowerCase();
           const text = (el.textContent || el.value || el.getAttribute('aria-label') || '').trim().slice(0, 30);
           // ナビゲーション項目パターン: <li><a> の場合、親 <li> の高さが実効的なターゲットサイズとなる
