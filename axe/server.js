@@ -1208,7 +1208,7 @@ async function pressTabAndCapture(page, { shift = false } = {}) {
   if (shift) await page.keyboard.down('Shift');
   await page.keyboard.press('Tab');
   if (shift) await page.keyboard.up('Shift');
-  await new Promise(resolve => setTimeout(resolve, 40));
+  await new Promise(resolve => setTimeout(resolve, 120));
   return getActiveElementSnapshot(page);
 }
 
@@ -1239,22 +1239,38 @@ async function detectKeyboardTrapsByTabbing(page) {
     return { focusableCount, traps: [] };
   }
 
-  const maxTabs = Math.min(focusableCount + 20, 50);
+  // ページ中央をクリックしてからTabを開始（フォーカス管理JSを正常に起動させる）
+  try {
+    await page.mouse.click(400, 300);
+    await new Promise(r => setTimeout(r, 200));
+  } catch (_) { /* クリック失敗は無視 */ }
+
+  // フォーカス可能要素数が少ない場合は周回が起きやすいため閾値を上げる
+  const cycleGuard = focusableCount <= 5 ? Infinity : focusableCount;
+  const maxTabs = Math.min(focusableCount + 20, 60);
   const history = [];
   const traps = [];
   const seenTrapKeys = new Set();
+  let tabCount = 0;
 
   for (let i = 0; i < maxTabs; i++) {
     const el = await pressTabAndCapture(page);
     if (!el) continue;
+    tabCount++;
     history.push(el);
-    if (history.length < 4) continue;
+
+    // フォーカス可能要素数を超えてTabしたら周回とみなし終了
+    if (tabCount > cycleGuard + 5) break;
+
+    if (history.length < 5) continue;
     const last  = history[history.length - 1];
     const prev  = history[history.length - 2];
     const prev2 = history[history.length - 3];
     const prev3 = history[history.length - 4];
+    const prev4 = history[history.length - 5];
     if (last.inModal || last.isWidget) continue;
-    if (last.key !== prev.key || last.key !== prev2.key || last.key !== prev3.key) continue;
+    // 5回連続で同じ要素に留まった場合のみ疑う
+    if (last.key !== prev.key || last.key !== prev2.key || last.key !== prev3.key || last.key !== prev4.key) continue;
     if (seenTrapKeys.has(last.key)) continue;
     const confirmed = await confirmKeyboardTrap(page, last.key);
     if (confirmed) {
