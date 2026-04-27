@@ -3831,7 +3831,7 @@ function relevantToolFindingsForAI(toolResults, ref) {
 function getMultiVerificationMethodForAI(item) {
   const ref = item?.ref || '';
   const methods = {
-    '1.1.1': '画像リストの各imgを以下の順で評価する。【スキップ条件（違反にしない）】isHidden=trueは評価不要。role="presentation"またはrole="none"は評価不要。ariaLabelまたはariaLabelledbyが存在すればalt欠落でもpass。【alt=""（空）】装飾画像として正しい（pass）。ただしinLink=trueかつBASICのrelevantToolFindingsにlink-name違反があれば除く。【alt=null（属性なし）】上記スキップ条件を満たさない場合はfail。BASICがすでにfailを出している場合は違反内容を具体化する。【alt値の品質評価（最重要）】BASICが構造的には問題なしと判定した画像について、alt値が意味を持つかを確認する: (1)ファイル名・拡張子を含む（"image001.jpg" "photo.png"等）→fail、(2)"image" "img" "photo" "pic" "画像" "写真" "バナー" "アイコン" "図" 等の汎用語のみ→fail、(3)スクリーンショットで画像が確認できれば内容との一致を評価。全画像がスキップまたは適切なalt/aria名を持つ場合はpass。一部確認不能ならmanual_required。',
+    '1.1.1': '画像リストの各imgを以下の順で評価する。【スキップ条件（違反にしない）】isHidden=trueは評価不要。role="presentation"またはrole="none"は評価不要。ariaLabelまたはariaLabelledbyが存在すればalt欠落でもpass。【alt=""（空）- 最重要】alt=""は意図的な装飾画像の宣言であり、それ自体はWCAG準拠（pass）。たとえ画像が意味を持つように見えても、alt=""を持つ画像を単独でfailにしてはならない。例外はinLink=trueかつBASICのrelevantToolFindingsにlink-name違反がある場合のみ（その場合はリンク名無しとして扱う）。【alt=null（属性なし）】上記スキップ条件を満たさない場合はfail。BASICがすでにfailを出している場合は違反内容を具体化する。【alt値の品質評価（最重要）】BASICが構造的には問題なしと判定した画像について、alt値が意味を持つかを確認する: (1)ファイル名・拡張子を含む（"image001.jpg" "photo.png"等）→fail、(2)"image" "img" "photo" "pic" "画像" "写真" "バナー" "アイコン" "図" 等の汎用語のみ→fail、(3)スクリーンショットで画像が確認できれば内容との一致を評価。全画像がスキップまたは適切なalt/aria名を持つ場合はpass。一部確認不能ならmanual_required。',
     '1.2.1': 'audio/video/iframe等のメディアをHTMLと画面から探す。音声のみコンテンツがあり、近接する文字起こし・テキスト代替・説明リンクが確認できればpass。メディア内容の聴取が必要ならmanual_required。メディアが無ければnot_applicable。',
     '1.2.2': '収録済み動画があるか確認し、track kind="captions"、字幕ボタン、キャプション付きプレーヤー、字幕/文字起こしリンクを証拠にする。動画があるが字幕の有無をHTML/画面で確認できなければmanual_required。',
     '1.2.3': '動画に音声解説または同等のメディア代替があるか、リンク・説明・track・プレーヤー表示から確認する。映像内容の理解が必要で証拠が無い場合はmanual_required。動画が無ければnot_applicable。',
@@ -4096,7 +4096,7 @@ ${JSON.stringify(evaluationItems, null, 2)}
     "confidence": 0.3〜1.0,
     "reason": "具体的な判断理由。検出内容を1文で明記",
     "evidence": "HTML断片、CSSセレクタ、画面上の文言、自動ツール結果などの根拠",
-    "selector": "該当するCSSセレクタ。特定不能なら空文字",
+    "selector": "該当するCSSセレクタ。属性値にダブルクォートを使わないこと（例: img[alt] は OK、img[alt=\"\"] は NG）。特定不能なら空文字",
     "suggestion": "修正アクション。fail/manual_requiredなら1〜2文で具体的に書く。pass/not_applicableなら空文字"
   }
   ],
@@ -4139,6 +4139,33 @@ improvementPlan はBASIC/EXT/DEEP/PLAY/MULTIの全結果を統合して作成し
     console.log('AI応答受信, 長さ:', aiResponse.length);
     _lastAiDebug = { ..._lastAiDebug, stage: 'ai_responded', model: usedModel, length: aiResponse.length, tokenLimited: aiTokenLimited, raw: aiResponse, timestamp: new Date().toISOString() };
     
+    // AIが CSS 属性セレクタ内のダブルクォートをエスケープしないケース対応。
+    // 例: "img[src*="file.jpg"][alt=""]" → "img[src*="file.jpg"][alt]"
+    // JSON文字列の外にいる状態でしか書き換えないため、正常なJSON文字列は壊さない。
+    function sanitizeAiJson(text) {
+      let result = '';
+      let inStr = false, esc = false;
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (esc) { esc = false; result += c; continue; }
+        if (c === '\\' && inStr) { esc = true; result += c; continue; }
+        if (c === '"') { inStr = !inStr; result += c; continue; }
+        // 文字列外のとき: CSS [attr="value"] を [attr] に縮約
+        if (!inStr && c === '[') {
+          const closeIdx = text.indexOf(']', i + 1);
+          if (closeIdx !== -1) {
+            const inner = text.slice(i + 1, closeIdx);
+            const safe = inner.replace(/=\s*["'][^"'\]]*["']/g, '');
+            result += '[' + safe + ']';
+            i = closeIdx;
+            continue;
+          }
+        }
+        result += c;
+      }
+      return result;
+    }
+
     // ブラケットカウント方式で JSON 配列を抽出
     // 正規表現は文字列内の ] や } に誤反応するため使用しない
     function extractJsonArray(text) {
@@ -4284,9 +4311,10 @@ improvementPlan はBASIC/EXT/DEEP/PLAY/MULTIの全結果を統合して作成し
     }
 
     let results = [];
-    const extractedObject = extractJsonObject(aiResponse);
+    const sanitizedResponse = sanitizeAiJson(aiResponse);
+    const extractedObject = extractJsonObject(sanitizedResponse);
     const improvementPlan = normalizeImprovementPlan(extractedObject?.improvementPlan);
-    const extracted = Array.isArray(extractedObject?.results) ? extractedObject.results : extractJsonArray(aiResponse);
+    const extracted = Array.isArray(extractedObject?.results) ? extractedObject.results : extractJsonArray(sanitizedResponse);
     if (extracted) {
       results = extracted;
     } else if (aiTokenLimited) {
