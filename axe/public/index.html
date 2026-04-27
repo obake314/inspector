@@ -2807,9 +2807,31 @@
             if (existing) existing.remove();
             const nc = batchNavConsistency;
             if (!nc) return;
-            const isPas = nc.result === 'pass';
+
+            const navDec = manualDecisions.get('BATCH:NAV_CONSISTENCY:SC:3.2.3') || null;
+
+            // 表示上の結果：manualDecision を優先し、なければスキャン結果を使う
+            const effectivePass = navDec === 'ok' ? true
+                : navDec === 'ng' ? false
+                : navDec === 'hold' ? null   // null = 保留（未確定）
+                : nc.result === 'pass';
+
+            // バーのクラス
+            const barStateClass = effectivePass === true ? 'is-pass'
+                : effectivePass === false ? 'is-fail'
+                : 'is-hold';
+            const decClass = navDec === 'ok' ? 'nav-bar-dec-ok'
+                : navDec === 'ng' ? 'nav-bar-dec-ng'
+                : navDec === 'hold' ? 'nav-bar-dec-hold' : '';
+
+            // 結果テキスト
+            const resultLabel = effectivePass === true ? '合格'
+                : effectivePass === false ? '不合格'
+                : '保留';
+
+            // 不合格の場合のみ差分詳細を表示（OK上書きなら詳細は折りたたむ）
             let issueHtml = '';
-            if (!isPas && nc.issues && nc.issues.length > 0) {
+            if (effectivePass === false && nc.issues && nc.issues.length > 0) {
                 issueHtml = nc.issues.map(iss =>
                     `<div class="nav-bar-issue">
                         ${escapeHtml(iss.message)}
@@ -2818,20 +2840,22 @@
                     </div>`
                 ).join('');
             }
-            const navDec = manualDecisions.get('BATCH:NAV_CONSISTENCY:SC:3.2.3') || null;
-            const decClass = navDec === 'ok' ? 'nav-bar-dec-ok' : navDec === 'ng' ? 'nav-bar-dec-ng' : navDec === 'hold' ? 'nav-bar-dec-hold' : '';
+
             const navDecBtns = `<div class="nav-bar-decision-btns" onclick="event.stopPropagation()">
                 <button class="decision-btn${navDec==='ok'?' active-ok':''}" onclick="setNavConsistencyDecision('ok',this)">OK</button>
                 <button class="decision-btn${navDec==='ng'?' active-ng':''}" onclick="setNavConsistencyDecision('ng',this)">NG</button>
                 <button class="decision-btn${navDec==='hold'?' active-hold':''}" onclick="setNavConsistencyDecision('hold',this)">保留</button>
             </div>`;
+
             const bar = document.createElement('div');
             bar.id = 'navConsistencyBar';
-            bar.className = `nav-bar ${isPas ? 'is-pass' : 'is-fail'} ${decClass}`;
+            bar.className = `nav-bar ${barStateClass} ${decClass}`;
             bar.innerHTML = `<span class="nav-bar-main">SC ${escapeHtml(nc.sc||'3.2.3/3.2.4')}　${escapeHtml(nc.title||'ナビゲーション一貫性')}</span>
-                <span class="nav-bar-result">${isPas ? '合格' : '不合格'}</span>
+                <span class="nav-bar-result">${resultLabel}</span>
                 <span class="nav-bar-meta">比較URL: ${(nc.comparedUrls||[]).length}件</span>
-                ${isPas ? '<span class="nav-bar-ok">全ページでナビゲーション構造が一致しています</span>' : issueHtml}
+                ${effectivePass === true ? '<span class="nav-bar-ok">合格（ヒューマンチェックによる上書き）</span>' : ''}
+                ${effectivePass === null ? '<span class="nav-bar-ok" style="color:var(--color-moderate)">保留中（未確定）</span>' : ''}
+                ${issueHtml}
                 ${navDecBtns}`;
             const resultsEl = $('results');
             if (resultsEl) resultsEl.prepend(bar);

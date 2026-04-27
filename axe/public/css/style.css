@@ -1463,6 +1463,7 @@ margin-bottom: 6px;
 }
 .nav-bar.is-fail { border-left-color: var(--color-serious); }
 .nav-bar.is-pass { border-left-color: var(--color-multi); }
+.nav-bar.is-hold { border-left-color: var(--color-moderate); }
 .nav-bar.nav-bar-dec-ok   { opacity: 0.65; }
 .nav-bar.nav-bar-dec-hold { opacity: 0.65; }
 .nav-bar-main { font-weight: 700; font-size: var(--font-size-s); }
