@@ -984,7 +984,8 @@
                         deepResults: lastEnhancedResults,
                         multiAiData: doMulti ? aiResults : null,
                         playResults: lastPlayResults,
-                        extResults: lastExtResults
+                        extResults: lastExtResults,
+                        navConsistency: currentMode === 'batch' ? batchNavConsistency : null
                     },
                     multiTokenLimited: lastMultiTokenLimited,
                     multiIssue: lastMultiIssue
