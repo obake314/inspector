@@ -1450,6 +1450,32 @@ margin-bottom: 6px;
 .item-card.expanded .expand-icon {
   transform: rotate(180deg);
 }
+/* ---- navConsistencyBar ---- */
+.nav-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-s);
+  padding: var(--space-s) var(--space-m);
+  margin-bottom: var(--space-m);
+  border-left: 4px solid var(--navy-400);
+  background: var(--color-white);
+}
+.nav-bar.is-fail { border-left-color: var(--color-serious); }
+.nav-bar.is-pass { border-left-color: var(--color-multi); }
+.nav-bar.nav-bar-dec-ok   { opacity: 0.65; }
+.nav-bar.nav-bar-dec-hold { opacity: 0.65; }
+.nav-bar-main { font-weight: 700; font-size: var(--font-size-s); }
+.nav-bar-result { font-size: var(--font-size-s); font-weight: 700; }
+.nav-bar.is-fail .nav-bar-result { color: var(--color-serious); }
+.nav-bar.is-pass .nav-bar-result { color: var(--color-multi); }
+.nav-bar-meta { font-size: var(--font-size-xs); color: var(--navy-400); }
+.nav-bar-ok { font-size: var(--font-size-s); color: var(--color-multi); }
+.nav-bar-issue { font-size: var(--font-size-s); color: var(--navy-700); }
+.nav-bar-issue-missing { color: var(--color-serious); margin-left: var(--space-s); }
+.nav-bar-issue-added   { color: var(--color-moderate); margin-left: var(--space-s); }
+.nav-bar-decision-btns { display: flex; gap: 3px; margin-left: auto; }
+
 .location-row {
   font-size: var(--font-size-s);
   padding: 5px var(--space-s);

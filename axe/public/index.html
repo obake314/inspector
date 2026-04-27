@@ -886,6 +886,39 @@
             }
         };
 
+        // navConsistencyBar 用：3.2.3 / 3.2.4 を同時にスコープなしで設定
+        window.setNavConsistencyDecision = (val, btnEl) => {
+            const keys = ['BATCH:NAV_CONSISTENCY:SC:3.2.3', 'BATCH:NAV_CONSISTENCY:SC:3.2.4'];
+            const current = manualDecisions.get(keys[0]);
+            const newVal = current === val ? null : val;
+            keys.forEach(k => {
+                if (newVal) {
+                    manualDecisions.set(k, newVal);
+                    if (newVal === 'ng') manualImpacts.set(k, 'moderate');
+                    else manualImpacts.delete(k);
+                } else {
+                    manualDecisions.delete(k);
+                    manualImpacts.delete(k);
+                }
+            });
+            renderNavBar();
+            renderAllTabs('pc');
+            refreshScoreTable();
+            if (currentMode === 'batch' && currentBatchIdx !== null) {
+                renderBatchSummary();
+                const mobileR = batchMobileResultsData[currentBatchIdx];
+                if (mobileR?.success) {
+                    renderAllTabs('sp', mobileR.results,
+                        batchMobileEnhancedResults[mobileR.url] || null,
+                        batchMobileAIResults[mobileR.url] || {},
+                        batchMobilePlayResults[mobileR.url] || null,
+                        batchMobileExtResults[mobileR.url] || null,
+                        batchMobileNavConsistency
+                    );
+                }
+            }
+        };
+
         window.setDecision = (key, val, btnEl) => {
             // 同じボタン再クリックで解除
             if (manualDecisions.get(key) === val) {
@@ -2784,13 +2817,21 @@
                     </div>`
                 ).join('');
             }
+            const navDec = manualDecisions.get('BATCH:NAV_CONSISTENCY:SC:3.2.3') || null;
+            const decClass = navDec === 'ok' ? 'nav-bar-dec-ok' : navDec === 'ng' ? 'nav-bar-dec-ng' : navDec === 'hold' ? 'nav-bar-dec-hold' : '';
+            const navDecBtns = `<div class="nav-bar-decision-btns" onclick="event.stopPropagation()">
+                <button class="decision-btn${navDec==='ok'?' active-ok':''}" onclick="setNavConsistencyDecision('ok',this)">OK</button>
+                <button class="decision-btn${navDec==='ng'?' active-ng':''}" onclick="setNavConsistencyDecision('ng',this)">NG</button>
+                <button class="decision-btn${navDec==='hold'?' active-hold':''}" onclick="setNavConsistencyDecision('hold',this)">保留</button>
+            </div>`;
             const bar = document.createElement('div');
             bar.id = 'navConsistencyBar';
-            bar.className = `nav-bar ${isPas ? 'is-pass' : 'is-fail'}`;
+            bar.className = `nav-bar ${isPas ? 'is-pass' : 'is-fail'} ${decClass}`;
             bar.innerHTML = `<span class="nav-bar-main">SC ${escapeHtml(nc.sc||'3.2.3/3.2.4')}　${escapeHtml(nc.title||'ナビゲーション一貫性')}</span>
                 <span class="nav-bar-result">${isPas ? '合格' : '不合格'}</span>
                 <span class="nav-bar-meta">比較URL: ${(nc.comparedUrls||[]).length}件</span>
-                ${isPas ? '<span class="nav-bar-ok">全ページでナビゲーション構造が一致しています</span>' : issueHtml}`;
+                ${isPas ? '<span class="nav-bar-ok">全ページでナビゲーション構造が一致しています</span>' : issueHtml}
+                ${navDecBtns}`;
             const resultsEl = $('results');
             if (resultsEl) resultsEl.prepend(bar);
         }
@@ -4024,9 +4065,10 @@
         // dkey: decisionのキー、rawStatus: 'fail'|'pass'|'na'|'unverified'
         // impact: NG時に返す重要度（元のimpact）
         function applyDecisionToStatus(dkey, rawStatus, rawImpact, scope = null) {
-            const dec = dkey ? getManualDecision(dkey, scope) : null;
+            // スコープありキーを優先し、なければスコープなしキー（navConsistencyBar等のグローバル判定）にフォールバック
+            const dec = dkey ? (getManualDecision(dkey, scope) || (scope ? manualDecisions.get(dkey) : null)) : null;
             if (dec === 'ok')   return { status: 'pass',       impact: null };
-            if (dec === 'ng')   return { status: 'fail',       impact: getManualImpact(dkey, scope) || rawImpact || 'serious' };
+            if (dec === 'ng')   return { status: 'fail',       impact: getManualImpact(dkey, scope) || manualImpacts.get(dkey) || rawImpact || 'serious' };
             if (dec === 'hold') return { status: 'unverified', impact: null };
             return { status: rawStatus, impact: rawImpact };
         }
