@@ -908,22 +908,21 @@ app.post('/api/batch-check', async (req, res) => {
     // 全URLを並列で検査
     const checkOne = async (url) => {
       let page;
-      try {
+      const runAxe = async () => {
         page = await browser.newPage();
         await applyViewportPreset(page, preset);
         if (basicAuth && basicAuth.user && basicAuth.pass) {
           await page.authenticate({ username: basicAuth.user, password: basicAuth.pass });
-	        }
-	        await page.setDefaultNavigationTimeout(60000);
-	        await page.goto(url, { waitUntil: 'networkidle2' });
-	        const pageSignals = await detectPageSignals(page);
-
-	        const builder = new AxePuppeteer(page);
-	        builder.withTags(tags);
-	        const results = await builder.analyze();
-	        results.pageSignals = pageSignals;
-
-        // SC 3.2.3/3.2.4 用にナビ構造を抽出
+        }
+        await page.setDefaultNavigationTimeout(60000);
+        await page.goto(url, { waitUntil: 'networkidle2' });
+        // ページ安定待ち（リダイレクト後の再レンダリングを待つ）
+        await new Promise(r => setTimeout(r, 500));
+        const pageSignals = await detectPageSignals(page);
+        const builder = new AxePuppeteer(page);
+        builder.withTags(tags);
+        const results = await builder.analyze();
+        results.pageSignals = pageSignals;
         const navStructure = await page.evaluate(() => {
           const navEls = Array.from(document.querySelectorAll('nav, [role="navigation"]'));
           return navEls.map(nav => {
@@ -935,9 +934,22 @@ app.post('/api/batch-check', async (req, res) => {
             return { label, links };
           });
         });
-
         return { url, success: true, results, navStructure };
+      };
+      try {
+        return await runAxe();
       } catch (error) {
+        // Page/Frame is not ready: ページ遷移中にaxeが実行された場合は1回リトライ
+        if (/not ready|frame.*detach|execution context/i.test(error.message)) {
+          console.warn(`[Batch] Page not ready for ${url}, retrying...`);
+          try {
+            if (page) { try { await page.close(); } catch (_) {} page = null; }
+            return await runAxe();
+          } catch (retryError) {
+            console.error(`[Batch] Retry failed for ${url}:`, retryError.message);
+            return { url, success: false, error: retryError.message, navStructure: [] };
+          }
+        }
         console.error(`[Batch] Error for ${url}:`, error.message);
         return { url, success: false, error: error.message, navStructure: [] };
       } finally {

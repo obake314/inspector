@@ -5386,7 +5386,7 @@
                     };
                 }
                 const record = batchResultsData[currentBatchIdx];
-                if (!record?.success) return null;
+                if (!record?.url) return null; // URLがなければ再スキャン不可
                 const url = record.url;
                 const isMobileOnlyBatch = batchViewportMode === 'mobile';
                 return {
@@ -5681,7 +5681,7 @@
             if (!['BASIC', 'DEEP', 'MULTI', 'PLAY', 'EXT'].includes(normalizedScanType)) return;
             if (scanInProgress || scoreRescanInProgress) return;
             const ctx = getScoreRescanContext(view);
-            if (!ctx?.url || !ctx.basic) {
+            if (!ctx?.url) {
                 alert('再スキャン対象のURLが見つかりません');
                 return;
             }
