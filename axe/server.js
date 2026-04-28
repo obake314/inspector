@@ -1784,172 +1784,213 @@ async function check_2_1_1_keyboard_operable(page) {
 }
 
 /** SC 2.4.7 フォーカス可視 + SC 2.4.13 フォーカスの外観
- *  [改善] el.focus() でスタイル差分を計測 — Tab依存より正確
+ *  page.keyboard.press('Tab') で実際にTab移動し :focus-visible を正しく評価する
  */
 async function check_2_4_7_focus_visible(page) {
   try {
-    const results = await page.evaluate(() => {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
-
-      // ===== カラーユーティリティ =====
-      function parseRgb(c) {
-        if (!c) return null;
-        const m = c.match(/rgba?\(\s*(\d+\.?\d*),\s*(\d+\.?\d*),\s*(\d+\.?\d*)/);
-        return m ? [parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3])] : null;
+    // --- step1: 未フォーカス時のスタイルを収集 ---
+    const preData = await page.evaluate(() => {
+      function snap(el) {
+        const s = window.getComputedStyle(el);
+        const tag = el.tagName.toLowerCase();
+        const id  = el.id ? `#${el.id}` : '';
+        const cls = el.className && typeof el.className === 'string'
+          ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+        const text = (el.getAttribute('aria-label') || el.textContent || el.value || '').trim().slice(0, 25);
+        const parentEl = el.parentElement;
+        const ctx = !el.id && parentEl && parentEl !== document.body
+          ? ` in ${parentEl.tagName.toLowerCase()}${parentEl.id ? '#' + parentEl.id : ''}` : '';
+        return {
+          key:   `${tag}${id}${cls}`.slice(0, 60),
+          label: `${tag}${id}${cls}${text ? ' "' + text + '"' : ''}${ctx}`.slice(0, 80),
+          outlineWidth:  parseFloat(s.outlineWidth) || 0,
+          outlineStyle:  s.outlineStyle,
+          outlineColor:  s.outlineColor,
+          boxShadow:     s.boxShadow,
+          backgroundColor: s.backgroundColor,
+          borderWidth:   parseFloat(s.borderWidth) || 0,
+          borderColor:   s.borderColor
+        };
       }
-      function luminance([r, g, b]) {
-        return [r, g, b].map((v, i) => {
-          v /= 255;
-          v = v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
-          return v * [0.2126, 0.7152, 0.0722][i];
-        }).reduce((a, b) => a + b, 0);
-      }
-      function contrastRatio(c1, c2) {
-        if (!c1 || !c2) return 0;
-        const l1 = luminance(c1), l2 = luminance(c2);
-        return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
-      }
-      function isTransparent(c) {
-        return !c || c === 'transparent' || /rgba?\(\s*\d+,\s*\d+,\s*\d+,\s*0\s*\)/.test(c);
-      }
-      // 透明要素は親を辿って実効背景色を取得
-      function effectiveBg(el) {
-        let node = el;
-        while (node && node !== document.documentElement) {
-          const bg = window.getComputedStyle(node).backgroundColor;
-          if (!isTransparent(bg)) return bg;
-          node = node.parentElement;
-        }
-        return 'rgb(255,255,255)';
-      }
-      // box-shadow の最初の層からスプレッド半径と色を抽出
-      function parseShadow(s) {
-        if (!s || s === 'none') return null;
-        const colorMatch = s.match(/rgba?\([^)]+\)/);
-        const color = colorMatch ? colorMatch[0] : null;
-        const noColor = s.replace(/rgba?\([^)]+\)/, '').trim();
-        const nums = (noColor.match(/(-?\d+\.?\d*)px/g) || []).map(parseFloat);
-        const spread = nums.length >= 4 ? nums[3] : (nums.length === 3 ? 0 : null);
-        return spread !== null ? { spread, color } : null;
-      }
-
-      const violations27 = [];
-      const violations213 = [];
-      const focusables = Array.from(document.querySelectorAll(
+      return Array.from(document.querySelectorAll(
         'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
       )).filter(el => {
         const s = window.getComputedStyle(el);
         return s.display !== 'none' && s.visibility !== 'hidden';
-      }).slice(0, 25);
-
-      for (const el of focusables) {
-        if (document.activeElement === el) el.blur();
-        const before = window.getComputedStyle(el);
-        const bOutlineW    = parseFloat(before.outlineWidth) || 0;
-        const bOutlineS    = before.outlineStyle;
-        const bBoxShadow   = before.boxShadow;
-        const bBg          = before.backgroundColor;
-        const bBorderW     = parseFloat(before.borderWidth) || 0;
-        const bBorderColor = before.borderColor;
-
-        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
-        el.focus({ preventScroll: true });
-        const after = window.getComputedStyle(el);
-        const aOutlineW    = parseFloat(after.outlineWidth) || 0;
-        const aOutlineS    = after.outlineStyle;
-        const aOutlineC    = after.outlineColor;
-        const aBoxShadow   = after.boxShadow;
-        const aBg          = after.backgroundColor;
-        const aBorderW     = parseFloat(after.borderWidth) || 0;
-        const aBorderColor = after.borderColor;
-        el.blur();
-
-        const tag    = el.tagName.toLowerCase();
-        const id     = el.id ? `#${el.id}` : '';
-        const cls    = el.className && typeof el.className === 'string'
-          ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
-        const text   = (el.getAttribute('aria-label') || el.textContent || el.value || '').trim().slice(0, 25);
-        const parentEl  = el.parentElement;
-        const parentCtx = !el.id && parentEl && parentEl !== document.body
-          ? ` in ${parentEl.tagName.toLowerCase()}${parentEl.id ? '#' + parentEl.id : ''}` : '';
-        const label = `${tag}${id}${cls}${text ? ' "' + text + '"' : ''}${parentCtx}`.slice(0, 80);
-
-        // --- SC 2.4.7: インジケーター存在確認 ---
-        const hasOutline    = aOutlineS !== 'none' && aOutlineW > 0 && !isTransparent(aOutlineC);
-        const hasBoxShadow  = aBoxShadow && aBoxShadow !== 'none' && aBoxShadow !== bBoxShadow;
-        const bgChanged     = aBg !== bBg && !isTransparent(aBg);
-        const borderChanged = aBorderW !== bBorderW || aBorderColor !== bBorderColor;
-        const hasFocusIndicator = hasOutline || hasBoxShadow || bgChanged || borderChanged;
-
-        if (!hasFocusIndicator) {
-          violations27.push(`${label} (outline:${aOutlineW}px, bg変化:${bgChanged}, shadow:${hasBoxShadow})`);
-          violations213.push(`${label} ／ インジケーター未検出`);
-          continue;
-        }
-
-        // --- SC 2.4.13: 面積（≥2px）+ コントラスト比（≥3:1）の自動判定 ---
-        const adjBg = effectiveBg(el.parentElement || el);
-        let areaOk = false, crOk = false, areaNote = '', crNote = '';
-
-        if (hasOutline) {
-          areaOk  = aOutlineW >= 2;
-          areaNote = `outline-width:${aOutlineW}px`;
-          const cr = contrastRatio(parseRgb(aOutlineC), parseRgb(adjBg));
-          crOk    = cr >= 3;
-          crNote  = `コントラスト:${cr.toFixed(1)}:1`;
-        } else if (hasBoxShadow) {
-          const sh = parseShadow(aBoxShadow);
-          if (sh) {
-            areaOk  = sh.spread >= 2;
-            areaNote = `box-shadow spread:${sh.spread}px`;
-            const cr = contrastRatio(parseRgb(sh.color || adjBg), parseRgb(adjBg));
-            crOk    = cr >= 3;
-            crNote  = `コントラスト:${cr.toFixed(1)}:1`;
-          } else {
-            areaOk = true; crOk = true; // パース不能は手動確認対象としてスルー
-          }
-        } else if (bgChanged) {
-          areaOk  = true; // 背景全体変化なので面積は十分
-          const cr = contrastRatio(parseRgb(aBg), parseRgb(adjBg));
-          crOk    = cr >= 3;
-          crNote  = `背景コントラスト:${cr.toFixed(1)}:1`;
-        } else if (borderChanged) {
-          const bwDiff = aBorderW - bBorderW;
-          areaOk  = bwDiff >= 2;
-          areaNote = `border増分:${bwDiff.toFixed(1)}px`;
-          const cr = contrastRatio(parseRgb(aBorderColor), parseRgb(adjBg));
-          crOk    = cr >= 3;
-          crNote  = `コントラスト:${cr.toFixed(1)}:1`;
-        }
-
-        if (!areaOk || !crOk) {
-          const reasons = [];
-          if (!areaOk) reasons.push(`面積不足(${areaNote}、≥2px必要)`);
-          if (!crOk)   reasons.push(`${crNote}（≥3:1必要）`);
-          violations213.push(`${label} ／ ${reasons.join('、')}`);
-        }
-      }
-      return { violations27, violations213 };
+      }).slice(0, 35).map(snap);
     });
 
-    const has247Fail = results.violations27.length > 0;
-    const has213Fail = results.violations213.length > 0;
+    if (preData.length === 0) {
+      return [
+        { sc: '2.4.7',  name: 'フォーカス可視（AA）',   status: 'pass', message: 'フォーカス可能要素なし', violations: [] },
+        { sc: '2.4.13', name: 'フォーカスの外観（AA）', status: 'pass', message: 'フォーカス可能要素なし', violations: [] }
+      ];
+    }
+
+    // キーボードモード確立（bodyクリック後にEsc→Tabで:focus-visibleをオン）
+    try {
+      await page.mouse.click(10, 10);
+      await new Promise(r => setTimeout(r, 100));
+      await page.keyboard.press('Escape');
+      await new Promise(r => setTimeout(r, 60));
+    } catch (_) {}
+
+    // --- step2: 実際にTabして :focus-visible 込みのスタイルを収集 ---
+    const byKey = new Map(preData.map(d => [d.key, d]));
+    const checked = new Map(); // key → afterStyles
+    const seen    = new Set();
+    const maxTabs = preData.length + 10;
+
+    for (let i = 0; i < maxTabs; i++) {
+      await page.keyboard.press('Tab');
+      await new Promise(r => setTimeout(r, 120));
+
+      const after = await page.evaluate(() => {
+        function isTransparent(c) {
+          return !c || c === 'transparent' || /rgba?\(\s*\d+,\s*\d+,\s*\d+,\s*0\s*\)/.test(c);
+        }
+        function effectiveBg(el) {
+          let node = el;
+          while (node && node !== document.documentElement) {
+            const bg = window.getComputedStyle(node).backgroundColor;
+            if (!isTransparent(bg)) return bg;
+            node = node.parentElement;
+          }
+          return 'rgb(255,255,255)';
+        }
+        const el = document.activeElement;
+        if (!el || el === document.body || el === document.documentElement) return null;
+        const s   = window.getComputedStyle(el);
+        const tag = el.tagName.toLowerCase();
+        const id  = el.id ? `#${el.id}` : '';
+        const cls = el.className && typeof el.className === 'string'
+          ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+        return {
+          key:             `${tag}${id}${cls}`.slice(0, 60),
+          outlineWidth:    parseFloat(s.outlineWidth) || 0,
+          outlineStyle:    s.outlineStyle,
+          outlineColor:    s.outlineColor,
+          boxShadow:       s.boxShadow,
+          backgroundColor: s.backgroundColor,
+          borderWidth:     parseFloat(s.borderWidth) || 0,
+          borderColor:     s.borderColor,
+          adjBg:           effectiveBg(el.parentElement || el)
+        };
+      });
+
+      if (!after) continue;
+      if (seen.has(after.key)) break; // 一周したら終了
+      seen.add(after.key);
+      if (byKey.has(after.key)) checked.set(after.key, after);
+    }
+
+    // --- step3: before/after 差分を評価 ---
+    function parseRgb(c) {
+      if (!c) return null;
+      const m = c.match(/rgba?\(\s*(\d+\.?\d*),\s*(\d+\.?\d*),\s*(\d+\.?\d*)/);
+      return m ? [parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3])] : null;
+    }
+    function luminance([r, g, b]) {
+      return [r, g, b].map((v, i) => {
+        v /= 255;
+        v = v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+        return v * [0.2126, 0.7152, 0.0722][i];
+      }).reduce((a, b) => a + b, 0);
+    }
+    function contrastRatio(c1, c2) {
+      if (!c1 || !c2) return 0;
+      const l1 = luminance(c1), l2 = luminance(c2);
+      return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+    }
+    function isTransparentColor(c) {
+      return !c || c === 'transparent' || /rgba?\(\s*\d+,\s*\d+,\s*\d+,\s*0\s*\)/.test(c);
+    }
+    function parseShadow(s) {
+      if (!s || s === 'none') return null;
+      const colorMatch = s.match(/rgba?\([^)]+\)/);
+      const color = colorMatch ? colorMatch[0] : null;
+      const noColor = s.replace(/rgba?\([^)]+\)/, '').trim();
+      const nums = (noColor.match(/(-?\d+\.?\d*)px/g) || []).map(parseFloat);
+      const spread = nums.length >= 4 ? nums[3] : (nums.length === 3 ? 0 : null);
+      return spread !== null ? { spread, color } : null;
+    }
+
+    const violations27  = [];
+    const violations213 = [];
+
+    for (const [key, a] of checked) {
+      const b = byKey.get(key);
+      if (!b) continue;
+
+      const hasOutline    = a.outlineStyle !== 'none' && a.outlineWidth > 0 && !isTransparentColor(a.outlineColor);
+      const hasBoxShadow  = a.boxShadow && a.boxShadow !== 'none' && a.boxShadow !== b.boxShadow;
+      const bgChanged     = a.backgroundColor !== b.backgroundColor && !isTransparentColor(a.backgroundColor);
+      const borderChanged = a.borderWidth !== b.borderWidth || a.borderColor !== b.borderColor;
+      const hasFocusIndicator = hasOutline || hasBoxShadow || bgChanged || borderChanged;
+
+      if (!hasFocusIndicator) {
+        violations27.push(`${b.label} (outline:${a.outlineWidth}px, bg変化:${bgChanged}, shadow:${hasBoxShadow})`);
+        violations213.push(`${b.label} ／ インジケーター未検出`);
+        continue;
+      }
+
+      // SC 2.4.13: 面積 ≥2px + コントラスト比 ≥3:1
+      let areaOk = false, crOk = false, areaNote = '', crNote = '';
+      if (hasOutline) {
+        areaOk   = a.outlineWidth >= 2;
+        areaNote = `outline-width:${a.outlineWidth}px`;
+        const cr = contrastRatio(parseRgb(a.outlineColor), parseRgb(a.adjBg));
+        crOk   = cr >= 3;
+        crNote = `コントラスト:${cr.toFixed(1)}:1`;
+      } else if (hasBoxShadow) {
+        const sh = parseShadow(a.boxShadow);
+        if (sh) {
+          areaOk   = sh.spread >= 2;
+          areaNote = `box-shadow spread:${sh.spread}px`;
+          const cr = contrastRatio(parseRgb(sh.color || a.adjBg), parseRgb(a.adjBg));
+          crOk   = cr >= 3;
+          crNote = `コントラスト:${cr.toFixed(1)}:1`;
+        } else { areaOk = true; crOk = true; }
+      } else if (bgChanged) {
+        areaOk = true;
+        const cr = contrastRatio(parseRgb(a.backgroundColor), parseRgb(a.adjBg));
+        crOk   = cr >= 3;
+        crNote = `背景コントラスト:${cr.toFixed(1)}:1`;
+      } else if (borderChanged) {
+        const bwDiff = a.borderWidth - b.borderWidth;
+        areaOk   = bwDiff >= 2;
+        areaNote = `border増分:${bwDiff.toFixed(1)}px`;
+        const cr = contrastRatio(parseRgb(a.borderColor), parseRgb(a.adjBg));
+        crOk   = cr >= 3;
+        crNote = `コントラスト:${cr.toFixed(1)}:1`;
+      }
+      if (!areaOk || !crOk) {
+        const reasons = [];
+        if (!areaOk) reasons.push(`面積不足(${areaNote}、≥2px必要)`);
+        if (!crOk)   reasons.push(`${crNote}（≥3:1必要）`);
+        violations213.push(`${b.label} ／ ${reasons.join('、')}`);
+      }
+    }
+
+    // Tab で到達しなかった要素（preData にあるが checked にない）は手動確認扱いにしてfailにしない
+    const has247Fail = violations27.length > 0;
+    const has213Fail = violations213.length > 0;
     return [
       {
         sc: '2.4.7', name: 'フォーカス可視（AA）',
         status: has247Fail ? 'fail' : 'pass',
         message: has247Fail
-          ? `${results.violations27.length}個の要素でフォーカス時にスタイル変化なし`
+          ? `${violations27.length}個の要素でフォーカス時にスタイル変化なし`
           : 'フォーカス時にスタイル変化あり（outline/shadow/background/border）',
-        violations: results.violations27
+        violations: violations27
       },
       {
         sc: '2.4.13', name: 'フォーカスの外観（AA）',
         status: has213Fail ? 'fail' : 'pass',
         message: has213Fail
-          ? `${results.violations213.length}個の要素が面積またはコントラスト比の要件を未達`
+          ? `${violations213.length}個の要素が面積またはコントラスト比の要件を未達`
           : '検出した全フォーカスインジケーターが面積（≥2px）・コントラスト比（≥3:1）を満たしています',
-        violations: results.violations213
+        violations: violations213
       }
     ];
   } catch (e) {
