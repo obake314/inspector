@@ -839,8 +839,9 @@ app.post('/api/check', async (req, res) => {
     console.log(`[Axe] 診断開始: ${url} (Level ${level}, View ${preset})`);
     browser = await getBrowser();
     const page = await browser.newPage();
+    await page.setCacheEnabled(false);
     await applyViewportPreset(page, preset);
-    
+
     // Basic認証がある場合
     if (basicAuth && basicAuth.user && basicAuth.pass) {
       await page.authenticate({
@@ -3675,6 +3676,7 @@ app.post('/api/enhanced-check', async (req, res) => {
     console.log(`[Enhanced] Phase 1 検査開始: ${url} (View ${preset})`);
     browser = await getBrowser();
     const page = await browser.newPage();
+    await page.setCacheEnabled(false);
     await applyViewportPreset(page, preset);
 
     if (basicAuth && basicAuth.user && basicAuth.pass) {
@@ -4102,11 +4104,12 @@ app.post('/api/ai-evaluate', async (req, res) => {
     _lastAiDebug = { ..._lastAiDebug, stage: 'browser_launch' };
     browser = await getBrowser();
     const page = await browser.newPage();
-    
+    await page.setCacheEnabled(false);
+
     // タイムアウト延長
     page.setDefaultNavigationTimeout(90000);
     page.setDefaultTimeout(90000);
-    
+
     await applyViewportPreset(page, preset);
     
     // ページ読み込み（リトライ付き）
@@ -6159,6 +6162,7 @@ app.post('/api/ext-check', async (req, res) => {
     }
     const context = await browser.newContext(contextOptions);
     const page = await context.newPage();
+    await page.setExtraHTTPHeaders({ 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' });
 
     await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
     await page.waitForTimeout(1000);
@@ -6230,6 +6234,7 @@ app.post('/api/playwright-check', async (req, res) => {
     }
     const context = await browser.newContext(contextOptions);
     const page = await context.newPage();
+    await page.setExtraHTTPHeaders({ 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' });
 
     await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
     await page.waitForTimeout(1000);
