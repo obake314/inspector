@@ -3659,8 +3659,8 @@ app.post('/api/enhanced-check', async (req, res) => {
     // 1-2
     results.push(await withTimeout(() => check_2_5_8_target_size(page)));
 
-    // 1-3
-    results.push(await withTimeout(() => check_2_1_2_keyboard_trap(page)));
+    // 2.1.2 はヘッドレス環境の誤検知リスクが高いため PLAY スキャン(Playwright)に委譲
+    results.push({ sc: '2.1.2', name: 'キーボードトラップなし', status: 'manual_required', message: 'PLAYスキャンで確認してください', violations: [] });
 
     // ページ再読み込みでキーボード状態リセット
     await page.goto(url, { waitUntil: 'networkidle2' }).catch(() => {});
