@@ -4013,7 +4013,7 @@ function relevantToolFindingsForAI(toolResults, ref) {
 function getMultiVerificationMethodForAI(item) {
   const ref = item?.ref || '';
   const methods = {
-    '1.1.1': '画像リストの各imgを以下の順で評価する。【スキップ条件（違反にしない）】isHidden=trueは評価不要。role="presentation"またはrole="none"は評価不要。ariaLabelまたはariaLabelledbyが存在すればalt欠落でもpass。【alt=""（空）- 最重要】alt=""は意図的な装飾画像の宣言であり、それ自体はWCAG準拠（pass）。たとえ画像が意味を持つように見えても、alt=""を持つ画像を単独でfailにしてはならない。例外はinLink=trueかつBASICのrelevantToolFindingsにlink-name違反がある場合のみ（その場合はリンク名無しとして扱う）。【alt=null（属性なし）】上記スキップ条件を満たさない場合はfail。BASICがすでにfailを出している場合は違反内容を具体化する。【alt値の品質評価（最重要）】BASICが構造的には問題なしと判定した画像について、alt値が意味を持つかを確認する: (1)ファイル名・拡張子を含む（"image001.jpg" "photo.png"等）→fail、(2)"image" "img" "photo" "pic" "画像" "写真" "バナー" "アイコン" "図" 等の汎用語のみ→fail、(3)スクリーンショットで画像が確認できれば内容との一致を評価。全画像がスキップまたは適切なalt/aria名を持つ場合はpass。一部確認不能ならmanual_required。',
+    '1.1.1': '画像リストの各imgを以下の順で評価する。【スキップ条件（違反にしない）】isHidden=trueは評価不要。role="presentation"またはrole="none"は評価不要。ariaLabelまたはariaLabelledbyが存在すればalt欠落でもpass。【隣接テキストによる装飾判定 - 最優先】同一リンク（a要素）内にscreen-reader-text・sr-only・visually-hidden等のSRテキストスパンがある場合、または同一li・div・figure・article等の親要素内に同じ内容を伝える可視テキスト（p・span・figcaption・h2・h3等）がある場合、その画像は装飾扱いであり alt="" はWCAG準拠（pass）。隣接テキストが画像と同じ情報（例：動物名・タイトル・リンク先）を提供している場合は絶対にfailにしてはならない。これは冗長なalt値を避けるためのWCAGベストプラクティスである。【alt=""（空）- 最重要】alt=""は意図的な装飾画像の宣言であり、それ自体はWCAG準拠（pass）。たとえ画像が意味を持つように見えても、alt=""を持つ画像を単独でfailにしてはならない。例外はinLink=trueかつBASICのrelevantToolFindingsにlink-name違反がある場合のみ（その場合はリンク名無しとして扱う）。【alt=null（属性なし）】上記スキップ条件を満たさない場合はfail。BASICがすでにfailを出している場合は違反内容を具体化する。【alt値の品質評価（最重要）】BASICが構造的には問題なしと判定した画像について、alt値が意味を持つかを確認する: (1)ファイル名・拡張子を含む（"image001.jpg" "photo.png"等）→fail、(2)"image" "img" "photo" "pic" "画像" "写真" "バナー" "アイコン" "図" 等の汎用語のみ→fail、(3)スクリーンショットで画像が確認できれば内容との一致を評価。全画像がスキップまたは適切なalt/aria名を持つ場合はpass。一部確認不能ならmanual_required。',
     '1.2.1': 'audio/video/iframe等のメディアをHTMLと画面から探す。音声のみコンテンツがあり、近接する文字起こし・テキスト代替・説明リンクが確認できればpass。メディア内容の聴取が必要ならmanual_required。メディアが無ければnot_applicable。',
     '1.2.2': '収録済み動画があるか確認し、track kind="captions"、字幕ボタン、キャプション付きプレーヤー、字幕/文字起こしリンクを証拠にする。動画があるが字幕の有無をHTML/画面で確認できなければmanual_required。',
     '1.2.3': '動画に音声解説または同等のメディア代替があるか、リンク・説明・track・プレーヤー表示から確認する。映像内容の理解が必要で証拠が無い場合はmanual_required。動画が無ければnot_applicable。',
@@ -4671,7 +4671,7 @@ async function sheetsApiFetch(url, options, maxRetries = 4) {
 }
 
 app.post('/api/export-report', async (req, res) => {
-  const { pages } = req.body;
+  const { coverRows, pages } = req.body;
   if (!pages || pages.length === 0) {
     return res.status(400).json({ error: 'レポートデータがありません' });
   }
@@ -4702,7 +4702,7 @@ app.post('/api/export-report', async (req, res) => {
     const now = new Date();
     const dateStr = now.toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
     const timeStr = now.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).replace(/:/g, '');
-    const COL = 11; // 列数
+    const COL = 10; // 列数（SC,項目,合否,検出数,検出箇所,指摘内容,改善方法,検査機関,お客様,再検査）
 
     // --- 結果シートを順次作成 ---
     const pageTabInfo = []; // { url, sheetId, title, stats }
@@ -4732,11 +4732,8 @@ app.post('/api/export-report', async (req, res) => {
       if (!addRes.ok) throw new Error(`シート追加失敗: ${addData.error?.message}`);
       const newSheetId = addData.replies[0].addSheet.properties.sheetId;
 
-      // 1行目: カラムヘッダーのみ（メタ情報は表紙に移動）
-      const sheetRows = [
-        ['No', '検査種別', 'SC', '検査項目', '適合レベル', '結果', '場所', '検出数', '重要度', '詳細', '改善案'],
-        ...page.rows
-      ];
+      // フロントエンドで buildSampleSheetData 変換済みの行を使用
+      const sheetRows = page.sheetRows || [];
 
       const writeRes = await sheetsApiFetch(
         `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${sheetTitle}'!A1`)}?valueInputOption=USER_ENTERED`,
@@ -4746,11 +4743,14 @@ app.post('/api/export-report', async (req, res) => {
       if (writeData.error) throw new Error(`書き込み失敗: ${writeData.error.message}`);
 
       // 書式設定
-      const resultColIdx = 5; // F列（結果）
+      // sheetRows 構造: [URL行, 達成率行, 空行, ヘッダー行, データ行...]
+      const resultColIdx = 2; // C列（合否）
+      const headerRowIdx = 3; // 0-based
+      const dataStartRowIdx = 4;
       const formatReqs = [
-        // ヘッダー行
+        // ヘッダー行（4行目、index=3）
         { repeatCell: {
-          range: { sheetId: newSheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: COL },
+          range: { sheetId: newSheetId, startRowIndex: headerRowIdx, endRowIndex: headerRowIdx + 1, startColumnIndex: 0, endColumnIndex: COL },
           cell: { userEnteredFormat: {
             textFormat: { bold: true, fontSize: 10, foregroundColor: { red: 1, green: 1, blue: 1 } },
             backgroundColor: { red: 0.2, green: 0.2, blue: 0.2 },
@@ -4758,24 +4758,21 @@ app.post('/api/export-report', async (req, res) => {
           }},
           fields: 'userEnteredFormat(textFormat,backgroundColor,horizontalAlignment)'
         }},
-        // 列幅: No, 検査種別, SC, 検査項目, 適合レベル, 結果, 場所, 検出数, 重要度, 詳細, 改善案
-        ...[50,70,70,240,70,70,180,60,70,280,220].map((px, i) => ({
+        // 列幅: SC, 項目, 合否, 検出数, 検出箇所, 指摘内容, 改善方法, 検査機関記入欄, お客様記入欄, 再検査
+        ...[70,240,70,60,180,280,200,120,120,70].map((px, i) => ({
           updateDimensionProperties: {
             range: { sheetId: newSheetId, dimension: 'COLUMNS', startIndex: i, endIndex: i + 1 },
             properties: { pixelSize: px }, fields: 'pixelSize'
           }
         })),
-        // 結果列の条件付き書式（データ行: startRowIndex: 1）
+        // 合否列の条件付き書式（データ行: startRowIndex: 4）
         ...[ ['不合格', { red: 0.96, green: 0.8, blue: 0.8 }, { red: 0.7, green: 0, blue: 0 }],
              ['合格',   { red: 0.8, green: 0.94, blue: 0.8 }, { red: 0, green: 0.4, blue: 0 }],
-             ['判定不能', { red: 1, green: 0.95, blue: 0.8 },  { red: 0.6, green: 0.4, blue: 0 }],
-             ['未検証', { red: 0.93, green: 0.93, blue: 0.93 }, { red: 0.4, green: 0.4, blue: 0.4 }],
-             ['該当なし', { red: 0.95, green: 0.95, blue: 0.95 }, { red: 0.6, green: 0.6, blue: 0.6 }],
-             ['対象外',   { red: 0.95, green: 0.95, blue: 0.95 }, { red: 0.6, green: 0.6, blue: 0.6 }]
+             ['未検証', { red: 0.93, green: 0.93, blue: 0.93 }, { red: 0.4, green: 0.4, blue: 0.4 }]
         ].map(([val, bg, fg], idx) => ({
           addConditionalFormatRule: {
             rule: {
-              ranges: [{ sheetId: newSheetId, startRowIndex: 1, startColumnIndex: resultColIdx, endColumnIndex: resultColIdx + 1 }],
+              ranges: [{ sheetId: newSheetId, startRowIndex: dataStartRowIdx, startColumnIndex: resultColIdx, endColumnIndex: resultColIdx + 1 }],
               booleanRule: {
                 condition: { type: 'TEXT_EQ', values: [{ userEnteredValue: val }] },
                 format: { backgroundColor: bg, textFormat: { foregroundColor: fg, bold: val === '不合格' || val === '合格' } }
@@ -4783,9 +4780,9 @@ app.post('/api/export-report', async (req, res) => {
             }, index: idx
           }
         })),
-        // フリーズ（1行）
+        // フリーズ（URL/達成率/空/ヘッダー = 4行）
         { updateSheetProperties: {
-          properties: { sheetId: newSheetId, gridProperties: { frozenRowCount: 1 } },
+          properties: { sheetId: newSheetId, gridProperties: { frozenRowCount: 4 } },
           fields: 'gridProperties.frozenRowCount'
         }}
       ];
@@ -4808,98 +4805,53 @@ app.post('/api/export-report', async (req, res) => {
     if (!addCoverRes.ok) throw new Error(`表紙シート追加失敗: ${addCoverData.error?.message}`);
     const coverSheetId = addCoverData.replies[0].addSheet.properties.sheetId;
 
-    const inspectionTime = pages[0].timestamp
-      ? new Date(pages[0].timestamp).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
-      : now.toLocaleString('ja-JP');
-
-    const quoteSheetNameForFormula = (title) => `'${String(title).replace(/'/g, "''")}'`;
-    const sheetColumnRange = (title, col) => `${quoteSheetNameForFormula(title)}!${col}2:${col}`;
-    const pageStartRow = 11;
-    const pageEndRow = pageStartRow + pageTabInfo.length; // pageTabInfo.length - 1 is a bug
-    const coverSum = (col) => `=SUM(${col}${pageStartRow}:${col}${pageEndRow})`;
-    const coverOverallScoreFormula = '=IFERROR(ROUND(J6/(B6+D6+F6+H6+J6)*100)&"%","—")';
-
-    function buildPageSummaryFormulas(sheetTitle, coverRowNo) {
-      const resultRange = sheetColumnRange(sheetTitle, 'F');
-      const impactRange = sheetColumnRange(sheetTitle, 'I'); // Note: This seems to be based on the old 11-column format
-      return {
-        critical: `=COUNTIFS(${resultRange},"不合格",${impactRange},"緊急")`,
-        serious: `=COUNTIFS(${resultRange},"不合格",${impactRange},"重大")+COUNTIFS(${resultRange},"不合格",${impactRange},"<>緊急",${impactRange},"<>重大",${impactRange},"<>中程度",${impactRange},"<>軽微")`,
-        moderate: `=COUNTIFS(${resultRange},"不合格",${impactRange},"中程度")`,
-        minor: `=COUNTIFS(${resultRange},"不合格",${impactRange},"軽微")`,
-        pass: `=COUNTIF(${resultRange},"合格")`,
-        na: `=COUNTIF(${resultRange},"該当なし")+COUNTIF(${resultRange},"対象外")`,
-        unverified: `=COUNTIF(${resultRange},"未検証")+COUNTIF(${resultRange},"判定不能")`,
-        score: `=IFERROR(ROUND(G${coverRowNo}/SUM(C${coverRowNo}:G${coverRowNo})*100)&"%","—")`
-      };
-    }
-
-    // 円グラフ用ヘルパーデータ（M列=12, N列=13）を1〜5行目に埋め込む
-    const chartHelperData = [
-      ['カテゴリ', '件数'],
-      ['合格',     '=J6'],
-      ['不合格',   '=B6+D6+F6+H6'],
-      ['未検証',   '=D7'],
-      ['該当なし', '=B7']
-    ];
-    const coverBaseRows = [
-      ['アクセシビリティ検査レポート', '', '', '', '', '', '', '', '', ''],
-      ['作成日時', inspectionTime, '', '', '', '', '', '', '', ''],
-      ['', '', '', '', '', '', '', '', '', ''],
-      ['■ 全体スコア', '', '', '', '', '', '', '', '', ''],
-      ['スコア', coverOverallScoreFormula, '', '', '', '', '', '', '', ''],
-      ['緊急', coverSum('C'), '重大', coverSum('D'), '中程度', coverSum('E'), '軽微', coverSum('F'), '合格', coverSum('G')],
-      ['該当なし', coverSum('H'), '未検証', coverSum('I'), '', '', '', '', '', '', ''],
-      ['', '', '', '', '', '', '', '', '', ''],
-      ['■ ページ別スコア', '', '', '', '', '', '', '', '', ''],
-      ['No', 'URL', '緊急', '重大', '中程度', '軽微', '合格', '該当なし', '未検証', 'スコア', '結果シート'],
-      ...pageTabInfo.map((p, idx) => {
-        const rowNo = pageStartRow + idx;
-        const formulas = buildPageSummaryFormulas(p.title, rowNo);
-        const link = `=HYPERLINK("https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit#gid=${p.sheetId}","${p.title.replace(/"/g, '""')}")`;
-        return [String(idx + 1), p.url, formulas.critical, formulas.serious, formulas.moderate, formulas.minor, formulas.pass, formulas.na, formulas.unverified, formulas.score, link];
-      })
-    ];
-    // チャートデータを最初の5行のM・N列（index 12,13）に直接埋め込む
-    const coverRows = coverBaseRows.map((row, idx) => {
-      if (idx >= 5) return row;
-      const extended = [...row];
-      while (extended.length < 12) extended.push('');
-      extended.push(chartHelperData[idx][0], chartHelperData[idx][1]);
-      return extended;
-    });
+    // coverRows はフロントエンドで buildCoverSheetData により生成された行データ
+    // 構造: [タイトル行, URL行, 空, ▼全体スコア, ヘッダー, 全体値, 空,
+    //        ▼ページ別スコア, ページ別ヘッダー, ...ページ行, 空,
+    //        ▼総合サマリー, サマリーヘッダー, ...SC行]
+    const safeCoverRows = Array.isArray(coverRows) ? coverRows : [];
+    const P = pages.length; // ページ数
+    // 行インデックス（0-based）
+    const coverTitleRow   = 0;
+    const coverSectionA   = 3;  // ▼ 全体スコア
+    const coverHeaderA    = 4;  // 達成率ヘッダー
+    const coverSectionB   = 7;  // ▼ ページ別スコア
+    const coverHeaderB    = 8;  // ページ別ヘッダー
+    const coverSectionC   = 10 + P; // ▼ 総合サマリー
+    const coverHeaderC    = 11 + P; // サマリーヘッダー
+    const COVER_COL       = 8;  // 最大列数（ページ別スコアヘッダーが8列）
 
     await sheetsApiFetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${coverTitle}'!A1`)}?valueInputOption=USER_ENTERED`,
-      { method: 'PUT', headers, body: JSON.stringify({ values: coverRows }) }
+      { method: 'PUT', headers, body: JSON.stringify({ values: safeCoverRows }) }
     );
 
     // 表紙の書式
     const coverFormatReqs = [
-      // タイトル行（青背景）
+      // タイトル行（青背景、マージ）
       { repeatCell: {
-        range: { sheetId: coverSheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 11 },
+        range: { sheetId: coverSheetId, startRowIndex: coverTitleRow, endRowIndex: coverTitleRow + 1, startColumnIndex: 0, endColumnIndex: COVER_COL },
         cell: { userEnteredFormat: {
           textFormat: { bold: true, fontSize: 14, foregroundColor: { red: 1, green: 1, blue: 1 } },
           backgroundColor: { red: 0.102, green: 0.451, blue: 0.91 }
         }},
         fields: 'userEnteredFormat(textFormat,backgroundColor)'
       }},
-      { mergeCells: { range: { sheetId: coverSheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 11 }, mergeType: 'MERGE_ALL' }},
-      // ■見出し行（セクション）: ■全体スコア=row3, ■ページ別スコア=row8
-      ...([3, 8].map(rowIdx => ({
+      { mergeCells: { range: { sheetId: coverSheetId, startRowIndex: coverTitleRow, endRowIndex: coverTitleRow + 1, startColumnIndex: 0, endColumnIndex: COVER_COL }, mergeType: 'MERGE_ALL' }},
+      // ▼ セクション見出し行
+      ...[coverSectionA, coverSectionB, coverSectionC].filter(r => r < safeCoverRows.length).map(rowIdx => ({
         repeatCell: {
-          range: { sheetId: coverSheetId, startRowIndex: rowIdx, endRowIndex: rowIdx + 1, startColumnIndex: 0, endColumnIndex: 11 },
+          range: { sheetId: coverSheetId, startRowIndex: rowIdx, endRowIndex: rowIdx + 1, startColumnIndex: 0, endColumnIndex: COVER_COL },
           cell: { userEnteredFormat: {
             textFormat: { bold: true, foregroundColor: { red: 0.1, green: 0.3, blue: 0.6 } },
             backgroundColor: { red: 0.9, green: 0.93, blue: 0.99 }
           }},
           fields: 'userEnteredFormat(textFormat,backgroundColor)'
         }
-      }))),
-      // ページ別ヘッダー行（row10 = index 9）
+      })),
+      // ページ別スコア ヘッダー行
       { repeatCell: {
-        range: { sheetId: coverSheetId, startRowIndex: 9, endRowIndex: 10, startColumnIndex: 0, endColumnIndex: 11 },
+        range: { sheetId: coverSheetId, startRowIndex: coverHeaderB, endRowIndex: coverHeaderB + 1, startColumnIndex: 0, endColumnIndex: COVER_COL },
         cell: { userEnteredFormat: {
           textFormat: { bold: true, fontSize: 10, foregroundColor: { red: 1, green: 1, blue: 1 } },
           backgroundColor: { red: 0.2, green: 0.2, blue: 0.2 },
@@ -4907,53 +4859,27 @@ app.post('/api/export-report', async (req, res) => {
         }},
         fields: 'userEnteredFormat(textFormat,backgroundColor,horizontalAlignment)'
       }},
-      // 列幅: No, URL, 緊急, 重大, 中程度, 軽微, 合格, 該当なし, 未検証, スコア, 結果シート
-      ...[40, 300, 55, 55, 65, 55, 55, 65, 65, 60, 240].map((px, i) => ({
+      // 総合サマリー ヘッダー行
+      ...(coverHeaderC < safeCoverRows.length ? [{ repeatCell: {
+        range: { sheetId: coverSheetId, startRowIndex: coverHeaderC, endRowIndex: coverHeaderC + 1, startColumnIndex: 0, endColumnIndex: COVER_COL },
+        cell: { userEnteredFormat: {
+          textFormat: { bold: true, fontSize: 10, foregroundColor: { red: 1, green: 1, blue: 1 } },
+          backgroundColor: { red: 0.2, green: 0.2, blue: 0.2 },
+          horizontalAlignment: 'CENTER'
+        }},
+        fields: 'userEnteredFormat(textFormat,backgroundColor,horizontalAlignment)'
+      }}] : []),
+      // 列幅: ページURL, 達成率, Level A, Level AA, 合格, 不合格, 未検証, 該当なし
+      ...[300, 70, 70, 70, 55, 55, 55, 65].map((px, i) => ({
         updateDimensionProperties: {
           range: { sheetId: coverSheetId, dimension: 'COLUMNS', startIndex: i, endIndex: i + 1 },
           properties: { pixelSize: px }, fields: 'pixelSize'
         }
       })),
-      // フリーズ（10行目まで）
+      // フリーズ（ページ別スコアヘッダー行まで = 9行）
       { updateSheetProperties: {
-        properties: { sheetId: coverSheetId, gridProperties: { frozenRowCount: 10 } },
+        properties: { sheetId: coverSheetId, gridProperties: { frozenRowCount: coverHeaderB + 1 } },
         fields: 'gridProperties.frozenRowCount'
-      }},
-      // 円グラフ（M2:N5 のデータを参照する動的ドーナツグラフ）
-      { addChart: {
-        chart: {
-          spec: {
-            title: '達成率',
-            titleTextFormat: { bold: true, fontSize: 13, foregroundColor: { red: 0.12, green: 0.16, blue: 0.24 } },
-            backgroundColor: { red: 1, green: 1, blue: 1 },
-            pieChart: {
-              legendPosition: 'RIGHT_LEGEND',
-              threeDimensional: false,
-              pieHole: 0.4,
-              domain: {
-                sourceRange: { sources: [{
-                  sheetId: coverSheetId,
-                  startRowIndex: 1, endRowIndex: 5,
-                  startColumnIndex: 12, endColumnIndex: 13  // M列: ラベル
-                }]}
-              },
-              series: {
-                sourceRange: { sources: [{
-                  sheetId: coverSheetId,
-                  startRowIndex: 1, endRowIndex: 5,
-                  startColumnIndex: 13, endColumnIndex: 14  // N列: 件数
-                }]}
-              }
-            }
-          },
-          position: {
-            overlayPosition: {
-              anchorCell: { sheetId: coverSheetId, rowIndex: 3, columnIndex: 11 },
-              widthPixels: 400,
-              heightPixels: 260
-            }
-          }
-        }
       }}
     ];
 

@@ -1655,112 +1655,6 @@
             return { rows, stats: { pass: totalPass, fail: totalFail, unverified: totalUnverified } };
         }
 
-        // 円グラフ PNG を canvas で描画し base64 を返す
-        function drawPieChartPng(slices, size = 300) {
-            const canvas = document.createElement('canvas');
-            canvas.width = size; canvas.height = size;
-            const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, size, size);
-            const total = slices.reduce((s, x) => s + (x.value || 0), 0);
-            if (total === 0) return null;
-            const cx = size / 2, cy = size * 0.44;
-            const r = size * 0.35, innerR = r * 0.52;
-            let angle = -Math.PI / 2;
-            slices.forEach(({ value, color }) => {
-                if (!value) return;
-                const sweep = (value / total) * 2 * Math.PI;
-                ctx.beginPath(); ctx.moveTo(cx, cy);
-                ctx.arc(cx, cy, r, angle, angle + sweep); ctx.closePath();
-                ctx.fillStyle = color; ctx.fill();
-                angle += sweep;
-            });
-            // ドーナツ穴
-            ctx.beginPath(); ctx.arc(cx, cy, innerR, 0, 2 * Math.PI);
-            ctx.fillStyle = '#ffffff'; ctx.fill();
-            // 中央テキスト（達成率）
-            const passSlice = slices.find(s => s.label === '合格');
-            if (passSlice) {
-                const applicable = slices.filter(s => s.label !== '未検証').reduce((s, x) => s + (x.value || 0), 0);
-                const pct = applicable > 0 ? Math.round(passSlice.value / applicable * 100) : 0;
-                ctx.fillStyle = '#1e293b';
-                ctx.font = `bold ${Math.floor(size * 0.1)}px sans-serif`;
-                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-                ctx.fillText(`${pct}%`, cx, cy - size * 0.02);
-                ctx.font = `${Math.floor(size * 0.065)}px sans-serif`;
-                ctx.fillStyle = '#64748b';
-                ctx.fillText('達成率', cx, cy + size * 0.08);
-            }
-            // 凡例
-            const active = slices.filter(s => s.value > 0);
-            const lw = Math.floor((size - size * 0.1) / active.length);
-            const boxS = Math.floor(size * 0.055), ly = size * 0.88;
-            ctx.font = `${Math.floor(size * 0.065)}px sans-serif`;
-            active.forEach((s, i) => {
-                const lx = size * 0.05 + i * lw;
-                ctx.fillStyle = s.color;
-                ctx.fillRect(lx, ly - boxS * 0.9, boxS, boxS);
-                ctx.fillStyle = '#1e293b'; ctx.textAlign = 'left';
-                ctx.fillText(`${s.label}:${s.value}`, lx + boxS + 3, ly);
-            });
-            return canvas.toDataURL('image/png').split(',')[1];
-        }
-
-        // XLSX(Uint8Array)の表紙シート(sheet1)に PNG 画像を埋め込む
-        async function addCoverChartToXlsx(uint8, chartPng, startRow, startCol, endRow, endCol) {
-            if (!window.JSZip || !chartPng) return uint8;
-            try {
-                const zip = await JSZip.loadAsync(uint8);
-                // 画像ファイル
-                zip.file('xl/media/image1.png', chartPng, { base64: true });
-                // drawing XML
-                const drawXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`
-                    + `<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"`
-                    + ` xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"`
-                    + ` xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">`
-                    + `<xdr:twoCellAnchor editAs="oneCell">`
-                    + `<xdr:from><xdr:col>${startCol}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${startRow}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>`
-                    + `<xdr:to><xdr:col>${endCol}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${endRow}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>`
-                    + `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="2" name="PieChart"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>`
-                    + `<xdr:blipFill><a:blip r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>`
-                    + `<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1" cy="1"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>`
-                    + `</xdr:pic><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>`;
-                zip.file('xl/drawings/drawing1.xml', drawXml);
-                // drawing rels
-                const drawRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`
-                    + `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`
-                    + `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/>`
-                    + `</Relationships>`;
-                zip.file('xl/drawings/_rels/drawing1.xml.rels', drawRels);
-                // sheet1.xml に <drawing> 追加
-                const sh = await zip.file('xl/worksheets/sheet1.xml').async('string');
-                const nsR = 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
-                let sh2 = sh.includes('xmlns:r=') ? sh : sh.replace('<worksheet ', `<worksheet ${nsR} `);
-                sh2 = sh2.replace('</worksheet>', '<drawing r:id="rId999"/></worksheet>');
-                zip.file('xl/worksheets/sheet1.xml', sh2);
-                // sheet1 rels
-                const relsPath = 'xl/worksheets/_rels/sheet1.xml.rels';
-                const drawRel = `<Relationship Id="rId999" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>`;
-                const existing = zip.file(relsPath);
-                if (existing) {
-                    const txt = await existing.async('string');
-                    zip.file(relsPath, txt.replace('</Relationships>', drawRel + '</Relationships>'));
-                } else {
-                    zip.file(relsPath, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`
-                        + `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`
-                        + drawRel + `</Relationships>`);
-                }
-                // [Content_Types].xml
-                let ct = await zip.file('[Content_Types].xml').async('string');
-                if (!ct.includes('image/png')) ct = ct.replace('</Types>', '<Default Extension="png" ContentType="image/png"/></Types>');
-                if (!ct.includes('drawing+xml')) ct = ct.replace('</Types>', '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>');
-                zip.file('[Content_Types].xml', ct);
-                return await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
-            } catch (e) {
-                console.error('[chart-embed]', e);
-                return uint8;
-            }
-        }
-
         function downloadXlsx(uint8, filename) {
             const blob = new Blob([uint8], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
             const a = document.createElement('a');
@@ -1832,14 +1726,8 @@
             }
 
             const date = new Date().toISOString().split('T')[0];
-            const chartPng = drawPieChartPng([
-                { label: '合格', value: stats.pass, color: '#22c55e' },
-                { label: '不合格', value: stats.fail, color: '#ef4444' },
-                { label: '未検証', value: stats.unverified, color: '#94a3b8' },
-            ]);
             const uint8 = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
-            const patched = await addCoverChartToXlsx(uint8, chartPng, 3, 4, 13, 8);
-            downloadXlsx(patched, `wcag-report-${date}.xlsx`);
+            downloadXlsx(uint8, `wcag-report-${date}.xlsx`);
         }
 
         // BATCHスキャン用Excelエクスポート（サンプル形式）
@@ -1893,14 +1781,8 @@
             });
 
             const date = new Date().toISOString().split('T')[0];
-            const chartPng = drawPieChartPng([
-                { label: '合格', value: stats.pass, color: '#22c55e' },
-                { label: '不合格', value: stats.fail, color: '#ef4444' },
-                { label: '未検証', value: stats.unverified, color: '#94a3b8' },
-            ]);
             const uint8 = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
-            const patched = await addCoverChartToXlsx(uint8, chartPng, 3, 4, 13, 8);
-            downloadXlsx(patched, `wcag-batch-report-${date}.xlsx`);
+            downloadXlsx(uint8, `wcag-batch-report-${date}.xlsx`);
         }
 
         // AI評価結果を保存
@@ -5988,38 +5870,23 @@
             try {
                 const baseUrl = lastResults.url;
                 const timestamp = lastResults.timestamp || new Date().toISOString();
-                const pages = [];
-
-                // PC rows
                 const pcRows = buildReportRows(lastResults, baseUrl, aiResults, lastEnhancedResults, batchNavConsistency, lastPlayResults, lastExtResults, lastImprovementPlan, 'PC VIEW');
+                const pageDataList = [{ url: baseUrl, rows: pcRows }];
+                const pageSheetsData = [{ url: baseUrl, sheetRows: buildSampleSheetData(pcRows, baseUrl).sheetRows, timestamp }];
 
-                let mergedRows;
                 if (lastMobileScanSnapshot) {
-                    // SP rows を結合し 1 URL = 1 シートに統合
                     const sp = lastMobileScanSnapshot;
                     const spRows = buildReportRows(sp.basic, baseUrl, sp.multi || {}, sp.deep || null, null, sp.play || null, sp.ext || null, sp.improvementPlan || null, 'SP VIEW');
-                    const sep = Array(11).fill('');
-                    mergedRows = [
-                        Object.assign([...sep], { 0: '＜PC VIEW＞' }),
-                        ...pcRows,
-                        Object.assign([...sep], { 0: '＜SP VIEW＞' }),
-                        ...spRows
-                    ];
-                } else {
-                    mergedRows = pcRows;
+                    pageDataList.push({ url: baseUrl + ' (SP)', rows: spRows });
+                    pageSheetsData.push({ url: baseUrl + ' (SP)', sheetRows: buildSampleSheetData(spRows, baseUrl).sheetRows, timestamp });
                 }
 
-                pages.push({
-                    url: baseUrl,
-                    rows: mergedRows,
-                    timestamp,
-                    stats: computeRowStats(mergedRows)
-                });
+                const { rows: coverRows } = buildCoverSheetData(pageDataList, baseUrl);
 
                 const { response: res, data } = await fetchApiJson(apiUrl('/api/export-report'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ pages })
+                    body: JSON.stringify({ coverRows, pages: pageSheetsData })
                 }, '/api/export-report');
                 if (!res.ok) throw new Error(data.error || '保存失敗');
                 window.open(data.url, '_blank');
@@ -6038,41 +5905,33 @@
             btn.disabled = true;
             btn.textContent = 'Exporting...';
             try {
-                const pages = [];
+                const pageDataList = [];
+                const pageSheetsData = [];
                 const hasMobile = batchMobileResultsData.length > 0;
 
                 batchResultsData.filter(r => r.success).forEach((r, i) => {
                     const pcRows = buildReportRows(r.results, r.url, batchAIResults[r.url] || {}, batchEnhancedResults[r.url] || null, batchNavConsistency, batchPlayResults[r.url] || null, batchExtResults[r.url] || null, batchImprovementPlans[r.url] || null, 'PC VIEW');
+                    const ts = r.results.timestamp || new Date().toISOString();
+                    pageDataList.push({ url: r.url, rows: pcRows });
+                    pageSheetsData.push({ url: r.url, sheetRows: buildSampleSheetData(pcRows, r.url).sheetRows, timestamp: ts });
 
-                    // SP データ（PC+SP モード時）は同一シートに統合
                     const mobileR = hasMobile ? batchMobileResultsData[i] : null;
-                    let mergedRows;
                     if (mobileR?.success) {
-                        const spRows = buildReportRows(mobileR.results, mobileR.url, batchMobileAIResults[mobileR.url] || {}, batchMobileEnhancedResults[mobileR.url] || null, batchMobileNavConsistency, batchMobilePlayResults[mobileR.url] || null, batchMobileExtResults[mobileR.url] || null, batchMobileImprovementPlans[mobileR.url] || null, 'SP VIEW');
-                        const sep = Array(11).fill('');
-                        mergedRows = [
-                            Object.assign([...sep], { 0: '＜PC VIEW＞' }),
-                            ...pcRows,
-                            Object.assign([...sep], { 0: '＜SP VIEW＞' }),
-                            ...spRows
-                        ];
-                    } else {
-                        mergedRows = pcRows;
+                        const spUrl = r.url + ' (SP)';
+                        const spRows = buildReportRows(mobileR.results, r.url, batchMobileAIResults[r.url] || {}, batchMobileEnhancedResults[r.url] || null, batchMobileNavConsistency, batchMobilePlayResults[r.url] || null, batchMobileExtResults[r.url] || null, batchMobileImprovementPlans[r.url] || null, 'SP VIEW');
+                        pageDataList.push({ url: spUrl, rows: spRows });
+                        pageSheetsData.push({ url: spUrl, sheetRows: buildSampleSheetData(spRows, r.url).sheetRows, timestamp: ts });
                     }
-
-                    pages.push({
-                        url: r.url,
-                        rows: mergedRows,
-                        timestamp: r.results.timestamp || new Date().toISOString(),
-                        stats: computeRowStats(mergedRows)
-                    });
                 });
-                if (pages.length === 0) { alert('成功した検査結果がありません'); return; }
+                if (pageSheetsData.length === 0) { alert('成功した検査結果がありません'); return; }
+
+                const topUrl = batchResultsData.find(r => r.success)?.url || '';
+                const { rows: coverRows } = buildCoverSheetData(pageDataList, topUrl);
 
                 const { response: res, data } = await fetchApiJson(apiUrl('/api/export-report'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ pages })
+                    body: JSON.stringify({ coverRows, pages: pageSheetsData })
                 }, '/api/export-report');
                 if (!res.ok) throw new Error(data.error || '保存失敗');
                 window.open(data.url, '_blank');
