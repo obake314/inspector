@@ -1094,14 +1094,22 @@ async function check_2_5_8_target_size(page) {
         for (const el of document.querySelectorAll(sel)) {
           if (seen.has(el)) continue;
           seen.add(el);
-          // インラインリンク除外: a タグで前後にテキストノードがある場合
+          // インラインリンク除外（WCAG 2.5.8 Inline例外）
           if (el.tagName === 'A') {
+            const cs = getComputedStyle(el);
+            // display:inline の <a> はインライン扱い → 例外
+            if (cs.display === 'inline') continue;
+            // 前後にテキストノードがある場合もインライン
             const parent = el.parentNode;
-            let siblings = Array.from(parent.childNodes);
+            const siblings = Array.from(parent.childNodes);
             const idx = siblings.indexOf(el);
             const hasBefore = idx > 0 && siblings[idx - 1].nodeType === 3 && siblings[idx - 1].textContent.trim();
             const hasAfter = idx < siblings.length - 1 && siblings[idx + 1].nodeType === 3 && siblings[idx + 1].textContent.trim();
             if (hasBefore || hasAfter) continue;
+            // 高さがline-heightと同程度（20px以下）かつブロック要素でない場合もインライン扱い
+            const rect0 = el.getBoundingClientRect();
+            const lineH = parseFloat(cs.lineHeight) || 0;
+            if (rect0.height > 0 && rect0.height <= 20 && (lineH === 0 || rect0.height <= lineH * 1.2)) continue;
           }
           if (isScreenReaderOnlyElement(el)) continue;
           const rect = el.getBoundingClientRect();
