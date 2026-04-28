@@ -5132,6 +5132,7 @@ const aceWindowPath = require.resolve('accessibility-checker-engine/ace-window.j
  */
 async function pw_check_4_1_2_accessible_names(page) {
   const result = await page.evaluate(() => {
+    const snap = el => { const h = el.outerHTML.replace(/\s+/g, ' ').trim(); return h.length > 120 ? h.slice(0, 117) + '...' : h; };
     const selectors = [
       'button', 'a[href]', 'input:not([type="hidden"])', 'select', 'textarea',
       '[role="button"]', '[role="link"]', '[role="checkbox"]', '[role="radio"]',
@@ -5144,7 +5145,6 @@ async function pw_check_4_1_2_accessible_names(page) {
       for (const el of document.querySelectorAll(sel)) {
         if (seen.has(el)) continue;
         seen.add(el);
-        // aria-hidden 子要素を除いたテキストを取得（aria-hidden SVG + span 構成の誤検出防止）
         function getAccessibleText(node) {
           if (node.getAttribute && node.getAttribute('aria-hidden') === 'true') return '';
           let text = '';
@@ -5164,7 +5164,7 @@ async function pw_check_4_1_2_accessible_names(page) {
           const role = el.getAttribute('role') || tag;
           const parentEl = el.parentElement;
           const ctx = !el.id && parentEl && parentEl !== document.body ? ` in ${parentEl.tagName.toLowerCase()}${parentEl.id ? '#'+parentEl.id : ''}` : '';
-          nameless.push(`<${tag}${id}${cls}>${ctx} [role=${role}] アクセシブルネームなし`);
+          nameless.push(`${tag}${id}${cls}${ctx} [role=${role}] アクセシブルネームなし | ${snap(el)}`);
           if (nameless.length >= 10) break;
         }
       }
@@ -5187,13 +5187,14 @@ async function pw_check_4_1_2_accessible_names(page) {
  */
 async function pw_check_4_1_3_status_messages(page) {
   const result = await page.evaluate(() => {
+    const snap = el => { const h = el.outerHTML.replace(/\s+/g, ' ').trim(); return h.length > 120 ? h.slice(0, 117) + '...' : h; };
     const live = Array.from(document.querySelectorAll('[aria-live], [role="status"], [role="alert"], [role="log"]'));
     const dynamic = ['[class*="alert"]','[class*="notification"]','[class*="toast"]',
       '[class*="message"]','[class*="error"]','[class*="success"]','[class*="feedback"]']
       .flatMap(sel => Array.from(document.querySelectorAll(sel)))
       .filter(el => !live.some(l => l.contains(el) || el.contains(l)));
     return { liveCount: live.length, unlabeledDynamic: dynamic.slice(0, 5).map(el =>
-      `${el.tagName.toLowerCase()}${el.id ? '#'+el.id : ''}${el.className ? '.'+el.className.split(' ')[0] : ''}`
+      `${el.tagName.toLowerCase()}${el.id ? '#'+el.id : ''}${el.className ? '.'+el.className.split(' ')[0] : ''} | ${snap(el)}`
     )};
   });
   const hasIssue = result.liveCount === 0 && result.unlabeledDynamic.length > 0;
@@ -5212,9 +5213,10 @@ async function pw_check_4_1_3_status_messages(page) {
  */
 async function pw_check_2_4_6_headings_labels(page) {
   const issues = await page.evaluate(() => {
+    const snap = el => { const h = el.outerHTML.replace(/\s+/g, ' ').trim(); return h.length > 120 ? h.slice(0, 117) + '...' : h; };
     const issues = [];
     document.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(h => {
-      if (!h.textContent.trim()) issues.push(`空の${h.tagName.toLowerCase()}見出しタグ`);
+      if (!h.textContent.trim()) issues.push(`空の${h.tagName.toLowerCase()}見出しタグ | ${snap(h)}`);
     });
     document.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]), select, textarea').forEach(el => {
       if (el.getAttribute('aria-hidden') === 'true') return;
@@ -5223,7 +5225,7 @@ async function pw_check_2_4_6_headings_labels(page) {
         || el.getAttribute('aria-label')
         || el.getAttribute('aria-labelledby')
         || el.closest('label');
-      if (!hasLabel) issues.push(`${el.tagName.toLowerCase()}${el.id ? '#'+el.id : ''}${el.name ? '[name='+el.name+']' : ''}にラベルなし`);
+      if (!hasLabel) issues.push(`${el.tagName.toLowerCase()}${el.id ? '#'+el.id : ''}${el.name ? '[name='+el.name+']' : ''} にラベルなし | ${snap(el)}`);
     });
     return [...new Set(issues)];
   });
@@ -5240,11 +5242,14 @@ async function pw_check_2_4_6_headings_labels(page) {
  */
 async function pw_check_1_3_1_info_relationships(page) {
   const issues = await page.evaluate(() => {
+    const snap = el => { const h = el.outerHTML.replace(/\s+/g, ' ').trim(); return h.length > 120 ? h.slice(0, 117) + '...' : h; };
     const issues = [];
     document.querySelectorAll('table').forEach(table => {
       const isLayout = table.getAttribute('role') === 'presentation' || table.getAttribute('role') === 'none';
       if (!isLayout && !table.querySelector('th') && !table.querySelector('[scope]') && !table.querySelector('[role="columnheader"]')) {
-        issues.push(`データテーブル（${table.id ? '#'+table.id : 'table'}）にヘッダーセルなし`);
+        const id = table.id ? `#${table.id}` : '';
+        const cls = table.className ? `.${String(table.className).split(' ')[0]}` : '';
+        issues.push(`table${id}${cls} にヘッダーセルなし | ${snap(table)}`);
       }
     });
     const seen = new Set();
@@ -5254,7 +5259,7 @@ async function pw_check_1_3_1_info_relationships(page) {
       const group = document.querySelectorAll(`input[name="${CSS.escape(name)}"]`);
       if (group.length > 1 && !el.closest('fieldset')) {
         seen.add(name);
-        issues.push(`ラジオ/チェックボックスグループ（name="${name}"）にfieldsetなし`);
+        issues.push(`input[name="${name}"] グループ（${group.length}件）にfieldsetなし | ${snap(el)}`);
       }
     });
     return [...new Set(issues)];
@@ -5315,7 +5320,9 @@ async function pw_check_2_4_7_focus_visible_all(page) {
         const text2 = (el.getAttribute('aria-label') || el.textContent || el.value || '').trim().slice(0, 25);
         const parentEl2 = el.parentElement;
         const ctx2 = !el.id && parentEl2 && parentEl2 !== document.body ? ` in ${parentEl2.tagName.toLowerCase()}${parentEl2.id ? '#'+parentEl2.id : ''}` : '';
-        noFocus.push(`${tag2}${id2}${cls2}${text2 ? ' "'+text2+'"' : ''}${ctx2}`);
+        const h = el.outerHTML.replace(/\s+/g, ' ').trim();
+        const snippetFv = h.length > 120 ? h.slice(0, 117) + '...' : h;
+        noFocus.push(`${tag2}${id2}${cls2}${text2 ? ' "'+text2+'"' : ''}${ctx2} (outline:${s.outline}, shadow:${s.boxShadow !== 'none' ? 'あり' : 'なし'}) | ${snippetFv}`);
       }
     });
     return noFocus;
@@ -5359,7 +5366,7 @@ async function pw_check_2_1_1_full_tab_sequence(page) {
   const hidden = visited.filter(v => v.hidden);
   const issues = hidden.map(v => {
     const sel = `${v.tag}${v.id ? '#'+v.id : ''}`;
-    return `非表示要素がTab順序に含まれる: ${sel}${v.label ? ' "'+v.label+'"' : ''}`;
+    return `非表示要素がTab順序に含まれる: ${sel}${v.label ? ' "'+v.label+'"' : ''} (role=${v.role || v.tag})`;
   });
   return {
     sc: '2.1.1',
@@ -5456,10 +5463,11 @@ async function pw_check_1_3_5_input_purpose(page) {
         const id = el.id ? `#${el.id}` : '';
         const nameAttr = el.name ? `[name="${el.name}"]` : '';
         // type から直接判定できる場合（email/tel/password は type だけで十分な証拠）
+        const snap = el => { const h = el.outerHTML.replace(/\s+/g, ' ').trim(); return h.length > 120 ? h.slice(0, 117) + '...' : h; };
         if (typeToAC[type]) {
           const expected = typeToAC[type];
           if (!expected.includes(ac)) {
-            missing.push(`${tag}${id}${nameAttr} (type="${type}") に autocomplete="${expected[0]}" 推奨 — 現在: "${ac || '未設定'}"`);
+            missing.push(`${tag}${id}${nameAttr} (type="${type}") に autocomplete="${expected[0]}" 推奨（現在: "${ac || '未設定'}"） | ${snap(el)}`);
           }
           return;
         }
@@ -5468,7 +5476,7 @@ async function pw_check_1_3_5_input_purpose(page) {
         for (const pat of personalInfoPatterns) {
           if (pat.re.test(hint)) {
             if (!ac || ac === 'on' || ac === 'off') {
-              missing.push(`${tag}${id}${nameAttr} (type="${type}") に autocomplete="${pat.ac}" 推奨 — 現在: "${ac || '未設定'}"`);
+              missing.push(`${tag}${id}${nameAttr} (type="${type}") に autocomplete="${pat.ac}" 推奨（現在: "${ac || '未設定'}"） | ${snap(el)}`);
             }
             break;
           }
@@ -5512,7 +5520,9 @@ async function pw_check_3_3_2_labels(page) {
           const tag = el.tagName.toLowerCase();
           const id = el.id ? `#${el.id}` : '';
           const name = el.name ? `[name="${el.name}"]` : '';
-          unlabeled.push(`${tag}${id}${name} (type="${type}") にラベルなし`);
+          const h = el.outerHTML.replace(/\s+/g, ' ').trim();
+          const snippet = h.length > 120 ? h.slice(0, 117) + '...' : h;
+          unlabeled.push(`${tag}${id}${name} (type="${type}") にラベルなし | ${snippet}`);
         }
       });
       return unlabeled;
@@ -5549,7 +5559,9 @@ async function pw_check_2_5_3_label_in_name(page) {
         if (!ariaLabel.includes(visibleText) && !visibleText.includes(ariaLabel)) {
           const tag = el.tagName.toLowerCase();
           const id = el.id ? `#${el.id}` : '';
-          mismatches.push(`${tag}${id}: 表示テキスト"${visibleText.substring(0,20)}" vs aria-label"${ariaLabel.substring(0,20)}"`);
+          const h = el.outerHTML.replace(/\s+/g, ' ').trim();
+          const snippet = h.length > 120 ? h.slice(0, 117) + '...' : h;
+          mismatches.push(`${tag}${id} 表示:"${visibleText.substring(0,20)}" ≠ aria-label:"${ariaLabel.substring(0,20)}" | ${snippet}`);
         }
       });
       return mismatches;
@@ -5604,13 +5616,14 @@ async function pw_check_2_1_2_keyboard_trap(page) {
 async function pw_check_2_1_4_character_shortcuts(page) {
   try {
     const issues = await page.evaluate(() => {
+      const snap = el => { const h = el.outerHTML.replace(/\s+/g, ' ').trim(); return h.length > 120 ? h.slice(0, 117) + '...' : h; };
       const els = Array.from(document.querySelectorAll('[accesskey]'));
       return els.map(el => {
         const key = el.getAttribute('accesskey');
         const tag = el.tagName.toLowerCase();
         const id = el.id ? `#${el.id}` : '';
         const label = (el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 40);
-        return `${tag}${id} accesskey="${key}"${label ? ` (${label})` : ''}`;
+        return `${tag}${id} accesskey="${key}"${label ? ` (${label})` : ''} | ${snap(el)}`;
       });
     });
     return {
@@ -5643,10 +5656,12 @@ async function pw_check_2_4_3_focus_order(page) {
         const id = el.id ? `#${el.id}` : '';
         const cls = el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
         const text = (el.getAttribute('aria-label') || el.textContent || el.value || '').trim().slice(0, 25);
-        return { x: rect.left, y: rect.top, tabindex, label: `${tag}${id}${cls}${text ? ' "'+text+'"' : ''}`.slice(0, 80) };
+        const h = el.outerHTML.replace(/\s+/g, ' ').trim();
+        const snippet = h.length > 120 ? h.slice(0, 117) + '...' : h;
+        return { x: rect.left, y: rect.top, tabindex, label: `${tag}${id}${cls}${text ? ' "'+text+'"' : ''}`.slice(0, 80), snippet };
       });
       if (!info) continue;
-      if (info.tabindex > 0) tabindexIssues.push(`${info.label} (tabindex=${info.tabindex})`);
+      if (info.tabindex > 0) tabindexIssues.push(`${info.label} (tabindex=${info.tabindex}) | ${info.snippet}`);
       positions.push({ x: info.x, y: info.y, label: info.label });
     }
     let orderViolations = 0;
@@ -5687,7 +5702,9 @@ async function pw_check_2_4_11_focus_obscured(page) {
         const text = (el.getAttribute('aria-label') || el.textContent || el.value || '').trim().slice(0, 25);
         const parentEl = el.parentElement;
         const ctx = !el.id && parentEl && parentEl !== document.body ? ` in ${parentEl.tagName.toLowerCase()}${parentEl.id ? '#'+parentEl.id : ''}` : '';
-        const label = `${tag}${id}${cls}${text ? ' "'+text+'"' : ''}${ctx}`.slice(0, 80);
+        const h = el.outerHTML.replace(/\s+/g, ' ').trim();
+        const snippet = h.length > 120 ? h.slice(0, 117) + '...' : h;
+        const label = `${tag}${id}${cls}${text ? ' "'+text+'"' : ''}${ctx} | ${snippet}`.slice(0, 200);
         const selfStyle = getComputedStyle(el);
         // 2.4.11 の対象は sticky/fixed 要素による遮蔽のみ。フォーカス時に非表示の要素はスキップ。
         const hiddenOnFocus = rect.width === 0
