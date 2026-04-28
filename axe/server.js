@@ -1206,6 +1206,8 @@ async function getActiveElementSnapshot(page) {
       ? '.' + a.className.trim().split(/\s+/).slice(0, 2).join('.')
       : '';
     const text = (a.getAttribute('aria-label') || a.textContent || a.value || '').trim().slice(0, 25);
+    // href や text を key に含め、同クラスの複数リンクを区別する（誤検出防止）
+    const href = tag === 'a' ? (a.getAttribute('href') || '').replace(/^https?:\/\/[^/]+/, '').slice(-30) : '';
     let inModal = false;
     let isWidget = false;
     let p = a;
@@ -1219,8 +1221,8 @@ async function getActiveElementSnapshot(page) {
     }
     // contenteditable は Tab でインデントするため除外
     if (a.isContentEditable) isWidget = true;
-    const key = `${tag}${id}${cls}`.slice(0, 60);
-    const display = `${key}${text ? ' "' + text + '"' : ''}`.slice(0, 80);
+    const key = `${tag}${id}${cls}${href}${text ? '_' + text.slice(0, 15) : ''}`.slice(0, 100);
+    const display = `${tag}${id}${cls}${text ? ' "' + text + '"' : ''}`.slice(0, 80);
     return { key, display, inModal, isWidget };
   }, [...WIDGET_ROLES_THAT_CAPTURE_TAB]);
 }
