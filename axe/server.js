@@ -1072,7 +1072,8 @@ async function check_1_4_10_reflow(page) {
 async function check_2_5_8_target_size(page) {
   try {
     const result = await page.evaluate(() => {
-      const selectors = ['a', 'button', 'input:not([type="hidden"])', 'select', 'textarea', '[onclick]', '[role="button"]', '[role="link"]', '[role="checkbox"]', '[role="radio"]'];
+      // select/textarea はユーザーエージェントがサイズを制御 → WCAG 2.5.8 UA例外
+      const selectors = ['a', 'button', 'input:not([type="hidden"])', '[onclick]', '[role="button"]', '[role="link"]', '[role="checkbox"]', '[role="radio"]'];
       const violations = [];
       const seen = new Set();
       const srOnlyPattern = /(^|[\s_-])(sr-only|screen-reader|screenreader|screen-reader-text|visually-hidden|visuallyhidden|visually_hidden|hidden-visually|u-hidden-visually|a11y-hidden|assistive-text|accessible-hidden|reader-only)([\s_-]|$)/i;
