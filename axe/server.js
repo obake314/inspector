@@ -5147,6 +5147,10 @@ async function pw_check_4_1_2_accessible_names(page) {
         seen.add(el);
         function getAccessibleText(node) {
           if (node.getAttribute && node.getAttribute('aria-hidden') === 'true') return '';
+          // img要素はalt属性がアクセシブルネームになる（accname-1.1）
+          if (node.tagName === 'IMG') return node.getAttribute('alt') || '';
+          // aria-labelを持つ子要素はその値を使う
+          if (node !== el && node.getAttribute && node.getAttribute('aria-label')) return node.getAttribute('aria-label');
           let text = '';
           for (const child of node.childNodes) {
             if (child.nodeType === Node.TEXT_NODE) text += child.textContent;
@@ -5154,9 +5158,12 @@ async function pw_check_4_1_2_accessible_names(page) {
           }
           return text;
         }
-        const label = el.getAttribute('aria-label') || el.getAttribute('aria-labelledby')
-          ? (el.getAttribute('aria-label') || document.getElementById(el.getAttribute('aria-labelledby'))?.textContent)
-          : getAccessibleText(el).trim() || el.getAttribute('title') || el.getAttribute('placeholder') || el.getAttribute('alt');
+        const ariaLabelledby = el.getAttribute('aria-labelledby');
+        const label = el.getAttribute('aria-label')
+          ? el.getAttribute('aria-label')
+          : ariaLabelledby
+            ? (document.getElementById(ariaLabelledby)?.textContent || '')
+            : getAccessibleText(el).trim() || el.getAttribute('title') || el.getAttribute('placeholder');
         if (!label || !label.trim()) {
           const tag = el.tagName.toLowerCase();
           const id = el.id ? `#${el.id}` : '';
