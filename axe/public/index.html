@@ -904,6 +904,7 @@
             renderNavBar();
             renderAllTabs('pc');
             refreshScoreTable();
+            renderImprovementPlanPanel();
             if (currentMode === 'batch' && currentBatchIdx !== null) {
                 renderBatchSummary();
                 const mobileR = batchMobileResultsData[currentBatchIdx];
@@ -959,7 +960,31 @@
                 renderAllTabs('sp', sp.basic, sp.deep || null, sp.multi || {}, sp.play || null, sp.ext || null);
             }
             refreshScoreTable();
+            renderImprovementPlanPanel();
         };
+
+        // manualDecisions で 'ok' になっている SC 番号の集合を返す
+        function getResolvedScSet() {
+            const resolved = new Set();
+            for (const [fullKey, val] of manualDecisions) {
+                if (val !== 'ok') continue;
+                // スコープ付き（"encodedUrl::rawKey"）の場合は rawKey 部分だけ使う
+                const key = fullKey.includes('::') ? fullKey.split('::').slice(1).join('::') : fullKey;
+                // DEEP/PLAY/EXT/BATCH: ...:SC:1.1.1
+                const scMatch = key.match(/:SC:([0-9.]+)$/);
+                if (scMatch) { resolved.add(scMatch[1]); continue; }
+                // AUTO:1.1.1
+                const autoMatch = key.match(/^AUTO:([0-9.]+)$/);
+                if (autoMatch) { resolved.add(autoMatch[1]); continue; }
+                // MULTI:3 → manualCheckItems[3].ref
+                const multiMatch = key.match(/^MULTI:(\d+)$/);
+                if (multiMatch) {
+                    const item = manualCheckItems[parseInt(multiMatch[1])];
+                    if (item?.ref) resolved.add(item.ref);
+                }
+            }
+            return resolved;
+        }
 
         function refreshScoreTable() {
             if (!lastResults) return;
@@ -2129,15 +2154,29 @@
             return priority === 'high' ? '高' : priority === 'low' ? '低' : '中';
         }
 
+        function filterPlanByResolved(plan) {
+            if (!plan) return plan;
+            const resolved = getResolvedScSet();
+            if (resolved.size === 0) return plan;
+            return {
+                ...plan,
+                priorityActions: plan.priorityActions.filter(action => {
+                    const scs = action.relatedSc || [];
+                    if (scs.length === 0) return true;
+                    return !scs.every(sc => resolved.has(sc));
+                })
+            };
+        }
+
         function renderImprovementPlanPanel(options = {}) {
             const panel = $('improvementPlanPanel');
             if (!panel) return;
-            const pcPlan = normalizeImprovementPlanClient(
+            const pcPlan = filterPlanByResolved(normalizeImprovementPlanClient(
                 Object.prototype.hasOwnProperty.call(options, 'pcPlan') ? options.pcPlan : lastImprovementPlan
-            );
-            const spPlan = normalizeImprovementPlanClient(
+            ));
+            const spPlan = filterPlanByResolved(normalizeImprovementPlanClient(
                 Object.prototype.hasOwnProperty.call(options, 'spPlan') ? options.spPlan : lastMobileScanSnapshot?.improvementPlan
-            );
+            ));
             const pcIssue = Object.prototype.hasOwnProperty.call(options, 'pcIssue') ? options.pcIssue : lastMultiIssue;
             const spIssue = Object.prototype.hasOwnProperty.call(options, 'spIssue') ? options.spIssue : lastMobileScanSnapshot?.multiIssue;
             const pcAttempted = Object.prototype.hasOwnProperty.call(options, 'pcAttempted')
