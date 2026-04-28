@@ -2275,14 +2275,25 @@ async function check_1_4_4_text_resize(page) {
     await new Promise(r => setTimeout(r, 500));
     const violations = await page.evaluate(() => {
       const issues = [];
+      const srOnlyPattern = /(sr-only|screen-reader|screenreader|visually-hidden|visuallyhidden|hidden-visually|a11y-hidden|reader-only)/i;
       const els = document.querySelectorAll('p, span, div, li, td, th, h1, h2, h3, h4, h5, h6');
       for (const el of els) {
         if (el.offsetHeight === 0) continue;
+        // clientHeight が極端に小さい（≤2px）要素はSR専用・装飾要素として除外
+        if (el.clientHeight <= 2) continue;
         const style = getComputedStyle(el);
         if (style.overflow === 'hidden' && el.scrollHeight > el.clientHeight + 4) {
           const tag = el.tagName.toLowerCase();
           const id = el.id ? `#${el.id}` : '';
-          issues.push(`${tag}${id} (scrollH:${el.scrollHeight} > clientH:${el.clientHeight})`.slice(0, 80));
+          const cls = el.className && typeof el.className === 'string'
+            ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+          // SR専用クラスを除外
+          if (srOnlyPattern.test(el.getAttribute('class') || '')) continue;
+          const text = el.textContent.trim().slice(0, 20);
+          const parentEl = el.parentElement;
+          const parentCtx = parentEl && parentEl !== document.body
+            ? ` in ${parentEl.tagName.toLowerCase()}${parentEl.id ? '#' + parentEl.id : (parentEl.className && typeof parentEl.className === 'string' ? '.' + parentEl.className.trim().split(/\s+/)[0] : '')}` : '';
+          issues.push(`${tag}${id}${cls}${text ? ' "' + text + '"' : ''}${parentCtx} (scrollH:${el.scrollHeight} > clientH:${el.clientHeight})`.slice(0, 100));
           if (issues.length >= 15) break;
         }
       }
