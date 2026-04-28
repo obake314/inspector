@@ -1506,7 +1506,14 @@ async function check_2_4_11_12_focus_obscured(page) {
         const fixedEls = topEls.filter(e => {
           if (e === el || el.contains(e) || e.contains(el)) return false;
           const s = getComputedStyle(e);
-          return s.position === 'fixed' || s.position === 'sticky';
+          if (s.position !== 'fixed' && s.position !== 'sticky') return false;
+          if (s.display === 'none' || s.visibility === 'hidden') return false;
+          if (Number(s.opacity) === 0) return false;
+          if (s.pointerEvents === 'none') return false;
+          const hasBg = s.backgroundColor && s.backgroundColor !== 'rgba(0, 0, 0, 0)' && s.backgroundColor !== 'transparent';
+          const hasBorder = parseFloat(s.borderWidth) > 0;
+          if (!hasBg && !hasBorder) return false;
+          return true;
         });
         if (fixedEls.length === 0) return null;
         // 重複面積計算
@@ -5750,7 +5757,14 @@ async function pw_check_2_4_11_focus_obscured(page) {
         const fixedEls = topEls.filter(e => {
           if (e === el || el.contains(e) || e.contains(el)) return false;
           const s = getComputedStyle(e);
-          return s.position === 'fixed' || s.position === 'sticky';
+          if (s.position !== 'fixed' && s.position !== 'sticky') return false;
+          if (s.display === 'none' || s.visibility === 'hidden') return false;
+          if (Number(s.opacity) === 0) return false;
+          if (s.pointerEvents === 'none') return false;
+          const hasBg = s.backgroundColor && s.backgroundColor !== 'rgba(0, 0, 0, 0)' && s.backgroundColor !== 'transparent';
+          const hasBorder = parseFloat(s.borderWidth) > 0;
+          if (!hasBg && !hasBorder) return false;
+          return true;
         });
         if (fixedEls.length === 0) return null;
         for (const fe of fixedEls) {
