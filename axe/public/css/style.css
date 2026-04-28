@@ -1653,8 +1653,12 @@ margin-bottom: 6px;
 
 #exportArea {
   font-family: var(--font-latin);
-  font-size:var(--font-size-m);
+  font-size: var(--font-size-m);
   margin-right: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-s);
 }
 #clearBtn {
   font-family: var(--font-basic);
@@ -2378,22 +2382,145 @@ footer small {
   opacity: 0.75;
 }
 
+/* ============================================================
+   レスポンシブ（タブレット〜スマートフォン）
+   ============================================================ */
+
+@media (max-width: 900px) {
+  .batch-controls,
+  .scan-controls {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}
+
 @media (max-width: 768px) {
+  /* コンテナ余白を縮小 */
+  .container {
+    padding: var(--space-m) var(--space-m);
+  }
+
+  /* ヘッダー */
+  header {
+    flex-direction: column;
+    gap: var(--space-m);
+    margin-bottom: var(--space-l);
+  }
+  h1 {
+    font-size: var(--font-size-l);
+  }
+
+  /* インプットセクション */
+  .input-section {
+    padding: var(--space-m);
+  }
+
+  /* section-column（ラベル＋コンテンツ）を縦積みに */
+  .section-column {
+    flex-direction: column;
+    gap: var(--space-s);
+  }
+  .section-headline {
+    width: auto;
+  }
+  .section-right {
+    width: 100%;
+  }
+
+  /* チェック方式・ビュー切り替え */
   .mode-toggle .section-right {
     flex-direction: column;
     align-items: flex-start;
-    gap:var(--space-s);
+    gap: var(--space-s);
   }
   .viewport-mode {
     flex-wrap: wrap;
-    gap:var(--space-s);
+    gap: var(--space-s);
   }
+
+  /* URL入力 */
   .url-form {
     flex-direction: column;
   }
+  .url-input {
+    font-size: var(--font-size-s);
+  }
+  .check-btn {
+    width: 100%;
+    font-size: var(--font-size-s);
+  }
+
+  /* スキャンオプションボタン */
+  .scan-option {
+    padding: var(--space-s) var(--space-m);
+    font-size: var(--font-size-xs);
+    width: 100%;
+    justify-content: center;
+  }
+  .scan-option-text {
+    font-size: var(--font-size-xs);
+  }
+
+  /* Basic auth */
+  .basic-auth-inputs {
+    flex-direction: column;
+  }
+
+  /* スキャンオプション */
+  .batch-controls,
+  .scan-controls {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
+  /* タブ：横スクロール */
+  .tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap;
+    margin-top: var(--space-l);
+  }
+  .tab {
+    flex-shrink: 0;
+    width: auto;
+    min-width: 72px;
+    padding: var(--space-s) var(--space-s);
+    font-size: var(--font-size-xs);
+    white-space: nowrap;
+  }
+
+  /* サマリーカード */
   .summary {
     grid-template-columns: repeat(3, 1fr);
   }
+
+  /* スコアテーブル */
+  .scoretable {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .scoretable table {
+    min-width: 600px;
+  }
+
+  /* 一括結果ヘッダー */
+  .batch-results-header {
+    flex-wrap: wrap;
+    gap: var(--space-s);
+  }
+
+  /* エクスポートエリア */
+  #exportArea {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-s);
+    margin-right: 0;
+    align-items: center;
+  }
+  .export-btn {
+    font-size: var(--font-size-xs);
+    padding: var(--space-s) var(--space-s);
+  }
+
+  /* 違反詳細 */
   .violation-details {
     margin-left: 0;
   }
@@ -2402,14 +2529,81 @@ footer small {
     align-items: flex-start;
     gap: var(--space-m);
   }
+
+  /* 改善プラン */
   .improvement-plan-panel {
     padding: var(--space-m);
   }
+  .improvement-plan-head {
+    flex-direction: column;
+  }
   .improvement-plan-view-head,
   .improvement-action-head {
+    flex-direction: column;
     align-items: flex-start;
   }
   .improvement-plan-lists {
     grid-template-columns: 1fr;
+  }
+
+  /* 詳細カード内のエビデンス */
+  .item-source-section {
+    padding: var(--space-s);
+  }
+
+  /* バッチサマリーテーブル */
+  .batch-summary-table {
+    font-size: var(--font-size-xs);
+  }
+
+  /* ヘルプパネル */
+  .help-panel {
+    padding: var(--space-m);
+  }
+
+  /* フッター */
+  footer {
+    padding: var(--space-m) 0;
+  }
+}
+
+@media (max-width: 480px) {
+  /* さらに小さい画面 */
+  .container {
+    padding: var(--space-s) var(--space-s);
+  }
+
+  h1 {
+    font-size: var(--font-size-m);
+  }
+  .subtitle {
+    font-size: var(--font-size-xs);
+  }
+
+  /* スキャンオプション：2列に */
+  .batch-controls,
+  .scan-controls {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* サマリーカード：2列 */
+  .summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* タブのバッジを非表示にして省スペース化 */
+  .tab-num {
+    display: none;
+  }
+
+  /* 違反アイテムヘッダー */
+  .violation-header {
+    flex-wrap: wrap;
+    gap: var(--space-s);
+  }
+
+  /* 統合カード内メタ情報 */
+  .violation-meta {
+    flex-wrap: wrap;
   }
 }
