@@ -4325,27 +4325,14 @@ improvementPlan はBASIC/EXT/DEEP/PLAY/MULTIの全結果を統合して作成し
     // 例: "img[src*="file.jpg"][alt=""]" → "img[src*="file.jpg"][alt]"
     // JSON文字列の外にいる状態でしか書き換えないため、正常なJSON文字列は壊さない。
     function sanitizeAiJson(text) {
-      let result = '';
-      let inStr = false, esc = false;
-      for (let i = 0; i < text.length; i++) {
-        const c = text[i];
-        if (esc) { esc = false; result += c; continue; }
-        if (c === '\\' && inStr) { esc = true; result += c; continue; }
-        if (c === '"') { inStr = !inStr; result += c; continue; }
-        // 文字列外のとき: CSS [attr="value"] を [attr] に縮約
-        if (!inStr && c === '[') {
-          const closeIdx = text.indexOf(']', i + 1);
-          if (closeIdx !== -1) {
-            const inner = text.slice(i + 1, closeIdx);
-            const safe = inner.replace(/=\s*["'][^"'\]]*["']/g, '');
-            result += '[' + safe + ']';
-            i = closeIdx;
-            continue;
-          }
-        }
-        result += c;
-      }
-      return result;
+      // CSS属性セレクタ [attr="value"] の値のみを除去する
+      // 旧実装: 文字単位ループで JSON 構造の [ も処理してしまい配列を破壊するバグがあった
+      // 新実装: CSS属性セレクタ固有パターン（識別子=クォート値）にのみマッチする正規表現を使用
+      // JSON配列 [{...}] や [1,2,3] は識別子+= で始まらないためマッチしない
+      return text.replace(
+        /\[([a-zA-Z_][\w:-]*[*^$~|!]?)=(?:"[^"\\]*(?:\\.[^"\\]*)*"|'[^'\\]*(?:\\.[^'\\]*)*')\]/g,
+        '[$1]'
+      );
     }
 
     // ブラケットカウント方式で JSON 配列を抽出
