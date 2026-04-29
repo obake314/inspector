@@ -1,6 +1,6 @@
 # SPEC_SHEET
 
-最終更新: 2026-04-22（GAS評価報告書のDocsフォント仕様を追加）
+最終更新: 2026-04-29（改善計画シートの仕様追加・export-report入力仕様更新）
 
 ## 対象
 
@@ -20,14 +20,17 @@ Google Sheets の出力構成、およびスプレッドシートからの報告
 ### 入力
 
 - `pages: [{ url, rows, timestamp, stats }]`
+- `improvementRows: [{ 優先度, タイトル, 対象SC, スキャン元, 概要・理由, 改善手順 }]` （任意。存在する場合は改善計画シートを追加する）
 
 ### 出力
 
 - `{ success, spreadsheetId, tabs, url }`
+- `tabs`: 表紙シートタイトル・改善計画シートタイトル（存在する場合）・各ページシートタイトルの配列
 
 ### スプレッドシート構成
 
 - 表紙シート（作成日時、全体スコア、ページ別リンク）
+- **改善計画シート**（`improvementRows` が存在する場合のみ追加。シート名: `改善計画_{YYYY-MM-DD}_{HHMMSS}`）
 - 各ページシート（1URL=1シート）
 
 ### シートタブ名生成規則
@@ -110,6 +113,27 @@ Google Sheets の出力構成、およびスプレッドシートからの報告
 - `https://www.googleapis.com/auth/spreadsheets`
 - `https://www.googleapis.com/auth/documents`
 - `https://www.googleapis.com/auth/drive.file`
+
+## 改善計画シート仕様
+
+### シート名
+`改善計画_{YYYY-MM-DD}_{HHMMSS}`（表紙シートの次、各ページシートの前に配置）
+
+### 列構成（6列）
+
+| 列 | 名称 | 列幅（px） |
+|---|---|---:|
+| A | 優先度 | 50 |
+| B | タイトル | 200 |
+| C | 対象SC | 80 |
+| D | スキャン元 | 100 |
+| E | 概要・理由 | 300 |
+| F | 改善手順 | 350 |
+
+### フォーマット
+- ヘッダー行: 背景色 `RGB(0.18, 0.34, 0.6)`（紺青）、文字色 白、太字
+- 各行: `priorityActions` → `quickWins` → `manualChecks` の順で出力
+- クライアントで `filterPlanByResolved()` を適用し、OK判定済みSCの項目は送信しない
 
 ## 既知差異
 

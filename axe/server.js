@@ -4683,7 +4683,7 @@ async function sheetsApiFetch(url, options, maxRetries = 4) {
 }
 
 app.post('/api/export-report', async (req, res) => {
-  const { coverRows, pages } = req.body;
+  const { coverRows, pages, improvementRows } = req.body;
   if (!pages || pages.length === 0) {
     return res.status(400).json({ error: 'レポートデータがありません' });
   }
@@ -4899,9 +4899,53 @@ app.post('/api/export-report', async (req, res) => {
       method: 'POST', headers, body: JSON.stringify({ requests: coverFormatReqs })
     });
 
+    // --- 改善計画シート（improvementRows がある場合のみ）---
+    let improvementTitle = null;
+    if (Array.isArray(improvementRows) && improvementRows.length > 0) {
+      improvementTitle = `改善計画_${dateStr}_${timeStr}`;
+      const addImpRes = await sheetsApiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ requests: [{ addSheet: { properties: { title: improvementTitle } } }] })
+      });
+      const addImpData = await addImpRes.json();
+      if (!addImpRes.ok) {
+        console.warn('[Report] 改善計画シート追加失敗:', addImpData.error?.message);
+        improvementTitle = null;
+      } else {
+        const impSheetId = addImpData.replies[0].addSheet.properties.sheetId;
+        await sheetsApiFetch(
+          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${improvementTitle}'!A1`)}?valueInputOption=USER_ENTERED`,
+          { method: 'PUT', headers, body: JSON.stringify({ values: improvementRows }) }
+        );
+        // ヘッダー行の書式設定
+        await sheetsApiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+          method: 'POST', headers,
+          body: JSON.stringify({ requests: [
+            { repeatCell: {
+              range: { sheetId: impSheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 6 },
+              cell: { userEnteredFormat: {
+                textFormat: { bold: true, fontSize: 10, foregroundColor: { red: 1, green: 1, blue: 1 } },
+                backgroundColor: { red: 0.18, green: 0.34, blue: 0.6 },
+                horizontalAlignment: 'CENTER'
+              }},
+              fields: 'userEnteredFormat(textFormat,backgroundColor,horizontalAlignment)'
+            }},
+            ...[50, 200, 80, 100, 300, 350].map((px, i) => ({
+              updateDimensionProperties: {
+                range: { sheetId: impSheetId, dimension: 'COLUMNS', startIndex: i, endIndex: i + 1 },
+                properties: { pixelSize: px }, fields: 'pixelSize'
+              }
+            }))
+          ]})
+        });
+        console.log(`[Report] 改善計画シート作成: ${improvementTitle}`);
+      }
+    }
+
+    const allTabs = [coverTitle, ...(improvementTitle ? [improvementTitle] : []), ...pageTabInfo.map(p => p.title)];
     const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
-    console.log(`[Report] Export完了: ${url} (表紙 + ${pageTabInfo.length}ページ)`);
-    res.json({ success: true, spreadsheetId, tabs: [coverTitle, ...pageTabInfo.map(p => p.title)], url });
+    console.log(`[Report] Export完了: ${url} (表紙 + ${pageTabInfo.length}ページ${improvementTitle ? ' + 改善計画' : ''})`);
+    res.json({ success: true, spreadsheetId, tabs: allTabs, url });
 
   } catch (error) {
     console.error('Report Export Error:', error.message);

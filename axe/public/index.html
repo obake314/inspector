@@ -655,6 +655,10 @@
             return verified > 0 ? Math.round((pass || 0) / verified * 100) : null;
         }
 
+        function calculateTotalAchievementRate(pass, total) {
+            return (total || 0) > 0 ? Math.round((pass || 0) / total * 100) : null;
+        }
+
         // 行データからスコア集計（F列=index5が結果）
         function computeStats(rows) {
             const s = { pass: 0, fail: 0, incomplete: 0, na: 0, unverified: 0 };
@@ -1591,6 +1595,7 @@
                 let pass = 0, fail = 0, na = 0, unverified = 0;
                 let passA = 0, failA = 0, passAA = 0, failAA = 0;
                 rows.forEach(row => {
+                    if (row[1] === '改善計画') return; // 改善計画行はスコア集計から除外
                     const result = row[5], level = row[4];
                     const isPass = result === '合格';
                     const isFail = result === '不合格';
@@ -1612,6 +1617,7 @@
             const scInfo = {};
             pageDataList.forEach(({ url, rows }) => {
                 rows.forEach(row => {
+                    if (row[1] === '改善計画') return; // 改善計画行はSC集計から除外
                     const sc = row[2], name = row[3], level = row[4], result = row[5];
                     if (!sc) return;
                     if (!scInfo[sc]) scInfo[sc] = { sc, name, level, pr: {} };
@@ -1690,7 +1696,7 @@
         function buildSampleSheetData(reportRows, url) {
             const HEADER = ['SC', '項目', '合否', '検出数', '検出箇所', '指摘内容', '改善方法', '検査機関記入欄', 'お客様記入欄', '再検査'];
             let pass = 0, fail = 0;
-            const dataRows = reportRows.map(row => {
+            const dataRows = reportRows.filter(row => row[1] !== '改善計画').map(row => {
                 // row = [No, 検査種別, SC, 検査項目, 適合レベル, 結果, 場所, 検出数, 重要度, 詳細, 改善案]
                 const result = row[5];
                 let gaihi, siteki;
@@ -1710,6 +1716,41 @@
             return {
                 sheetRows: [['URL', url || ''], ['達成率', rate], [], HEADER, ...dataRows]
             };
+        }
+
+        // 改善計画専用シートデータを生成
+        // 列構成: [優先度, タイトル, 対象SC, スキャン元, 概要/理由, 改善手順]
+        function buildImprovementSheetData(improvementPlan) {
+            const plan = filterPlanByResolved(normalizeImprovementPlanClient(improvementPlan));
+            if (!plan) return null;
+            const priorityJaMap = { high: '高', medium: '中', low: '低' };
+            const HEADER = ['優先度', 'タ��トル', '対象SC', 'スキャン元', '概要・理由', '改善手順'];
+            const rows = [HEADER];
+            if (plan.summary) {
+                rows.push(['', '改善計画サマリー', '', '', plan.summary, '']);
+                rows.push([]);
+            }
+            plan.priorityActions.forEach(action => {
+                rows.push([
+                    priorityJaMap[action.priority] || action.priority,
+                    action.title || '改善タスク',
+                    action.relatedSc.join(', '),
+                    action.sources.join(' / '),
+                    action.reason || '',
+                    action.steps.join('\n')
+                ]);
+            });
+            if (plan.quickWins.length > 0) {
+                rows.push([]);
+                rows.push(['', '▼ 短期改善（Quick Wins）', '', '', '', '']);
+                plan.quickWins.forEach(item => rows.push(['低', item, '', '', '', '']));
+            }
+            if (plan.manualChecks.length > 0) {
+                rows.push([]);
+                rows.push(['', '▼ 手動確認が必要な項目', '', '', '', '']);
+                plan.manualChecks.forEach(item => rows.push(['中', item, '', '', '', '']));
+            }
+            return { sheetRows: rows };
         }
 
         async function exportExcel() {
@@ -1748,6 +1789,14 @@
                 const spWs = XLSX.utils.aoa_to_sheet(spSheet.sheetRows);
                 spWs['!cols'] = COL_WIDTHS;
                 XLSX.utils.book_append_sheet(wb, spWs, 'SP VIEW');
+            }
+
+            // 改善計画シート（MULTIスキャン結果がある場合のみ）
+            const improvementData = buildImprovementSheetData(lastImprovementPlan);
+            if (improvementData) {
+                const impWs = XLSX.utils.aoa_to_sheet(improvementData.sheetRows);
+                impWs['!cols'] = [8, 36, 14, 16, 50, 60].map(w => ({ wch: w }));
+                XLSX.utils.book_append_sheet(wb, impWs, '改善計画');
             }
 
             const date = new Date().toISOString().split('T')[0];
@@ -1804,6 +1853,15 @@
                 ws['!cols'] = COL_WIDTHS;
                 XLSX.utils.book_append_sheet(wb, ws, name);
             });
+
+            // バッチ: 最初の改善計画を代表として出力（URLごとに複数ある場合は最初のものを使用）
+            const firstImprovementPlan = Object.values(batchImprovementPlans).find(p => p);
+            const batchImprovementData = buildImprovementSheetData(firstImprovementPlan);
+            if (batchImprovementData) {
+                const impWs = XLSX.utils.aoa_to_sheet(batchImprovementData.sheetRows);
+                impWs['!cols'] = [8, 36, 14, 16, 50, 60].map(w => ({ wch: w }));
+                XLSX.utils.book_append_sheet(wb, impWs, '改善計画');
+            }
 
             const date = new Date().toISOString().split('T')[0];
             const uint8 = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
@@ -4073,7 +4131,7 @@
                 pass,
                 na,
                 unverified: Math.max(0, fixedTotal - covered),
-                score: calculateAchievementRate(pass, critical + serious + moderate + minor)
+                score: calculateTotalAchievementRate(pass, fixedTotal)
             };
         }
 
@@ -4462,9 +4520,10 @@
                 else if (result === 'na')   na++;
                 else unverified++;
             });
-            return { total: fail+pass+na+unverified,
+            const total = fail + pass + na + unverified;
+            return { total,
                      critical: imp.critical, serious: imp.serious, moderate: imp.moderate, minor: imp.minor,
-                     pass, na, unverified, score: calculateAchievementRate(pass, fail) };
+                     pass, na, unverified, score: calculateTotalAchievementRate(pass, total) };
         }
 
         // ============================================================
@@ -5921,11 +5980,12 @@
                 }
 
                 const { rows: coverRows } = buildCoverSheetData(pageDataList, baseUrl);
+                const improvementSheetData = buildImprovementSheetData(lastImprovementPlan);
 
                 const { response: res, data } = await fetchApiJson(apiUrl('/api/export-report'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ coverRows, pages: pageSheetsData })
+                    body: JSON.stringify({ coverRows, pages: pageSheetsData, improvementRows: improvementSheetData?.sheetRows || null })
                 }, '/api/export-report');
                 if (!res.ok) throw new Error(data.error || '保存失敗');
                 window.open(data.url, '_blank');
@@ -5966,11 +6026,13 @@
 
                 const topUrl = batchResultsData.find(r => r.success)?.url || '';
                 const { rows: coverRows } = buildCoverSheetData(pageDataList, topUrl);
+                const firstBatchPlan = Object.values(batchImprovementPlans).find(p => p);
+                const batchImprovementSheetData = buildImprovementSheetData(firstBatchPlan);
 
                 const { response: res, data } = await fetchApiJson(apiUrl('/api/export-report'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ coverRows, pages: pageSheetsData })
+                    body: JSON.stringify({ coverRows, pages: pageSheetsData, improvementRows: batchImprovementSheetData?.sheetRows || null })
                 }, '/api/export-report');
                 if (!res.ok) throw new Error(data.error || '保存失敗');
                 window.open(data.url, '_blank');

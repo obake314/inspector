@@ -1,6 +1,6 @@
 # SPEC_WEB
 
-最終更新: 2026-04-24（SC 1.4.1 役割分担整理・DEEP主判定化・MULTI補助判定化・自動検査結果連携・改善計画パネル/レポート反映・スキャン順序変更・SC権威マージ・OpenAI response_format対応・デバッグエンドポイント追加）
+最終更新: 2026-04-29（キャッシュ無効化・改善計画フィルタリング・MULTIトークン削減・改善計画Excelシート・Sheetsシート追加）
 
 ## 対象
 
@@ -15,12 +15,14 @@
 - `viewportPreset`: `desktop` / `iphone-se`（省略時 `desktop`）
 - 出力: `{ success, viewportPreset, results: { violations[], passes[], incomplete[] } }`
 - クライアント側タイムアウト: 6分
+- **キャッシュ無効化**: Puppeteer ページ生成直後に `page.setCacheEnabled(false)` を呼び出し、メモリ・ディスクキャッシュをバイパスして常に最新ページを取得する
 
 ### DEEP SCAN
 
 - API: `POST /api/enhanced-check`
 - 入力: `{ url, includeAAA?, basicAuth?, viewportPreset? }`
 - 出力: `{ success, viewportPreset, results: [{ sc, name, status, message, violations[] }], includeAAA }`
+- **キャッシュ無効化**: Puppeteer ページ生成直後に `page.setCacheEnabled(false)` を呼び出す（BASIC と共通）
 - SC 1.4.12 テキスト間隔検査では、class/id/data属性に `screen-reader-text` / `sr-only` / `visually-hidden` 等のスクリーンリーダー専用マーカーを持つ要素とその配下をクリップ判定から除外する
 - SC 2.5.8 ターゲットサイズ検査では、class/id/data属性に `sr-only` / `screen-reader` / `screen-reader-text` / `visually-hidden` / `assistive-text` 等のスクリーンリーダー専用マーカーを持つ要素とその配下を24×24px判定から除外する
 - SC 2.3.1 点滅検査では、現在ページ上の要素に実際に適用され、`animation-duration > 0` の `animation-name` に対応する keyframes のみを点滅候補にする。WordPress標準 lightbox 由来の `turn-on-visibility` / `turn-off-visibility` / `lightbox-zoom-in` / `lightbox-zoom-out` keyframes は除外する
@@ -60,6 +62,9 @@
 - SC 1.4.1 は MULTI の直接評価対象に残すが、役割は **色語・凡例・必須/エラー/成功表示・操作指示の意味依存**の補助判定に限定する。本文中リンク識別やナビゲーション current/selected の視覚差分は DEEP の結果を優先的に利用する
 - MULTIが有効な場合、AIはBASIC/EXT/DEEP/PLAY/MULTIの全結果を統合した `improvementPlan` を返す。構成は `summary`、最大6件の `priorityActions`、`quickWins`、`manualChecks`。
 - クライアントは `improvementPlan` を `#improvementPlanPanel` に表示する。APIエラー、モデル利用不可、JSON解析失敗、タイムアウト、または改善計画未生成は同パネルに明示し、通常の改善計画として扱わない。
+- **改善計画フィルタリング**: 詳細パネルでOK判定（`manualDecisions`）が設定されたSCに関連する `priorityActions` は、表示前に `filterPlanByResolved()` で除外する。`relatedSc` の全SCがOK済みの場合のみ非表示にする。`setDecision()` / `setNavConsistencyDecision()` の完了後に `renderImprovementPlanPanel()` を再描画して改善計画を即時更新する。
+- **トークン削減**: AIプロンプトに渡すデータを以下のルールで制限する: HTMLスニペット `shortHtml` は8000文字上限、画像altリスト `imgAltList` は最大20件、各評価項目の `verificationMethod` は項目ごとに埋め込まず共有 `methodGuide` 辞書として1回だけ送信、`toolResults` / `evaluationItems` はすべてコンパクトJSON（インデントなし）で送信する。
+- **キャッシュ無効化**: Puppeteer ページ生成直後に `page.setCacheEnabled(false)` を呼び出す（BASIC・DEEP と共通）
 - AIには各対象項目ごとの `verificationMethod` をサーバー側で付与し、証拠不足の場合は推測せず `manual_required` を返させる。
 - SC 1.4.1 の TOTAL / 詳細統合はハイブリッド扱いとし、**DEEP の pass を MULTI の fail で補足的に覆せる**。つまり 1.4.1 は `DEEP fail` または `MULTI fail` のいずれかで fail、両者が fail を出さない場合のみ pass / unverified を採用する
 - AI未設定時: `success: true` のまま `model: manual-fallback` で全項目 `manual_required` を返し、`aiErrorType: api_error` / `detailLabel: APIエラー` を返す
@@ -77,6 +82,7 @@
 
 - API: `POST /api/playwright-check`
 - エンジン: Playwright（`playwright` npm パッケージ、Chromium ヘッドレス）
+- **キャッシュ無効化**: `context.newPage()` 直後に `page.setExtraHTTPHeaders({ 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' })` を設定し、サーバーに対してキャッシュ不使用を要求する
 - 入力: `{ url, basicAuth?, viewportPreset? }`
 - 出力: `{ success, url, results: [{ sc, status, violations[], message, tabSequence? }], checkedAt }`
 - status: `pass` / `fail` / `not_applicable` / `manual_required` / `unverified`
@@ -109,6 +115,7 @@
 
 - API: `POST /api/ext-check`
 - エンジン: Playwright + IBM Equal Access Checker + ネイティブDOM検査 + CDP
+- **キャッシュ無効化**: `context.newPage()` 直後に `page.setExtraHTTPHeaders({ 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' })` を設定する（PLAY と共通）
 - npm: `accessibility-checker-engine`（IBM ACE エンジン; `ace-window.js` をページ内注入）
 - 入力: `{ url, basicAuth?, viewportPreset? }`
 - 出力: `{ success, url, results: [{ source, sc, status, violations[], message, name }], checkedAt }`
@@ -266,9 +273,9 @@
 
 TOTAL:
 
-`達成率 = ROUND(合格 / (全項目数 - 該当なし) * 100)`
+`達成率 = ROUND(合格 / 全項目数 * 100)`
 
-個別スキャンは、そのスキャンが絶対に確認できない項目を `未検証` として扱い、分母から外す。TOTALのみ、対象レベルの全項目数を基準に `computeTotalScore()` を `normalizeScoreToTarget(..., { mode: 'total' })` で固定項目数へ正規化した SC 単位スコアと一致させる。
+個別スキャンは、そのスキャンが絶対に確認できない項目を `未検証` として扱い、分母から外す。TOTALのみ、`該当なし` と `未検証` を含む対象レベルの全項目数を分母に固定し、`computeTotalScore()` を `normalizeScoreToTarget(..., { mode: 'total' })` で正規化した SC 単位スコアと一致させる。
 
 - 未カバーSCは `unverified` に補完する
 - MULTI行はAI対象項目（`aiTarget: true`）を判定可能範囲とし、AI対象外・未取得項目は未検証として表示する。ただし達成率の分母からは未検証を外す
@@ -556,6 +563,8 @@ TOTAL:
 - ヘッダー列: `No` / `検査種別` / `SC` / `検査項目` / `適合レベル` / `結果` / `場所` / `検出数` / `重要度` / `詳細` / `改善案`
 - 列幅（`wch`）: No=4, 検査種別=8, SC=6, 検査項目=30, 適合レベル=6, 結果=8, 場所=20, 検出数=6, 重要度=8, 詳細=30, 改善案=20
 - MULTI改善計画が存在する場合、`検査種別=改善計画` の行としてサマリー、優先改善、短期改善、手動確認を末尾に追加する。結果列は空にし、集計対象には含めない。
+- **改善計画シート**: `buildImprovementSheetData()` で `filterPlanByResolved()` を適用した後、`優先度 / タイトル / 対象SC / スキャン元 / 概要・理由 / 改善手順` の6列からなる `改善計画` シートを追加する。列幅（`wch`）: 優先度=8, タイトル=36, 対象SC=14, スキャン元=16, 概要・理由=50, 改善手順=60。改善計画がない場合はシートを追加しない。
+- **スコア集計からの除外**: `buildCoverSheetData()` と `buildSampleSheetData()` で `row[1] === '改善計画'` の行を集計対象から除外し、改善計画行が表紙スコアを汚染しない。
 - `not_applicable` / `対象外` 相当の項目をヒューマンチェックで `OK` にし、結果列が `合格` になる場合、`詳細` 列に `該当箇所なし` を追記する。
 - 旧 CSV エクスポートボタン（`#csvBtn`）を `Excel` ボタンに置換済み
 
