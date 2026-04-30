@@ -1072,9 +1072,10 @@
         let scoreRescanProgressTimer = null;
         let targetLevel = 'AA';
         const $ = id => document.getElementById(id);
-        // The UI may be served from /axe/, but API routes are usually rooted at /api.
+        // Prefer root API routes. Some deployments redirect /axe/api/* to /api/*,
+        // and POST may become GET during that redirect.
         const appBasePath = /^\/axe(\/|$)/.test(window.location.pathname) ? '/axe' : '';
-        const apiUrl = (path) => appBasePath + path;
+        const apiUrl = (path) => path;
         async function parseApiJson(response, apiName) {
             const text = await response.text();
             if (!text) return {};
@@ -1123,7 +1124,15 @@
                 || /^(not found|route not found|endpoint not found)$/i.test(compactMessage);
         }
         async function fetchApiJson(url, options, apiName) {
-            const response = await fetch(url, options);
+            const buildFetchOptions = () => {
+                if (!options) return options;
+                const cloned = { ...options };
+                if (options.headers instanceof Headers) cloned.headers = new Headers(options.headers);
+                else if (Array.isArray(options.headers)) cloned.headers = options.headers.slice();
+                else if (options.headers && typeof options.headers === 'object') cloned.headers = { ...options.headers };
+                return cloned;
+            };
+            const response = await fetch(url, buildFetchOptions());
             try {
                 const data = await parseApiJson(response, apiName);
                 const fallbackUrl = isApiRouteMiss(response, data) ? getAlternateApiUrl(url) : null;
@@ -1132,7 +1141,7 @@
                         status: response.status,
                         error: data?.error || data?.message || ''
                     });
-                    const fallbackResponse = await fetch(fallbackUrl, options);
+                    const fallbackResponse = await fetch(fallbackUrl, buildFetchOptions());
                     const fallbackData = await parseApiJson(fallbackResponse, apiName);
                     return { response: fallbackResponse, data: fallbackData };
                 }
@@ -1145,7 +1154,7 @@
                     contentType: error.contentType,
                     preview: error.preview
                 });
-                const fallbackResponse = await fetch(fallbackUrl, options);
+                const fallbackResponse = await fetch(fallbackUrl, buildFetchOptions());
                 try {
                     const fallbackData = await parseApiJson(fallbackResponse, apiName);
                     return { response: fallbackResponse, data: fallbackData };

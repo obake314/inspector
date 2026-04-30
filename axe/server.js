@@ -6640,6 +6640,12 @@ app.post('/api/playwright-check', async (req, res) => {
   }
 });
 
+app.all('/api/playwright-check', (req, res) => {
+  res.status(405).json({
+    error: `PLAYWRIGHT APIはPOSTのみ対応しています: ${req.method} ${req.originalUrl}`
+  });
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // エラーハンドリング
