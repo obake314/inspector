@@ -2483,6 +2483,7 @@ footer small {
   }
   .section-headline {
     width: auto;
+    align-self: flex-start;
   }
   .section-right {
     width: 100%;
@@ -2508,14 +2509,17 @@ footer small {
   }
   .section-right-btn{
     width: 100%;
+    line-height: 1;
   }
   .mode-btn{
     width: 50%;
+    line-height: 1;
   }
   .viewport-mode {
     flex-wrap: wrap;
     gap: var(--space-s);
     padding: 0;
+    line-height: 1;
   }
 
   /* URL入力 */
@@ -2568,6 +2572,9 @@ footer small {
     white-space: nowrap;
   }
 
+  .skip-rule-item small, .pre-check-item small{
+    display: none;
+  }
   /* サマリーカード */
   .summary {
     grid-template-columns: repeat(3, 1fr);
