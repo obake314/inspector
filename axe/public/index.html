@@ -2660,7 +2660,8 @@
                 el.style.pointerEvents = locked ? 'none' : '';
                 el.style.opacity = locked ? '0.4' : '';
             };
-            ['singleInput', 'batchInput', 'singleScanControls', 'batchScanControls'].forEach(id => {
+            // URL入力エリアのみロック（スキャンボタンは除外して再スキャン可能に保つ）
+            ['singleInput', 'batchInput'].forEach(id => {
                 setLockedStyle($(id));
             });
             const importBtn = $('scanStateImportBtn');
