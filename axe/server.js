@@ -2986,6 +2986,101 @@ async function check_1_4_1_use_of_color(page) {
   }
 }
 
+/** SC 1.4.3 テキストのコントラスト最低限 */
+async function check_1_4_3_text_contrast(page) {
+  try {
+    const result = await page.evaluate(() => {
+      const SR_ONLY_RE = /\b(sr-only|screen-reader(-text)?|visually-hidden|visually_hidden|assistive-text|offscreen|hidden-text)\b/i;
+      function parseCssColor(c) {
+        if (!c || c === 'transparent') return null;
+        const m = c.match(/rgba?\((\d+\.?\d*),\s*(\d+\.?\d*),\s*(\d+\.?\d*)(?:,\s*([\d.]+))?\s*\)/i);
+        if (!m) return null;
+        if (m[4] !== undefined && parseFloat(m[4]) < 0.05) return null;
+        return [+m[1], +m[2], +m[3]];
+      }
+      function luminance(r, g, b) {
+        return [r, g, b].reduce((s, c, i) => {
+          const v = c / 255;
+          return s + (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)) * [0.2126, 0.7152, 0.0722][i];
+        }, 0);
+      }
+      function cr(c1, c2) {
+        const [l1, l2] = [luminance(...c1), luminance(...c2)].sort((a, b) => b - a);
+        return (l1 + 0.05) / (l2 + 0.05);
+      }
+      function resolveBg(el) {
+        let e = el;
+        while (e && e !== document.documentElement) {
+          const bg = parseCssColor(getComputedStyle(e).backgroundColor);
+          if (bg) return bg;
+          e = e.parentElement;
+        }
+        return [255, 255, 255];
+      }
+      function isSrOnly(el) {
+        if (SR_ONLY_RE.test(el.className || '') || SR_ONLY_RE.test(el.id || '')) return true;
+        const r = el.getBoundingClientRect();
+        return r.width <= 1 && r.height <= 1;
+      }
+      function isLargeText(style) {
+        const fs = parseFloat(style.fontSize) || 16;
+        const fw = style.fontWeight === 'bold' ? 700 : (parseInt(style.fontWeight, 10) || 400);
+        return fs >= 24 || (fs >= 18.67 && fw >= 700);
+      }
+      function desc(el) {
+        const tag = el.tagName.toLowerCase();
+        const id  = el.id ? `#${el.id}` : '';
+        const cls = typeof el.className === 'string' && el.className
+          ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+        const txt = String(el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 30);
+        return `${tag}${id || cls}${txt ? ` "${txt}"` : ''}`.slice(0, 100);
+      }
+
+      const MAX = 150;
+      const seen = new Set();
+      const violations = [];
+      let checked = 0;
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+      let node;
+      while ((node = walker.nextNode()) && checked < MAX) {
+        const text = (node.textContent || '').trim();
+        if (!text || text.length < 2) continue;
+        const el = node.parentElement;
+        if (!el || seen.has(el)) continue;
+        seen.add(el);
+        const style = getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) < 0.1) continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.width < 1 || rect.height < 1) continue;
+        if (isSrOnly(el)) continue;
+        const fg = parseCssColor(style.color);
+        if (!fg) continue;
+        const bg = resolveBg(el);
+        const ratio = cr(fg, bg);
+        const large = isLargeText(style);
+        const required = large ? 3.0 : 4.5;
+        checked++;
+        if (ratio < required) {
+          violations.push(`${desc(el)}: ${ratio.toFixed(1)}:1（必要: ${required}:1${large ? '、大きいテキスト' : ''}）`);
+        }
+      }
+      return { violations, checked };
+    });
+
+    return {
+      sc: '1.4.3',
+      name: 'コントラスト（最低限）',
+      status: result.violations.length === 0 ? 'pass' : 'fail',
+      message: result.violations.length === 0
+        ? `${result.checked}件のテキスト要素を検査、コントラスト不足なし（軽微な誤検出の可能性あり）`
+        : `${result.violations.length}件のテキスト要素でコントラスト比不足（BASIC axe-coreで詳細確認推奨）`,
+      violations: result.violations.slice(0, 15)
+    };
+  } catch (e) {
+    return { sc: '1.4.3', status: 'error', violations: [], message: e.message };
+  }
+}
+
 /** SC 1.4.5 文字画像 */
 async function check_1_4_5_images_of_text(page) {
   try {
@@ -3811,6 +3906,9 @@ app.post('/api/enhanced-check', async (req, res) => {
 
     // 3-2
     results.push(await withTimeout(() => check_1_4_1_use_of_color(page)));
+
+    // 3-2b SC 1.4.3 テキストコントラスト（Puppeteer DOM計算）
+    results.push(await withTimeout(() => check_1_4_3_text_contrast(page)));
 
     // 3-3
     results.push(await withTimeout(() => check_1_4_5_images_of_text(page)));
@@ -5871,6 +5969,8 @@ const IBM_RULE_SC_MAP = {
   'RPT_Embed_HasNoEmbed':               '1.1.1',
   'WCAG21_Style_Viewport':              '1.4.4',
   'WCAG22_Label_Tooltip_Required':      '3.3.2',
+  'IBMA_Color_Contrast_WCAG2AA':        '1.4.3',
+  'IBMA_Color_Contrast_WCAG2AA_PV':    '1.4.3',
 };
 
 function ibmRuleToSC(ruleId) {
