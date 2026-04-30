@@ -2619,6 +2619,13 @@ footer small {
     flex-wrap: wrap;
     gap: var(--space-s);
   }
+ .item-header{
+      flex-direction: column;
+    align-items: flex-start;
+}
+  .item-header > span{
+    display: inline-block;
+  }
 
   /* エクスポートエリア */
   #exportArea {
@@ -2627,6 +2634,9 @@ footer small {
     gap: var(--space-s);
     margin-right: 0;
     align-items: center;
+  }
+  #exportArea span{
+    display: none;
   }
   .export-btn {
     font-size: var(--font-size-xs);
