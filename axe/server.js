@@ -5825,7 +5825,13 @@ async function pw_check_2_4_6_headings_labels(page) {
     const snap = el => { const h = el.outerHTML.replace(/\s+/g, ' ').trim(); return h.length > 120 ? h.slice(0, 117) + '...' : h; };
     const issues = [];
     document.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(h => {
-      if (!h.textContent.trim()) issues.push(`空の${h.tagName.toLowerCase()}見出しタグ | ${snap(h)}`);
+      if (h.textContent.trim()) return; // テキストあり → 問題なし
+      // テキストなしでも画像のalt・aria属性でアクセシブルネームがあればOK
+      const hasImgAlt = Array.from(h.querySelectorAll('img')).some(img => (img.getAttribute('alt') || '').trim());
+      const hasAria = h.getAttribute('aria-label') || h.getAttribute('aria-labelledby');
+      if (!hasImgAlt && !hasAria) {
+        issues.push(`空の${h.tagName.toLowerCase()}見出しタグ | ${snap(h)}`);
+      }
     });
     document.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]), select, textarea').forEach(el => {
       if (el.getAttribute('aria-hidden') === 'true') return;
