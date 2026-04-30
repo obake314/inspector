@@ -2591,6 +2591,9 @@ footer small {
   .batch-progress .phase-chip{
     padding: 0;
   }
+  .batchsum-total{
+    display: none;
+  }
 
   /* スコアテーブル */
   .scoretable {
@@ -2693,7 +2696,7 @@ footer small {
 @media (max-width: 480px) {
   /* さらに小さい画面 */
   .container {
-    padding: var(--space-s) var(--space-s);
+    padding: 12px;
   }
 
   h1 {
