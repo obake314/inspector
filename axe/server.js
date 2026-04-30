@@ -3986,14 +3986,18 @@ app.post('/api/enhanced-check', async (req, res) => {
       await page.authenticate({ username: basicAuth.user, password: basicAuth.pass });
     }
 
-    await page.setDefaultNavigationTimeout(60000);
-    await page.goto(url, { waitUntil: 'networkidle2' });
+    // 初回読み込みは networkidle2 + 60s（ページの完全なレンダリングを待つ）
+    await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
     await new Promise(r => setTimeout(r, 1000));
 
     console.log('[Enhanced] 各検査を実行中...');
 
     const withTimeout = (fn, ms = 30000) =>
       Promise.race([fn(), new Promise(r => setTimeout(() => r({ status: 'error', message: 'タイムアウト', violations: [] }), ms))]);
+
+    // 中間リロード用ヘルパー: analytics/WebSocket 常時接続サイトで networkidle2 が永久待機するのを防ぐため
+    // 'load' イベント + 20s タイムアウトを使用（JS実行は完了、ネットワーク常時接続の影響を受けない）
+    const reloadPage = () => page.goto(url, { waitUntil: 'load', timeout: 20000 }).catch(() => {});
 
     const results = [];
 
@@ -4009,7 +4013,7 @@ app.post('/api/enhanced-check', async (req, res) => {
     results.push({ sc: '2.1.2', name: 'キーボードトラップなし', status: 'manual_required', message: 'PLAYスキャンで確認してください', violations: [] });
 
     // ページ再読み込みでキーボード状態リセット
-    await page.goto(url, { waitUntil: 'networkidle2' }).catch(() => {});
+    await reloadPage();
     await new Promise(r => setTimeout(r, 1000));
 
     // 1-4
@@ -4022,7 +4026,7 @@ app.post('/api/enhanced-check', async (req, res) => {
     results.push(await withTimeout(() => check_1_4_12_text_spacing(page)));
 
     // ページ再読み込み（スタイルリセット）
-    await page.goto(url, { waitUntil: 'networkidle2' }).catch(() => {});
+    await reloadPage();
     await new Promise(r => setTimeout(r, 1000));
 
     // 1-7 (2つの結果を返す)
@@ -4031,21 +4035,21 @@ app.post('/api/enhanced-check', async (req, res) => {
     else results.push(focusObscured);
 
     // ページ再読み込み
-    await page.goto(url, { waitUntil: 'networkidle2' }).catch(() => {});
+    await reloadPage();
     await new Promise(r => setTimeout(r, 1000));
 
     // 1-8
     results.push(await withTimeout(() => check_3_2_1_2_unexpected_change(page)));
 
     // ページ再読み込み
-    await page.goto(url, { waitUntil: 'networkidle2' }).catch(() => {});
+    await reloadPage();
     await new Promise(r => setTimeout(r, 1000));
 
     // 1-9
     results.push(await withTimeout(() => check_3_3_1_error_identification(page)));
 
     // ページ再読み込み（Phase 2用）
-    await page.goto(url, { waitUntil: 'networkidle2' }).catch(() => {});
+    await reloadPage();
     await new Promise(r => setTimeout(r, 1000));
 
     // --- Phase 2 ---
@@ -4060,14 +4064,14 @@ app.post('/api/enhanced-check', async (req, res) => {
     else results.push(focusVisible);
 
     // ページ再読み込み（フォーカス状態リセット）
-    await page.goto(url, { waitUntil: 'networkidle2' }).catch(() => {});
+    await reloadPage();
     await new Promise(r => setTimeout(r, 1000));
 
     // 2-3
     results.push(await withTimeout(() => check_2_4_3_focus_order(page)));
 
     // ページ再読み込み
-    await page.goto(url, { waitUntil: 'networkidle2' }).catch(() => {});
+    await reloadPage();
     await new Promise(r => setTimeout(r, 1000));
 
     // 2-4
@@ -4077,7 +4081,7 @@ app.post('/api/enhanced-check', async (req, res) => {
     results.push(await withTimeout(() => check_1_3_3_sensory_characteristics(page)));
 
     // ページ再読み込み
-    await page.goto(url, { waitUntil: 'networkidle2' }).catch(() => {});
+    await reloadPage();
     await new Promise(r => setTimeout(r, 1000));
 
     // 2-5
@@ -4099,7 +4103,7 @@ app.post('/api/enhanced-check', async (req, res) => {
     results.push(await withTimeout(() => check_2_3_1_three_flashes(page)));
 
     // ページ再読み込み（Phase 3用）
-    await page.goto(url, { waitUntil: 'networkidle2' }).catch(() => {});
+    await reloadPage();
     await new Promise(r => setTimeout(r, 1000));
 
     // --- Phase 3 ---
@@ -4109,7 +4113,7 @@ app.post('/api/enhanced-check', async (req, res) => {
     results.push(await withTimeout(() => check_1_4_13_hover_content(page)));
 
     // ページ再読み込み
-    await page.goto(url, { waitUntil: 'networkidle2' }).catch(() => {});
+    await reloadPage();
     await new Promise(r => setTimeout(r, 1000));
 
     // 3-2
@@ -4125,7 +4129,7 @@ app.post('/api/enhanced-check', async (req, res) => {
     results.push(await withTimeout(() => check_2_2_1_timing_adjustable(page)));
 
     // 3-5
-    await page.goto(url, { waitUntil: 'networkidle2' }).catch(() => {});
+    await reloadPage();
     await new Promise(r => setTimeout(r, 1000));
     results.push(await withTimeout(() => check_3_3_3_error_suggestion(page)));
 
@@ -4133,7 +4137,7 @@ app.post('/api/enhanced-check', async (req, res) => {
     results.push(await withTimeout(() => check_2_5_1_7_gestures(page)));
 
     // ページ再読み込み（Section A用）
-    await page.goto(url, { waitUntil: 'networkidle2' }).catch(() => {});
+    await reloadPage();
     await new Promise(r => setTimeout(r, 1000));
 
     // --- Section A: 新規チェック (A/AA) ---
