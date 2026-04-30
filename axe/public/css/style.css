@@ -2571,13 +2571,25 @@ footer small {
     font-size: var(--font-size-xs);
     white-space: nowrap;
   }
-
+.skip-rule-item, .pre-check-item{
+  padding: 10px 0;
+}
+.scan-estimate{
+  letter-spacing: ;
+}
   .skip-rule-item small, .pre-check-item small{
     display: none;
   }
   /* サマリーカード */
   .summary {
     grid-template-columns: repeat(3, 1fr);
+  }
+  .batch-progress-label,
+  .batch-textarea{
+    font-size: 14px;
+  }
+  .batch-progress .phase-chip{
+    padding: 0;
   }
 
   /* スコアテーブル */
@@ -2589,6 +2601,19 @@ footer small {
     min-width: 600px;
   }
 
+  .batchsum-th, .scoretable thead th,
+  .scoretable thead th{
+    padding: 6px 0;
+    font-size: 10px;
+  }
+  .scoretable thead th.label-all span{
+    font-size: 10px;
+  }
+.batch-page-btn.active{
+  padding: 6px;
+}
+
+.batch-page-btn.active
   /* 一括結果ヘッダー */
   .batch-results-header {
     flex-wrap: wrap;
