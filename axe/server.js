@@ -2718,41 +2718,126 @@ async function check_2_2_2_pause_stop(page) {
   try {
     const result = await page.evaluate(() => {
       const issues = [];
-      // video[autoplay]
+
+      // ページ全体で一時停止/停止ボタンがあるか確認するヘルパー
+      // テキスト・aria-label・クラス名から pause/stop/停止 等を探す
+      const PAUSE_RE = /pause|stop|停止|一時停止|止める|スライド停止/i;
+      function hasPauseControlInPage() {
+        const btns = document.querySelectorAll('button, [role="button"], input[type="button"]');
+        for (const b of btns) {
+          const label = (b.textContent || b.getAttribute('aria-label') || b.getAttribute('title') || '').trim();
+          const cls = typeof b.className === 'string' ? b.className : '';
+          if (PAUSE_RE.test(label) || PAUSE_RE.test(cls)) return true;
+        }
+        return false;
+      }
+      // aria-label に pause/stop 系の要素（Swiper等がsrのみのボタンを置く）
+      function hasPauseAriaInPage() {
+        const els = document.querySelectorAll('[aria-label]');
+        for (const e of els) {
+          if (PAUSE_RE.test(e.getAttribute('aria-label') || '')) return true;
+        }
+        return false;
+      }
+      const pageHasPauseControl = hasPauseControlInPage() || hasPauseAriaInPage();
+
+      // --- video[autoplay] ---
       const autoplayVideos = document.querySelectorAll('video[autoplay]');
       for (const v of autoplayVideos) {
-        const parent = v.parentElement;
-        const hasPauseBtn = parent && parent.querySelector('button, [role="button"]');
-        if (!hasPauseBtn) issues.push(`video[autoplay]: 停止ボタン未確認`);
-      }
-      // marquee
-      const marquees = document.querySelectorAll('marquee');
-      for (const m of marquees) {
-        issues.push(`<marquee>要素: 動くコンテンツの停止手段なし`);
-      }
-      // CSS animation が長い要素
-      const animated = document.querySelectorAll('[style*="animation"]');
-      const longAnimations = [];
-      for (const el of animated) {
-        const style = getComputedStyle(el);
-        const dur = parseFloat(style.animationDuration) || 0;
-        if (dur > 5) {
-          const tag = el.tagName.toLowerCase();
-          const id = el.id ? `#${el.id}` : '';
-          longAnimations.push(`${tag}${id} (${dur}s)`);
-          if (longAnimations.length >= 5) break;
+        if (!pageHasPauseControl) {
+          issues.push(`video[autoplay]: 停止ボタン未確認`);
         }
       }
-      if (longAnimations.length > 0) {
-        issues.push(`長時間CSSアニメーション(5秒超): ${longAnimations.join(', ')}`);
+
+      // --- <marquee> ---
+      for (const m of document.querySelectorAll('marquee')) {
+        issues.push(`<marquee>要素: 動くコンテンツの停止手段なし`);
       }
-      return { issues, autoplayCount: autoplayVideos.length };
+
+      // --- スライダーライブラリ検出 ---
+      // 主要ライブラリのクラス・data属性パターン
+      const SLIDER_SELECTORS = [
+        '.swiper', '.swiper-container',       // Swiper
+        '.slick-slider', '.slick-list',        // Slick
+        '.owl-carousel', '.owl-stage',         // Owl Carousel
+        '.splide', '.splide__list',            // Splide
+        '.glide', '.glide__slides',            // Glide.js
+        '.flickity-slider',                    // Flickity
+        '.keen-slider',                        // KeenSlider
+        '[data-ride="carousel"]',              // Bootstrap carousel
+        '.js-slider', '.js-carousel',          // 汎用命名
+        '.hero-slider', '.top-slider',         // よくあるカスタム命名
+        '.slide-wrap', '.slideshow',
+      ].join(',');
+
+      const sliderEls = document.querySelectorAll(SLIDER_SELECTORS);
+      if (sliderEls.length > 0 && !pageHasPauseControl) {
+        const names = Array.from(sliderEls).slice(0, 3).map(el => {
+          const cls = typeof el.className === 'string'
+            ? el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+          return `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : (cls ? '.' + cls : '')}`;
+        });
+        issues.push(`自動再生スライダー候補(${sliderEls.length}個): ${names.join(', ')} — 停止ボタンなし`);
+      }
+
+      // --- CSSアニメーション無限ループ検出（クラスベース含む） ---
+      // inlineスタイルに限らず、getComputedStyleで animationName != 'none' かつ
+      // iterationCount が infinite な要素を探す（候補を絞るためクラス名でフィルタ）
+      const ANIM_CLASS_RE = /slide|carousel|scroll|banner|ticker|marquee|rotate|spin|fade|move|animate/i;
+      const candidates = Array.from(document.querySelectorAll('*')).filter(el => {
+        if (el.tagName === 'SCRIPT' || el.tagName === 'STYLE') return false;
+        const cls = typeof el.className === 'string' ? el.className : '';
+        const id = el.id || '';
+        return ANIM_CLASS_RE.test(cls) || ANIM_CLASS_RE.test(id);
+      });
+      const infiniteAnims = [];
+      for (const el of candidates.slice(0, 200)) {
+        const style = getComputedStyle(el);
+        const animName = style.animationName;
+        const iterCount = style.animationIterationCount;
+        const dur = parseFloat(style.animationDuration) || 0;
+        if (animName && animName !== 'none' && (iterCount === 'infinite' || dur > 5)) {
+          const tag = el.tagName.toLowerCase();
+          const elId = el.id ? `#${el.id}` : '';
+          const cls2 = typeof el.className === 'string'
+            ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+          infiniteAnims.push(`${tag}${elId}${cls2}`);
+          if (infiniteAnims.length >= 5) break;
+        }
+      }
+      // インラインstyleからも取得（既存ロジックを維持）
+      if (infiniteAnims.length === 0) {
+        for (const el of document.querySelectorAll('[style*="animation"]')) {
+          const style = getComputedStyle(el);
+          const dur = parseFloat(style.animationDuration) || 0;
+          const iterCount = style.animationIterationCount;
+          if (dur > 5 || iterCount === 'infinite') {
+            const tag = el.tagName.toLowerCase();
+            const elId = el.id ? `#${el.id}` : '';
+            infiniteAnims.push(`${tag}${elId} (${dur}s)`);
+            if (infiniteAnims.length >= 5) break;
+          }
+        }
+      }
+      if (infiniteAnims.length > 0 && !pageHasPauseControl && sliderEls.length === 0) {
+        issues.push(`無限ループCSSアニメーション: ${infiniteAnims.join(', ')} — 停止ボタンなし`);
+      }
+
+      return {
+        issues,
+        autoplayCount: autoplayVideos.length,
+        sliderCount: sliderEls.length,
+        infiniteAnimCount: infiniteAnims.length
+      };
     });
 
-    if (result.autoplayCount === 0 && result.issues.length === 0) {
+    const hasMovingContent = result.autoplayCount > 0 || result.sliderCount > 0 || result.infiniteAnimCount > 0
+      || document.querySelectorAll('marquee').length > 0;
+
+    if (result.issues.length === 0 && result.autoplayCount === 0 && result.sliderCount === 0 && result.infiniteAnimCount === 0) {
       return {
         sc: '2.2.2', name: '動くコンテンツ停止',
-        status: 'pass', message: '自動再生動画・marquee・長時間アニメーションなし', violations: []
+        status: 'pass', message: '自動再生動画・スライダー・無限ループアニメーション・marqueeなし', violations: []
       };
     }
 
@@ -2760,8 +2845,8 @@ async function check_2_2_2_pause_stop(page) {
       sc: '2.2.2', name: '動くコンテンツ停止',
       status: result.issues.length === 0 ? 'pass' : 'fail',
       message: result.issues.length === 0
-        ? '動くコンテンツに停止手段あり'
-        : `${result.issues.length}件の問題を検出`,
+        ? `動くコンテンツあり（スライダー${result.sliderCount}・video${result.autoplayCount}）、停止手段を確認`
+        : `${result.issues.length}件: 動くコンテンツに停止手段なし`,
       violations: result.issues
     };
   } catch (e) {
