@@ -6674,6 +6674,130 @@ app.post('/api/ext-check', async (req, res) => {
   }
 });
 
+/** SC 2.2.2 - 自動再生スライダー・アニメーション停止手段（Playwright版）
+ *  document.getAnimations() でJS初期化後の実際の動作アニメーションを取得し、
+ *  ページに停止/一時停止コントロールが存在するか確認する。
+ */
+async function pw_check_2_2_2_pause_stop(page) {
+  try {
+    // ページ読み込み後にスライダーのJSが初期化されるまで待機
+    await page.waitForTimeout(2000);
+
+    const result = await page.evaluate(() => {
+      // ページ全体で一時停止/停止コントロールを探す
+      const PAUSE_RE = /pause|stop|停止|一時停止|止める|スライド停止/i;
+      function findPauseControl() {
+        // ボタン・role=button
+        for (const el of document.querySelectorAll('button, [role="button"], input[type="button"]')) {
+          const label = (el.textContent || el.getAttribute('aria-label') || el.getAttribute('title') || '').trim();
+          const cls = typeof el.className === 'string' ? el.className : '';
+          if (PAUSE_RE.test(label) || PAUSE_RE.test(cls)) return true;
+        }
+        // aria-label属性
+        for (const el of document.querySelectorAll('[aria-label]')) {
+          if (PAUSE_RE.test(el.getAttribute('aria-label') || '')) return true;
+        }
+        return false;
+      }
+
+      // Web Animations API で実際に動いているアニメーションを取得
+      const runningAnims = [];
+      if (typeof document.getAnimations === 'function') {
+        for (const anim of document.getAnimations()) {
+          if (anim.playState !== 'running') continue;
+          const timing = anim.effect && anim.effect.getTiming ? anim.effect.getTiming() : {};
+          const iterations = timing.iterations;
+          const duration = typeof timing.duration === 'number' ? timing.duration : 0;
+          // 無限ループ または 5秒超
+          if (iterations === Infinity || duration > 5000) {
+            const target = anim.effect && anim.effect.target;
+            if (!target) continue;
+            const tag = target.tagName ? target.tagName.toLowerCase() : '';
+            const id = target.id ? `#${target.id}` : '';
+            const cls = typeof target.className === 'string'
+              ? '.' + target.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+            const animName = anim.animationName || (anim.constructor && anim.constructor.name) || '?';
+            runningAnims.push({ desc: `${tag}${id}${cls}`, animName, durationMs: Math.round(duration), iterations: iterations === Infinity ? 'infinite' : iterations });
+            if (runningAnims.length >= 8) break;
+          }
+        }
+      }
+
+      // スライダーライブラリのクラスパターン検出
+      const SLIDER_SELECTORS = [
+        '.swiper', '.swiper-container',
+        '.slick-slider', '.slick-list',
+        '.owl-carousel', '.owl-stage',
+        '.splide', '.splide__list',
+        '.glide', '.glide__slides',
+        '.flickity-slider',
+        '.keen-slider',
+        '[data-ride="carousel"]',
+        '.js-slider', '.js-carousel',
+        '.hero-slider', '.top-slider',
+        '.slide-wrap', '.slideshow',
+      ].join(',');
+      const sliderEls = document.querySelectorAll(SLIDER_SELECTORS);
+      const sliderInfo = Array.from(sliderEls).slice(0, 3).map(el => {
+        const tag = el.tagName.toLowerCase();
+        const id = el.id ? `#${el.id}` : '';
+        const cls = typeof el.className === 'string'
+          ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+        return `${tag}${id}${cls}`;
+      });
+
+      // video[autoplay]
+      const autoplayVideos = Array.from(document.querySelectorAll('video[autoplay]')).length;
+      // marquee
+      const marquees = Array.from(document.querySelectorAll('marquee')).length;
+
+      const hasPauseControl = findPauseControl();
+
+      return { runningAnims, sliderInfo, sliderCount: sliderEls.length, autoplayVideos, marquees, hasPauseControl };
+    });
+
+    const violations = [];
+    const { runningAnims, sliderInfo, sliderCount, autoplayVideos, marquees, hasPauseControl } = result;
+
+    // marquee は無条件違反
+    if (marquees > 0) {
+      violations.push(`<marquee>要素${marquees}個: 停止手段なし（廃止要素）`);
+    }
+
+    // video[autoplay]
+    if (autoplayVideos > 0 && !hasPauseControl) {
+      violations.push(`video[autoplay] ${autoplayVideos}個: 停止/一時停止コントロールなし`);
+    }
+
+    // スライダーライブラリが検出され、停止ボタンがない場合
+    if (sliderCount > 0 && !hasPauseControl) {
+      violations.push(`自動再生スライダー候補${sliderCount}個 (${sliderInfo.join(', ')}): 停止コントロールなし`);
+    }
+
+    // Web Animations APIで確認された無限/長時間アニメーションがあり、停止ボタンがなく、スライダーとも重複しない場合
+    if (runningAnims.length > 0 && !hasPauseControl && sliderCount === 0) {
+      const descs = runningAnims.slice(0, 3).map(a => `${a.desc}(${a.animName},${a.iterations})`).join(', ');
+      violations.push(`無限/長時間アニメーション${runningAnims.length}件: ${descs} — 停止コントロールなし`);
+    }
+
+    const nothingFound = sliderCount === 0 && autoplayVideos === 0 && marquees === 0 && runningAnims.length === 0;
+    if (nothingFound) {
+      return { sc: '2.2.2', status: 'pass', violations: [], message: '自動再生コンテンツ・スライダーなし' };
+    }
+    if (violations.length === 0) {
+      return { sc: '2.2.2', status: 'pass', violations: [], message: `動くコンテンツあり（スライダー${sliderCount}・アニメ${runningAnims.length}）、停止手段を確認` };
+    }
+    return {
+      sc: '2.2.2',
+      status: 'fail',
+      violations,
+      message: `${violations.length}件: 自動再生コンテンツに停止手段なし（SC 2.2.2違反）`
+    };
+  } catch (e) {
+    return { sc: '2.2.2', status: 'error', violations: [], message: e.message };
+  }
+}
+
 app.post('/api/playwright-check', async (req, res) => {
   const { url, basicAuth, viewportPreset } = req.body;
   if (!url) return res.status(400).json({ error: 'URLを指定してください' });
@@ -6719,6 +6843,8 @@ app.post('/api/playwright-check', async (req, res) => {
     results.push(await withTimeout(() => pw_check_1_3_5_input_purpose(page)));
     results.push(await withTimeout(() => pw_check_3_3_2_labels(page)));
     results.push(await withTimeout(() => pw_check_2_5_3_label_in_name(page)));
+    // SC 2.2.2: JS初期化後の自動再生スライダー・アニメーション検出（2s待機込み）
+    results.push(await withTimeout(() => pw_check_2_2_2_pause_stop(page), 25000));
     // アクセシビリティツリー検査
     results.push(await withTimeout(() => pw_check_4_1_2_accessible_names(page)));
     await page.reload({ waitUntil: 'networkidle' }).catch(() => {});
