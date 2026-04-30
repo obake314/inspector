@@ -1509,6 +1509,10 @@
 
             if (options.renderTabs !== false) {
                 renderAllTabs('pc');
+                if (options.renderScore !== false) {
+                    refreshScoreTable();
+                    renderImprovementPlanPanel();
+                }
             }
             $('results').classList.add('visible');
             $('exportArea').classList.add('visible');
@@ -5254,6 +5258,7 @@
             function labelCell(scanType, labelHtml, isTotal) {
                 if (isTotal) return labelHtml;
                 const disabled = (scanInProgress || scoreRescanInProgress) ? ' disabled' : '';
+                const showBatchAll = currentMode === 'batch';
                 const progressActive = scoreRescanProgressState
                     && scoreRescanProgressState.scanType === scanType
                     && scoreRescanProgressState.view === viewScope;
@@ -5271,13 +5276,22 @@
                         </div>
                         <div class="score-rescan-progress-label">${escapeHtml(progressLabel)} ${progress}%</div>
                     </div>` : '';
+                const singleButtonLabel = showBatchAll ? 'このページ' : '再SCAN';
+                const batchAllButton = showBatchAll ? `<button type="button"
+                        class="score-rescan-btn score-rescan-btn-all"
+                        onclick="event.stopPropagation(); rescanBatchFromScoreTable('${scanType}', '${viewScope}', this)"
+                        aria-label="${scanType}を全ページ再スキャン"
+                        title="${scanType}だけを全ページで再スキャン"${disabled}>全ページ</button>` : '';
                 return `<div class="score-label-content">
                     <div class="score-label-title">${labelHtml}</div>
-                    <button type="button"
-                        class="score-rescan-btn"
-                        onclick="event.stopPropagation(); rescanFromScoreTable('${scanType}', '${viewScope}', this)"
-                        aria-label="${scanType}を個別再スキャン"
-                        title="${scanType}だけを現在のURLで再スキャン"${disabled}>再SCAN</button>
+                    <div class="score-rescan-actions">
+                        <button type="button"
+                            class="score-rescan-btn"
+                            onclick="event.stopPropagation(); rescanFromScoreTable('${scanType}', '${viewScope}', this)"
+                            aria-label="${scanType}を個別再スキャン"
+                            title="${scanType}だけを現在のURLで再スキャン"${disabled}>${singleButtonLabel}</button>
+                        ${batchAllButton}
+                    </div>
                     ${progressHtml}
                 </div>`;
             }
@@ -5379,7 +5393,8 @@
                         deep: batchMobileEnhancedResults[url] || null,
                         multi: batchMobileAIResults[url] || {},
                         play: batchMobilePlayResults[url] || null,
-                        ext: batchMobileExtResults[url] || null
+                        ext: batchMobileExtResults[url] || null,
+                        navConsistency: batchMobileNavConsistency
                     };
                 }
                 const record = batchResultsData[currentBatchIdx];
@@ -5393,7 +5408,8 @@
                     deep: batchEnhancedResults[url] || null,
                     multi: batchAIResults[url] || {},
                     play: batchPlayResults[url] || null,
-                    ext: batchExtResults[url] || null
+                    ext: batchExtResults[url] || null,
+                    navConsistency: batchNavConsistency
                 };
             }
 
@@ -5410,6 +5426,7 @@
                     multi: sp.multi || {},
                     play: sp.play || null,
                     ext: sp.ext || null,
+                    navConsistency: null,
                     syncPrimary: primaryIsMobileOnly
                 };
             }
@@ -5424,8 +5441,44 @@
                 multi: aiResults || {},
                 play: lastPlayResults || null,
                 ext: lastExtResults || null,
+                navConsistency: null,
                 syncPrimary: true
             };
+        }
+
+        function buildBatchScoreRescanContext(record, store, view, viewportPreset, navConsistency) {
+            if (!record?.success || !record.url) return null;
+            const isMobileStore = store === 'batch-mobile';
+            const url = record.url;
+            return {
+                mode: 'batch',
+                store,
+                view,
+                url,
+                viewportPreset,
+                record,
+                basic: record.results,
+                deep: (isMobileStore ? batchMobileEnhancedResults : batchEnhancedResults)[url] || null,
+                multi: (isMobileStore ? batchMobileAIResults : batchAIResults)[url] || {},
+                play: (isMobileStore ? batchMobilePlayResults : batchPlayResults)[url] || null,
+                ext: (isMobileStore ? batchMobileExtResults : batchExtResults)[url] || null,
+                navConsistency
+            };
+        }
+
+        function getBatchScoreRescanContexts(view = 'pc') {
+            if (currentMode !== 'batch') return [];
+            const requestedView = view === 'sp' ? 'sp' : 'pc';
+            if (requestedView === 'sp' && batchMobileResultsData.some(r => r?.success)) {
+                return batchMobileResultsData
+                    .map(record => buildBatchScoreRescanContext(record, 'batch-mobile', 'sp', 'mobile', batchMobileNavConsistency))
+                    .filter(Boolean);
+            }
+            const mainView = batchViewportMode === 'mobile' ? 'sp' : 'pc';
+            const mainPreset = batchViewportMode === 'mobile' ? 'mobile' : 'desktop';
+            return batchResultsData
+                .map(record => buildBatchScoreRescanContext(record, 'batch-main', mainView, mainPreset, batchNavConsistency))
+                .filter(Boolean);
         }
 
         async function fetchScoreRescanResult(scanType, ctx) {
@@ -5472,7 +5525,7 @@
             }
 
             if (scanType === 'MULTI') {
-                const filteredItems = getFilteredAiItemsForTargetLevel(ctx.basic, batchNavConsistency);
+                const filteredItems = getFilteredAiItemsForTargetLevel(ctx.basic, ctx.navConsistency || null);
                 const { response, data: rawData } = await postScoreRescanJson('/api/ai-evaluate', {
                     url: ctx.url,
                     checkItems: filteredItems,
@@ -5520,7 +5573,7 @@
             lastExtResults = cloneData(lastMobileScanSnapshot.ext || null);
         }
 
-        function applyScoreRescanResult(ctx, result) {
+        function applyScoreRescanResult(ctx, result, options = {}) {
             const has = key => Object.prototype.hasOwnProperty.call(result, key);
             if (ctx.mode === 'batch') {
                 const url = ctx.url;
@@ -5560,8 +5613,10 @@
                 if (has('play')) target.play[url] = cloneData(result.play);
                 if (has('ext')) target.ext[url] = cloneData(result.ext);
 
-                renderBatchSummary();
-                showBatchDetail(currentBatchIdx);
+                if (!options.deferRender) {
+                    renderBatchSummary();
+                    showBatchDetail(currentBatchIdx);
+                }
                 return;
             }
 
@@ -5637,7 +5692,7 @@
             });
         }
 
-        function startScoreRescanProgress(scanType, view) {
+        function startScoreRescanProgress(scanType, view, options = {}) {
             clearInterval(scoreRescanProgressTimer);
             const estimates = {
                 BASIC: 2 * 60 * 1000,
@@ -5647,15 +5702,15 @@
                 EXT:   3 * 60 * 1000
             };
             const startedAt = Date.now();
-            const estimateMs = estimates[scanType] || 6 * 60 * 1000;
+            const estimateMs = options.estimateMs || estimates[scanType] || 6 * 60 * 1000;
             scoreRescanProgressState = {
                 scanType,
                 view: view === 'sp' ? 'sp' : 'pc',
                 progress: 3,
-                label: '準備中'
+                label: options.label || '準備中'
             };
             refreshScoreTable();
-            updateScoreRescanProgress(3, '準備中');
+            updateScoreRescanProgress(3, options.label || '準備中');
             scoreRescanProgressTimer = setInterval(() => {
                 const elapsed = Date.now() - startedAt;
                 const pct = Math.min(92, 6 + (elapsed / estimateMs) * 86);
@@ -5708,6 +5763,80 @@
                 alert(`${normalizedScanType}再スキャンエラー: ${msg}`);
                 console.error(`[SCORE-RESCAN] ${normalizedScanType}`, error);
                 finishScoreRescanProgress('エラー');
+            } finally {
+                scoreRescanInProgress = false;
+                setScoreRescanBusy(btn, false);
+                refreshScoreTable();
+            }
+        };
+
+        window.rescanBatchFromScoreTable = async function(scanType, view, btn) {
+            const normalizedScanType = String(scanType || '').toUpperCase();
+            if (!['BASIC', 'DEEP', 'MULTI', 'PLAY', 'EXT'].includes(normalizedScanType)) return;
+            if (currentMode !== 'batch') return;
+            if (scanInProgress || scoreRescanInProgress) return;
+
+            const contexts = getBatchScoreRescanContexts(view);
+            if (!contexts.length) {
+                alert('全ページ再スキャン対象が見つかりません');
+                return;
+            }
+
+            scoreRescanInProgress = true;
+            setScoreRescanBusy(btn, true);
+            const progressView = contexts[0].view || (view === 'sp' ? 'sp' : 'pc');
+            const perPageEstimate = {
+                BASIC: 2 * 60 * 1000,
+                DEEP: 5 * 60 * 1000,
+                MULTI: 7 * 60 * 1000,
+                PLAY: 4 * 60 * 1000,
+                EXT: 3 * 60 * 1000
+            }[normalizedScanType] || 4 * 60 * 1000;
+            startScoreRescanProgress(normalizedScanType, progressView, {
+                estimateMs: perPageEstimate * contexts.length,
+                label: `全ページ 0/${contexts.length}`
+            });
+
+            const errors = [];
+            try {
+                for (let i = 0; i < contexts.length; i++) {
+                    const ctx = contexts[i];
+                    const pct = 8 + (i / contexts.length) * 84;
+                    updateScoreRescanProgress(pct, `全ページ ${i + 1}/${contexts.length}`);
+                    try {
+                        const result = await fetchScoreRescanResult(normalizedScanType, ctx);
+                        applyScoreRescanResult(ctx, result, { deferRender: true });
+                    } catch (error) {
+                        const msg = error.name === 'AbortError'
+                            ? `${normalizedScanType} SCANがタイムアウトしました`
+                            : (error.message || `${normalizedScanType} SCANに失敗しました`);
+                        errors.push({ url: ctx.url, message: msg });
+                        if (isTimeoutLike(error, msg)) {
+                            recordTimeoutRetry({
+                                url: ctx.url,
+                                scanType: normalizedScanType,
+                                mode: 'batch',
+                                viewportPreset: ctx.viewportPreset,
+                                message: msg
+                            });
+                        }
+                        console.error(`[BATCH-SCORE-RESCAN] ${normalizedScanType} ${ctx.url}`, error);
+                    }
+                    updateScoreRescanProgress(8 + ((i + 1) / contexts.length) * 84, `全ページ ${i + 1}/${contexts.length}`);
+                }
+
+                renderBatchSummary();
+                const detailIdx = Number.isInteger(currentBatchIdx) && batchResultsData[currentBatchIdx]?.success
+                    ? currentBatchIdx
+                    : batchResultsData.findIndex(r => r.success);
+                if (detailIdx >= 0) showBatchDetail(detailIdx);
+                finishScoreRescanProgress(errors.length ? '一部エラー' : '完了');
+
+                if (errors.length) {
+                    const preview = errors.slice(0, 3).map(e => `${e.url}: ${e.message}`).join('\n');
+                    const more = errors.length > 3 ? `\nほか ${errors.length - 3}件` : '';
+                    alert(`${normalizedScanType}全ページ再スキャンは一部失敗しました。\n${preview}${more}`);
+                }
             } finally {
                 scoreRescanInProgress = false;
                 setScoreRescanBusy(btn, false);

@@ -788,6 +788,14 @@ h1 {
     font-weight: 100;
 }
 
+.score-rescan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+}
+
 .score-rescan-btn {
   appearance: none;
   border: 1px solid currentColor;
@@ -801,11 +809,24 @@ h1 {
   white-space: nowrap;
 }
 
+.score-rescan-btn-all {
+  background: var(--navy-700);
+  border-color: var(--navy-700);
+  color: var(--color-white);
+}
+
 .score-rescan-btn:hover,
 .score-rescan-btn:focus-visible {
   background: #f8fafc;
   outline: 2px solid currentColor;
   outline-offset: 2px;
+}
+
+.score-rescan-btn-all:hover,
+.score-rescan-btn-all:focus-visible {
+  background: var(--navy-400);
+  border-color: var(--navy-400);
+  color: var(--color-white);
 }
 
 .score-rescan-btn:disabled {
