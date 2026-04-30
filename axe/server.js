@@ -1406,34 +1406,39 @@ const WIDGET_ROLES_THAT_CAPTURE_TAB = new Set([
 ]);
 
 async function getActiveElementSnapshot(page) {
-  return page.evaluate((widgetRoles) => {
-    const a = document.activeElement;
-    if (!a || a === document.body || a === document.documentElement) return null;
-    const tag = a.tagName.toLowerCase();
-    const id = a.id ? `#${a.id}` : '';
-    const cls = a.className && typeof a.className === 'string'
-      ? '.' + a.className.trim().split(/\s+/).slice(0, 2).join('.')
-      : '';
-    const text = (a.getAttribute('aria-label') || a.textContent || a.value || '').trim().slice(0, 25);
-    // href や text を key に含め、同クラスの複数リンクを区別する（誤検出防止）
-    const href = tag === 'a' ? (a.getAttribute('href') || '').replace(/^https?:\/\/[^/]+/, '').slice(-30) : '';
-    let inModal = false;
-    let isWidget = false;
-    let p = a;
-    while (p) {
-      if (p.getAttribute) {
-        if (p.getAttribute('aria-modal') === 'true') { inModal = true; break; }
-        const role = p.getAttribute('role') || '';
-        if (widgetRoles.includes(role)) { isWidget = true; break; }
+  try {
+    return await page.evaluate((widgetRoles) => {
+      const a = document.activeElement;
+      if (!a || a === document.body || a === document.documentElement) return null;
+      const tag = a.tagName.toLowerCase();
+      const id = a.id ? `#${a.id}` : '';
+      const cls = a.className && typeof a.className === 'string'
+        ? '.' + a.className.trim().split(/\s+/).slice(0, 2).join('.')
+        : '';
+      const text = (a.getAttribute('aria-label') || a.textContent || a.value || '').trim().slice(0, 25);
+      // href や text を key に含め、同クラスの複数リンクを区別する（誤検出防止）
+      const href = tag === 'a' ? (a.getAttribute('href') || '').replace(/^https?:\/\/[^/]+/, '').slice(-30) : '';
+      let inModal = false;
+      let isWidget = false;
+      let p = a;
+      while (p) {
+        if (p.getAttribute) {
+          if (p.getAttribute('aria-modal') === 'true') { inModal = true; break; }
+          const role = p.getAttribute('role') || '';
+          if (widgetRoles.includes(role)) { isWidget = true; break; }
+        }
+        p = p.parentElement;
       }
-      p = p.parentElement;
-    }
-    // contenteditable は Tab でインデントするため除外
-    if (a.isContentEditable) isWidget = true;
-    const key = `${tag}${id}${cls}${href}${text ? '_' + text.slice(0, 15) : ''}`.slice(0, 100);
-    const display = `${tag}${id}${cls}${text ? ' "' + text + '"' : ''}`.slice(0, 80);
-    return { key, display, inModal, isWidget };
-  }, [...WIDGET_ROLES_THAT_CAPTURE_TAB]);
+      // contenteditable は Tab でインデントするため除外
+      if (a.isContentEditable) isWidget = true;
+      const key = `${tag}${id}${cls}${href}${text ? '_' + text.slice(0, 15) : ''}`.slice(0, 100);
+      const display = `${tag}${id}${cls}${text ? ' "' + text + '"' : ''}`.slice(0, 80);
+      return { key, display, inModal, isWidget };
+    }, [...WIDGET_ROLES_THAT_CAPTURE_TAB]);
+  } catch (e) {
+    // ナビゲーションによる実行コンテキスト破棄はnullを返して上位に委ねる
+    return null;
+  }
 }
 
 async function pressTabAndCapture(page, { shift = false } = {}) {
@@ -1445,28 +1450,37 @@ async function pressTabAndCapture(page, { shift = false } = {}) {
 }
 
 async function confirmKeyboardTrap(page, suspectKey) {
-  const current = await getActiveElementSnapshot(page);
-  if (!current || current.key !== suspectKey || current.inModal || current.isWidget) return false;
-  // Escape で脱出できれば正当なフォーカス管理（ダイアログ等）→ トラップではない
-  await page.keyboard.press('Escape');
-  await new Promise(r => setTimeout(r, 60));
-  const afterEsc = await getActiveElementSnapshot(page);
-  if (afterEsc && afterEsc.key !== suspectKey) return false;
-  // Shift+Tab → Tab → Tab の3回すべてで同じ要素に留まる場合のみトラップと確定
-  const backward = await pressTabAndCapture(page, { shift: true });
-  const restored = await pressTabAndCapture(page);
-  const forward  = await pressTabAndCapture(page);
-  return !!backward && !!restored && !!forward
-    && backward.key === suspectKey
-    && restored.key === suspectKey
-    && forward.key === suspectKey;
+  try {
+    const current = await getActiveElementSnapshot(page);
+    if (!current || current.key !== suspectKey || current.inModal || current.isWidget) return false;
+    // Escape で脱出できれば正当なフォーカス管理（ダイアログ等）→ トラップではない
+    await page.keyboard.press('Escape');
+    await new Promise(r => setTimeout(r, 60));
+    const afterEsc = await getActiveElementSnapshot(page);
+    if (afterEsc && afterEsc.key !== suspectKey) return false;
+    // Shift+Tab → Tab → Tab の3回すべてで同じ要素に留まる場合のみトラップと確定
+    const backward = await pressTabAndCapture(page, { shift: true });
+    const restored = await pressTabAndCapture(page);
+    const forward  = await pressTabAndCapture(page);
+    return !!backward && !!restored && !!forward
+      && backward.key === suspectKey
+      && restored.key === suspectKey
+      && forward.key === suspectKey;
+  } catch (_) {
+    return false;
+  }
 }
 
 async function detectKeyboardTrapsByTabbing(page) {
-  const focusableCount = await page.evaluate(selector =>
-    document.querySelectorAll(selector).length,
-    KEYBOARD_TRAP_FOCUSABLE_SELECTOR
-  );
+  let focusableCount;
+  try {
+    focusableCount = await page.evaluate(selector =>
+      document.querySelectorAll(selector).length,
+      KEYBOARD_TRAP_FOCUSABLE_SELECTOR
+    );
+  } catch (_) {
+    return { focusableCount: 0, traps: [] };
+  }
   if (focusableCount <= 1) {
     return { focusableCount, traps: [] };
   }
@@ -1484,10 +1498,25 @@ async function detectKeyboardTrapsByTabbing(page) {
   const traps = [];
   const seenTrapKeys = new Set();
   let tabCount = 0;
+  // ナビゲーション検出: 開始前のURLを記録
+  const startUrl = page.url ? page.url() : '';
+  let nullStreak = 0; // 連続null回数（ナビゲーション発生の代理指標）
 
   for (let i = 0; i < maxTabs; i++) {
     const el = await pressTabAndCapture(page);
-    if (!el) continue;
+
+    // nullが3回連続 → ナビゲーションが発生した可能性が高いためループ中断
+    if (!el) {
+      nullStreak++;
+      if (nullStreak >= 3) break;
+      continue;
+    }
+    nullStreak = 0;
+
+    // URLが変わった場合はナビゲーション発生 → ループ中断
+    const currentUrl = page.url ? page.url() : '';
+    if (startUrl && currentUrl && currentUrl !== startUrl) break;
+
     tabCount++;
     history.push(el);
 
