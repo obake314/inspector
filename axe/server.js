@@ -3802,35 +3802,63 @@ async function check_2_4_4_link_purpose(page) {
     const violations = await page.evaluate(() => {
       // 日本語・英語の汎用リンクテキストブラックリスト
       const blacklist = /^(こちら|ここ|詳しくは|詳細|続きを読む|もっと見る|click here|here|read more|more|learn more|details|続き|see more|view more|全文|全て)$/i;
+      // ファイル名パターン: Image2, img01, photo_3, figure01, pic2 etc.（拡張子あり/なし両対応）
+      const fileNameAltRe = /^(image|img|photo|pic|picture|figure|fig|banner|icon|thumb|thumbnail)[_\-]?\d*(\.[a-z]{2,5})?$/i;
       const issues = [];
       for (const a of document.querySelectorAll('a[href]')) {
-        const text = (a.textContent || a.getAttribute('aria-label') || '').trim().replace(/\s+/g, ' ');
+        const ariaLabel = a.getAttribute('aria-label') || a.getAttribute('aria-labelledby');
+        const text = (a.textContent || ariaLabel || '').trim().replace(/\s+/g, ' ');
         if (!text) {
-          // テキストなし — alt付きimgのみのリンク以外は違反
-          const hasImg = a.querySelector('img[alt]:not([alt=""])');
-          const hasAriaLabel = a.getAttribute('aria-label') || a.getAttribute('aria-labelledby');
-          if (!hasImg && !hasAriaLabel) {
-            const id = a.id ? `#${a.id}` : '';
-            issues.push(`a${id}[href="${(a.getAttribute('href') || '').slice(0, 40)}"]: リンクテキストなし`);
+          // テキストなし — alt付きimgのみのリンクかチェック
+          const img = a.querySelector('img');
+          const hasAriaLabel = !!ariaLabel;
+          if (!hasAriaLabel) {
+            if (!img) {
+              const id = a.id ? `#${a.id}` : '';
+              issues.push(`a${id}[href="${(a.getAttribute('href') || '').slice(0, 40)}"]: リンクテキストなし`);
+            } else {
+              const alt = img.getAttribute('alt');
+              if (alt === null || alt === '') {
+                const id = a.id ? `#${a.id}` : '';
+                issues.push(`a${id}[href="${(a.getAttribute('href') || '').slice(0, 40)}"]: 画像リンクのalt空/なし — リンク目的不明`);
+              } else if (fileNameAltRe.test(alt.trim())) {
+                const id = a.id ? `#${a.id}` : '';
+                issues.push(`a${id}[href="${(a.getAttribute('href') || '').slice(0, 40)}"]: 画像alt「${alt}」はファイル名パターン — リンク目的を説明していない`);
+              }
+            }
           }
         } else if (blacklist.test(text)) {
           const id = a.id ? `#${a.id}` : '';
           issues.push(`a${id}: 汎用テキスト「${text}」— リンク先が特定できない`);
+        } else {
+          // テキストがある場合でも、画像onlyリンクでaltがファイル名パターンか確認
+          // （テキストノードが空白のみで実際の可視テキストがimgのaltだけの場合）
+          const visibleText = (a.textContent || '').replace(/\s+/g, '').length;
+          if (visibleText === 0 && !ariaLabel) {
+            const img = a.querySelector('img');
+            if (img) {
+              const alt = img.getAttribute('alt');
+              if (alt && fileNameAltRe.test(alt.trim())) {
+                const id = a.id ? `#${a.id}` : '';
+                issues.push(`a${id}[href="${(a.getAttribute('href') || '').slice(0, 40)}"]: 画像alt「${alt}」はファイル名パターン — リンク目的を説明していない`);
+              }
+            }
+          }
         }
         if (issues.length >= 15) break;
       }
       return issues;
     });
     return {
-      sc: '2.4.4', name: 'リンクの目的（汎用テキスト検出）',
+      sc: '2.4.4', name: 'リンクの目的（汎用テキスト・画像リンク検出）',
       status: violations.length === 0 ? 'pass' : 'fail',
       message: violations.length === 0
-        ? '汎用的なリンクテキストは検出されませんでした'
-        : `${violations.length}件: リンク目的が不明なテキスト（「こちら」「read more」等）`,
+        ? '汎用的なリンクテキスト・ファイル名パターンalt画像リンクは検出されませんでした'
+        : `${violations.length}件: リンク目的が不明（汎用テキスト・ファイル名patternのalt等）`,
       violations
     };
   } catch (e) {
-    return { sc: '2.4.4', name: 'リンクの目的（汎用テキスト検出）', status: 'error', message: e.message, violations: [] };
+    return { sc: '2.4.4', name: 'リンクの目的（汎用テキスト・画像リンク検出）', status: 'error', message: e.message, violations: [] };
   }
 }
 
@@ -4327,7 +4355,7 @@ function relevantToolFindingsForAI(toolResults, ref) {
 function getMultiVerificationMethodForAI(item) {
   const ref = item?.ref || '';
   const methods = {
-    '1.1.1': '画像リストの各imgを以下の順で評価する。【スキップ条件（違反にしない）】isHidden=trueは評価不要。role="presentation"またはrole="none"は評価不要。ariaLabelまたはariaLabelledbyが存在すればalt欠落でもpass。【隣接テキストによる装飾判定 - 最優先】同一リンク（a要素）内にscreen-reader-text・sr-only・visually-hidden等のSRテキストスパンがある場合、または同一li・div・figure・article等の親要素内に同じ内容を伝える可視テキスト（p・span・figcaption・h2・h3等）がある場合、その画像は装飾扱いであり alt="" はWCAG準拠（pass）。隣接テキストが画像と同じ情報（例：動物名・タイトル・リンク先）を提供している場合は絶対にfailにしてはならない。これは冗長なalt値を避けるためのWCAGベストプラクティスである。【alt=""（空）- 最重要】alt=""は意図的な装飾画像の宣言であり、それ自体はWCAG準拠（pass）。たとえ画像が意味を持つように見えても、alt=""を持つ画像を単独でfailにしてはならない。例外はinLink=trueかつBASICのrelevantToolFindingsにlink-name違反がある場合のみ（その場合はリンク名無しとして扱う）。【alt=null（属性なし）】上記スキップ条件を満たさない場合はfail。BASICがすでにfailを出している場合は違反内容を具体化する。【alt値の品質評価（最重要）】BASICが構造的には問題なしと判定した画像について、alt値が意味を持つかを確認する: (1)ファイル名・拡張子を含む（"image001.jpg" "photo.png"等）→fail、(2)"image" "img" "photo" "pic" "画像" "写真" "バナー" "アイコン" "図" 等の汎用語のみ→fail、(3)スクリーンショットで画像が確認できれば内容との一致を評価。全画像がスキップまたは適切なalt/aria名を持つ場合はpass。一部確認不能ならmanual_required。',
+    '1.1.1': '画像リストの各imgを以下の順で評価する。【スキップ条件（違反にしない）】isHidden=trueは評価不要。role="presentation"またはrole="none"は評価不要。ariaLabelまたはariaLabelledbyが存在すればalt欠落でもpass。【隣接テキストによる装飾判定 - 最優先】同一リンク（a要素）内にscreen-reader-text・sr-only・visually-hidden等のSRテキストスパンがある場合、または同一li・div・figure・article等の親要素内に同じ内容を伝える可視テキスト（p・span・figcaption・h2・h3等）がある場合、その画像は装飾扱いであり alt="" はWCAG準拠（pass）。隣接テキストが画像と同じ情報（例：動物名・タイトル・リンク先）を提供している場合は絶対にfailにしてはならない。これは冗長なalt値を避けるためのWCAGベストプラクティスである。【alt=""（空）- 最重要】alt=""は意図的な装飾画像の宣言であり、それ自体はWCAG準拠（pass）。たとえ画像が意味を持つように見えても、alt=""を持つ画像を単独でfailにしてはならない。例外はinLink=trueかつBASICのrelevantToolFindingsにlink-name違反がある場合のみ（その場合はリンク名無しとして扱う）。【alt=null（属性なし）】上記スキップ条件を満たさない場合はfail。BASICがすでにfailを出している場合は違反内容を具体化する。【alt値の品質評価（最重要）】BASICが構造的には問題なしと判定した画像について、alt値が意味を持つかを確認する: (1)ファイル名・拡張子を含む（"image001.jpg" "photo.png"等）→fail、(2)汎用語のみのalt（"image" "img" "photo" "pic" "画像" "写真" "バナー" "アイコン" "図" 等）→fail、(3)【重要】汎用語＋連番のパターン（"Image2" "Image3" "img01" "photo_3" "pic2"等、単語に数字を付けただけのもの）は意味のある代替テキストではないのでfail、(4)スクリーンショットで画像が確認できれば内容との一致を評価。全画像がスキップまたは適切なalt/aria名を持つ場合はpass。一部確認不能ならmanual_required。',
     '1.2.1': 'audio/video/iframe等のメディアをHTMLと画面から探す。音声のみコンテンツがあり、近接する文字起こし・テキスト代替・説明リンクが確認できればpass。メディア内容の聴取が必要ならmanual_required。メディアが無ければnot_applicable。',
     '1.2.2': '収録済み動画があるか確認し、track kind="captions"、字幕ボタン、キャプション付きプレーヤー、字幕/文字起こしリンクを証拠にする。動画があるが字幕の有無をHTML/画面で確認できなければmanual_required。',
     '1.2.3': '動画に音声解説または同等のメディア代替があるか、リンク・説明・track・プレーヤー表示から確認する。映像内容の理解が必要で証拠が無い場合はmanual_required。動画が無ければnot_applicable。',
@@ -4335,7 +4363,7 @@ function getMultiVerificationMethodForAI(item) {
     '1.3.3': 'DEEP結果に感覚依存らしい指示文候補があればそれを優先確認しつつ、「右の」「左の」「上の」「丸い」「赤い」「音が鳴ったら」など、位置・形・色・音だけで操作を指示する文言を探す。テキスト名やラベルも併記されていればpass、感覚的特徴だけならfail。',
     '1.4.1': 'DEEP結果で本文リンク識別とナビゲーション current/selected の視覚差分を先に確認し、その上で色語・凡例・必須/エラー/成功表示・操作指示の意味依存を確認する。「赤いボタン」「緑が完了」等、色だけで情報や操作を伝える場合はfail。文字・アイコン・形状・ラベルも併用されていればpass。証拠不足ならmanual_required。',
     '1.4.5': 'スクリーンショットとimg/背景画像から、本文や操作説明が画像化されていないか確認する。ロゴ等の例外を除き、読ませる目的の文字画像があればfail。画像内文字の有無が不確実ならmanual_required。',
-    '2.4.4': 'リンクテキストと直近の見出し・段落・aria-label/titleを見て目的が分かるか確認する。「こちら」「詳細」「click here」等が文脈なしで並ぶ場合はfail。リンクが無ければnot_applicable。',
+    '2.4.4': 'リンクテキストと直近の見出し・段落・aria-label/titleを見て目的が分かるか確認する。「こちら」「詳細」「click here」等が文脈なしで並ぶ場合はfail。【画像のみのリンク】inLink=trueのimgがある場合、そのaltがリンク先を説明しているか確認する。alt="Image2"・alt="Image4"・alt="img01"等のファイル名パターン（汎用語＋数字）はリンク目的を説明せずfail（SC 2.4.4違反）。alt=""または属性なしの画像のみのリンクもfail。DEEPまたはBASICで画像リンクのalt問題が検出されていればそれを証拠として使用する。リンクが無ければnot_applicable。',
     '2.4.5': '検索、サイトマップ、グローバルナビ、パンくず、関連リンクなど、ページへ到達する複数手段の証拠を探す。単一ページ証拠ではサイト全体を確認できない場合はmanual_required。',
     '3.2.3': '複数ページ比較またはツール結果がある場合だけ、ナビゲーション順序・構成の一貫性を判定する。単一ページだけではmanual_required。明確な比較結果があればそれを尊重する。',
     '3.2.4': '同じ機能を持つコンポーネントの名称・ラベル・アイコンが一貫しているか、ツール結果や画面上の繰り返し要素で確認する。サイト横断確認が必要ならmanual_required。',
