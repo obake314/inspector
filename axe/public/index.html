@@ -4875,6 +4875,9 @@
                     locs = (issueRows.length ? issueRows : compared.map(u => `比較URL: ${u}`)).slice(0, 8);
                 }
                 return {
+                    statusTone: status === 'fail' ? 'fail'
+                        : status === 'pass' ? 'pass'
+                        : status === 'na' ? 'na' : 'unverified',
                     srcLabels: [src],
                     toolLabels: [toolLabel],
                     statusLabels: [statusLabel],
@@ -4891,11 +4894,13 @@
                 const groups = [];
                 records.forEach(record => {
                     const existing = groups.find(group => {
+                        if (group.statusTone !== record.statusTone) return false;
                         const sameSummary = [...record.normSummaries].some(s => group.normSummaries.has(s));
                         const sameLocation = [...record.normLocs].some(l => group.normLocs.has(l));
                         return sameSummary || sameLocation;
                     });
                     const target = existing || {
+                        statusTone: record.statusTone,
                         srcLabels: [], toolLabels: [], statusLabels: [], summaries: [],
                         countTexts: [], locs: [], suggestions: [],
                         normLocs: new Set(), normSummaries: new Set()
@@ -4915,7 +4920,8 @@
             }
 
             // ソース別エビデンスは同一メッセージ/同一箇所を名寄せして表示する。
-            // 合格タブ以外（影響度タブ）では pass ソースを除外して誤表示を防ぐ
+            // 合格タブでは、最終判定を合格にした根拠と、上書き前の不合格/未検証根拠を併記する。
+            // 不合格系タブでは pass ソースを除外して、問題として扱う根拠だけを表示する。
             const visibleSources = consolidatedStatus !== 'pass'
                 ? sources.filter(s => s.status !== 'pass')
                 : sources;
@@ -4932,8 +4938,9 @@
                 const adviceHtml = record.suggestions.length
                     ? `<div class="item-advice"><div class="item-advice-title">AI改善案</div>${record.suggestions.map(s => `<div class="item-advice-text">${escapeHtml(s)}</div>`).join('')}</div>`
                     : '';
-                return `<div class="item-source-section">
-                    <div class="item-source-header">${srcBadges}<span class="item-source-tool">${escapeHtml(toolText)}</span><span class="item-source-tool">${escapeHtml(statusText)}</span></div>
+                const statusTone = record.statusTone || 'unverified';
+                return `<div class="item-source-section item-source-${statusTone}">
+                    <div class="item-source-header">${srcBadges}<span class="item-source-status">${escapeHtml(statusText)}</span><span class="item-source-tool">${escapeHtml(toolText)}</span></div>
                     ${summaryText ? `<div class="item-summary">${escapeHtml(summaryText)}</div>` : ''}
                     ${countText ? `<div class="item-count">${escapeHtml(countText)}</div>` : ''}
                     ${locHtml}
