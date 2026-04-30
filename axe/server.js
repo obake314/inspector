@@ -633,6 +633,25 @@ app.post('/api/login', (req, res) => {
   res.status(401).json({ error: 'パスワードが正しくありません' });
 });
 
+/** パスワードリセット（ローカルアクセス限定） */
+app.post('/api/reset-password', (req, res) => {
+  const ip = req.ip || req.connection.remoteAddress || '';
+  const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+  if (!isLocal) {
+    return res.status(403).json({ error: 'ローカルアクセスからのみリセット可能です' });
+  }
+  const { newPassword } = req.body;
+  if (!newPassword || newPassword.length < 4) {
+    return res.status(400).json({ error: 'パスワードは4文字以上で入力してください' });
+  }
+  const saved = loadSettings();
+  saved.passwordHash = hashPassword(newPassword);
+  APP_PASSWORD_HASH = saved.passwordHash;
+  saveSettingsFile(saved);
+  console.log('[Auth] パスワードをリセットしました（ローカルアクセス）');
+  res.json({ success: true });
+});
+
 /**
  * 設定取得API（機密情報はマスク）
  */
