@@ -790,7 +790,6 @@ h1 {
 
 .score-rescan-actions {
   display: flex;
-  flex-wrap: wrap;
   justify-content: center;
   gap: 6px;
   width: 100%;

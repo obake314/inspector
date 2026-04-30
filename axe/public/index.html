@@ -5404,7 +5404,7 @@
                         </div>
                         <div class="score-rescan-progress-label">${escapeHtml(progressLabel)} ${progress}%</div>
                     </div>` : '';
-                const singleButtonLabel = showBatchAll ? 'このページ' : '再SCAN';
+                const singleButtonLabel = showBatchAll ? 'SINGLE' : '再SCAN';
                 const batchAllButton = showBatchAll ? `<button type="button"
                         class="score-rescan-btn score-rescan-btn-all"
                         onclick="event.stopPropagation(); rescanBatchFromScoreTable('${scanType}', '${viewScope}', this)"
@@ -5922,7 +5922,7 @@
             }[normalizedScanType] || 4 * 60 * 1000;
             startScoreRescanProgress(normalizedScanType, progressView, {
                 estimateMs: perPageEstimate * contexts.length,
-                label: `全ページ 0/${contexts.length}`
+                label: `ALL 0/${contexts.length}`
             });
 
             const errors = [];
@@ -5930,7 +5930,7 @@
                 for (let i = 0; i < contexts.length; i++) {
                     const ctx = contexts[i];
                     const pct = 8 + (i / contexts.length) * 84;
-                    updateScoreRescanProgress(pct, `全ページ ${i + 1}/${contexts.length}`);
+                    updateScoreRescanProgress(pct, `ALL ${i + 1}/${contexts.length}`);
                     try {
                         const result = await fetchScoreRescanResult(normalizedScanType, ctx);
                         applyScoreRescanResult(ctx, result, { deferRender: true });

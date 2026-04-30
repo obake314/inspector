@@ -101,7 +101,7 @@ function checkApiAndRescanPolicy() {
     'function getBatchScoreRescanContexts(view =',
     'function buildBatchScoreRescanContext(record, store, view, viewportPreset, navConsistency)',
     'renderScore !== false',
-    '全ページ'
+    'ALL'
   ];
   htmlSnippets.forEach(snippet => {
     if (!html.includes(snippet)) {
