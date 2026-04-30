@@ -2385,7 +2385,7 @@ footer small {
   border: 1px solid var(--navy-400);
   color: var(--navy-400);
   flex-direction: column;
-  width: 90px;
+  width: 140px;
   justify-content: center;
   line-height: 1;
 }
@@ -2408,9 +2408,7 @@ footer small {
 
 /* AI モデルインジケーター（幅広・3行構造） */
 .config-status-ai {
-  width: auto;
-  min-width: 140px;
-  max-width: 210px;
+  width: 140px;
   gap: 2px;
   padding: 4px 10px;
 }
