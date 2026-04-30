@@ -1827,11 +1827,15 @@ async function check_2_4_11_12_focus_obscured(page) {
 
 /** SC 3.2.1/3.2.2 フォーカス/入力時の予期しない変化 */
 async function check_3_2_1_2_unexpected_change(page) {
+  // page.url() はページ遷移後も安全に呼べるPuppeteer組み込みメソッドを使う
+  const startUrl = page.url();
+  const violations = [];
+  let navigated = false;
+
+  // MutationObserver + window.open フック注入
   try {
-    // MutationObserver + window.open フック注入
     await page.evaluate(() => {
       window.__unexpectedChanges = [];
-      const origOpen = window.open;
       window.open = function(...args) {
         window.__unexpectedChanges.push({ type: 'window.open', detail: args[0] || '' });
         return null;
@@ -1849,47 +1853,98 @@ async function check_3_2_1_2_unexpected_change(page) {
         window.__unexpectedChanges.push({ type: 'auto-submit', detail: this.action || '(unknown)' });
         return origSubmit.apply(this, arguments);
       };
-      window.__startUrl = location.href;
     });
+  } catch (_) {
+    return { sc: '3.2.1/3.2.2', name: 'フォーカス・入力時の予期しない変化', status: 'manual_required', message: 'フック注入失敗のため手動確認が必要', violations: [] };
+  }
 
-    const maxCheck = 20;
-    for (let i = 0; i < maxCheck; i++) {
+  // Tab を送出しフォーカス移動中の予期しない変化を観測
+  const maxCheck = 20;
+  for (let i = 0; i < maxCheck; i++) {
+    try {
       await page.keyboard.press('Tab');
-      await new Promise(r => setTimeout(r, 100));
-      // URL変化チェック
-      const urlChanged = await page.evaluate(() => location.href !== window.__startUrl);
-      if (urlChanged) break;
+      await new Promise(r => setTimeout(r, 120));
+    } catch (_) {
+      // キー送出失敗はコンテキスト破棄の可能性 → URL確認して終了
+      const currentUrl = page.url();
+      if (currentUrl !== startUrl) {
+        violations.push(`[SC 3.2.1] フォーカス移動中にページ遷移: ${currentUrl}`);
+        navigated = true;
+      }
+      break;
     }
 
-    // select/input に値を入力してコンテキスト変化を確認
-    await page.evaluate(() => {
-      const sel = document.querySelector('select');
-      if (sel && sel.options.length > 1) {
-        const prev = sel.value;
-        sel.options[1].selected = true;
-        sel.dispatchEvent(new Event('change', { bubbles: true }));
+    // page.url() はナビゲーション後も安全（page.evaluate不要）
+    const currentUrl = page.url();
+    if (currentUrl !== startUrl) {
+      violations.push(`[SC 3.2.1] フォーカス移動でページ遷移: ${currentUrl}`);
+      navigated = true;
+      break;
+    }
+
+    // MutationObserver の記録を取得（コンテキスト生存中のみ）
+    try {
+      const interim = await page.evaluate(() => {
+        const c = (window.__unexpectedChanges || []).slice();
+        window.__unexpectedChanges = [];
+        return c;
+      });
+      for (const c of interim) {
+        violations.push(`[${c.type}] ${c.detail}`.slice(0, 80));
       }
-    });
-    await new Promise(r => setTimeout(r, 500));
-
-    const changes = await page.evaluate(() => {
-      const urlChanged = location.href !== window.__startUrl;
-      if (urlChanged) window.__unexpectedChanges.push({ type: 'url-change', detail: location.href });
-      window.__observer.disconnect();
-      return window.__unexpectedChanges.slice(0, 10);
-    });
-
-    return {
-      sc: '3.2.1/3.2.2', name: 'フォーカス・入力時の予期しない変化',
-      status: changes.length === 0 ? 'pass' : 'fail',
-      message: changes.length === 0
-        ? 'フォーカス・入力によるコンテキスト変化は検出されませんでした'
-        : `${changes.length}件の予期しない変化を検出`,
-      violations: changes.map(c => `[${c.type}] ${c.detail}`.slice(0, 80))
-    };
-  } catch (e) {
-    return { sc: '3.2.1/3.2.2', name: 'フォーカス・入力時の予期しない変化', status: 'error', message: e.message, violations: [] };
+    } catch (_) {
+      // context破棄 → URL変化確認して終了
+      const currentUrl2 = page.url();
+      if (currentUrl2 !== startUrl) {
+        violations.push(`[SC 3.2.1] フォーカス移動中にページ遷移（context破棄）: ${currentUrl2}`);
+        navigated = true;
+      }
+      break;
+    }
   }
+
+  // select に値を入力してコンテキスト変化を確認（SC 3.2.2）
+  if (!navigated) {
+    try {
+      await page.evaluate(() => {
+        const sel = document.querySelector('select');
+        if (sel && sel.options.length > 1) {
+          sel.options[1].selected = true;
+          sel.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      });
+      await new Promise(r => setTimeout(r, 500));
+
+      const afterSelectUrl = page.url();
+      if (afterSelectUrl !== startUrl) {
+        violations.push(`[SC 3.2.2] select変更でページ遷移: ${afterSelectUrl}`);
+      } else {
+        // MutationObserver の残存記録を回収
+        const final = await page.evaluate(() => {
+          const c = (window.__unexpectedChanges || []).slice();
+          try { window.__observer.disconnect(); } catch (_) {}
+          return c;
+        });
+        for (const c of final) {
+          violations.push(`[${c.type}] ${c.detail}`.slice(0, 80));
+        }
+      }
+    } catch (_) {
+      const afterUrl = page.url();
+      if (afterUrl !== startUrl) {
+        violations.push(`[SC 3.2.2] select変更中にページ遷移: ${afterUrl}`);
+      }
+    }
+  }
+
+  return {
+    sc: '3.2.1/3.2.2', name: 'フォーカス・入力時の予期しない変化',
+    status: violations.length === 0 ? 'pass' : 'fail',
+    message: violations.length === 0
+      ? 'フォーカス・入力によるコンテキスト変化は検出されませんでした'
+      : `${violations.length}件の予期しない変化を検出`,
+    violations
+  };
 }
 
 /** SC 3.3.1 エラー特定
