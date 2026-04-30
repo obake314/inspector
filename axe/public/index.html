@@ -5406,10 +5406,10 @@
                     </div>` : '';
                 const singleButtonLabel = showBatchAll ? 'SINGLE' : '再SCAN';
                 const batchAllButton = showBatchAll ? `<button type="button"
-                        class="score-rescan-btn score-rescan-btn-all"
+                        class="score-rescan-btn score-rescan-btn"
                         onclick="event.stopPropagation(); rescanBatchFromScoreTable('${scanType}', '${viewScope}', this)"
                         aria-label="${scanType}を全ページ再スキャン"
-                        title="${scanType}だけを全ページで再スキャン"${disabled}>全ページ</button>` : '';
+                        title="${scanType}だけを全ページで再スキャン"${disabled}>ALL</button>` : '';
                 return `<div class="score-label-content">
                     <div class="score-label-title">${labelHtml}</div>
                     <div class="score-rescan-actions">
