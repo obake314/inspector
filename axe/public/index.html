@@ -29,16 +29,28 @@
 
             <!-- リセットパネル（初期非表示） -->
             <div id="resetPanel" style="display:none;">
-                <p>新しいパスワードを設定</p>
                 <div class="login-error" id="resetError" style="display:none;"></div>
                 <div id="resetSuccess" style="display:none;color:#4caf50;margin-bottom:8px;font-size:13px;">リセット完了しました。ログインしてください。</div>
-                <input type="password" id="resetPassword" placeholder="新しいパスワード（4文字以上）" autocomplete="new-password">
-                <input type="password" id="resetPasswordConfirm" placeholder="確認（もう一度）" autocomplete="new-password" style="margin-top:6px;">
-                <button type="button" id="resetBtn" style="margin-top:8px;">リセットする</button>
-                <div style="margin-top:10px;">
+
+                <!-- Step1: トークン発行 -->
+                <div id="resetStep1">
+                    <p style="font-size:13px;">サーバーのターミナルにリセットトークンを出力します</p>
+                    <button type="button" id="requestTokenBtn">トークンを発行する</button>
+                    <p style="font-size:11px;color:#888;margin-top:10px;">発行後、サーバーのターミナルに表示される<br>トークンを次の画面で入力してください（有効期限5分）</p>
+                </div>
+
+                <!-- Step2: トークン入力 + 新PW（初期非表示） -->
+                <div id="resetStep2" style="display:none;">
+                    <p style="font-size:13px;">ターミナルのトークンを入力してください</p>
+                    <input type="text" id="resetToken" placeholder="トークン（ターミナルに表示）" autocomplete="off" style="font-family:monospace;font-size:12px;">
+                    <input type="password" id="resetPassword" placeholder="新しいパスワード（4文字以上）" autocomplete="new-password" style="margin-top:6px;">
+                    <input type="password" id="resetPasswordConfirm" placeholder="確認（もう一度）" autocomplete="new-password" style="margin-top:6px;">
+                    <button type="button" id="resetBtn" style="margin-top:8px;">リセットする</button>
+                </div>
+
+                <div style="margin-top:12px;">
                     <a href="#" id="backToLoginLink" style="font-size:12px;color:#aaa;">← ログインに戻る</a>
                 </div>
-                <p style="font-size:11px;color:#888;margin-top:12px;">※ このサーバーに直接アクセスしている場合のみ使用できます</p>
             </div>
 
             <div class="login-meta"><small id="loginUpdateTime">LAST UPDATE : -</small></div>
@@ -1373,7 +1385,10 @@
                     e.preventDefault();
                     $('loginPanel').style.display = 'none';
                     $('resetPanel').style.display = '';
-                    $('resetPassword').focus();
+                    $('resetStep1').style.display = '';
+                    $('resetStep2').style.display = 'none';
+                    $('resetError').style.display = 'none';
+                    $('resetSuccess').style.display = 'none';
                 });
                 $('backToLoginLink').addEventListener('click', e => {
                     e.preventDefault();
@@ -1381,9 +1396,11 @@
                     $('loginPanel').style.display = '';
                     $('resetError').style.display = 'none';
                     $('resetSuccess').style.display = 'none';
+                    $('resetToken').value = '';
                     $('resetPassword').value = '';
                     $('resetPasswordConfirm').value = '';
                 });
+                $('requestTokenBtn').addEventListener('click', doRequestToken);
                 $('resetBtn').addEventListener('click', doReset);
                 $('resetPasswordConfirm').addEventListener('keydown', e => { if (e.key === 'Enter') doReset(); });
             } catch (e) {
@@ -1414,12 +1431,40 @@
             }
         }
 
+        async function doRequestToken() {
+            const errEl = $('resetError');
+            errEl.style.display = 'none';
+            try {
+                const { response: res } = await fetchApiJson(apiUrl('/api/request-reset'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                }, '/api/request-reset');
+                if (res.ok) {
+                    $('resetStep1').style.display = 'none';
+                    $('resetStep2').style.display = '';
+                    $('resetToken').focus();
+                } else {
+                    errEl.textContent = 'トークン発行に失敗しました';
+                    errEl.style.display = 'block';
+                }
+            } catch (e) {
+                errEl.textContent = 'トークン発行に失敗しました';
+                errEl.style.display = 'block';
+            }
+        }
+
         async function doReset() {
+            const token = ($('resetToken').value || '').trim();
             const pw = $('resetPassword').value;
             const pw2 = $('resetPasswordConfirm').value;
             const errEl = $('resetError');
             errEl.style.display = 'none';
             $('resetSuccess').style.display = 'none';
+            if (!token) {
+                errEl.textContent = 'ターミナルに表示されたトークンを入力してください';
+                errEl.style.display = 'block';
+                return;
+            }
             if (pw.length < 4) {
                 errEl.textContent = 'パスワードは4文字以上で入力してください';
                 errEl.style.display = 'block';
@@ -1434,13 +1479,13 @@
                 const { response: res } = await fetchApiJson(apiUrl('/api/reset-password'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ newPassword: pw })
+                    body: JSON.stringify({ token, newPassword: pw })
                 }, '/api/reset-password');
                 if (res.ok) {
                     $('resetSuccess').style.display = 'block';
+                    $('resetToken').value = '';
                     $('resetPassword').value = '';
                     $('resetPasswordConfirm').value = '';
-                    // 2秒後にログインパネルへ戻る
                     setTimeout(() => {
                         $('resetPanel').style.display = 'none';
                         $('loginPanel').style.display = '';
@@ -1448,11 +1493,11 @@
                     }, 2000);
                 } else {
                     const body = await res.json().catch(() => ({}));
-                    errEl.textContent = body.error || 'リセットに失敗しました（ローカルアクセスが必要です）';
+                    errEl.textContent = body.error || 'リセットに失敗しました';
                     errEl.style.display = 'block';
                 }
             } catch (e) {
-                errEl.textContent = 'リセットに失敗しました（ローカルアクセスが必要です）';
+                errEl.textContent = 'リセットに失敗しました';
                 errEl.style.display = 'block';
             }
         }

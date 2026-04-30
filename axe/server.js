@@ -633,14 +633,33 @@ app.post('/api/login', (req, res) => {
   res.status(401).json({ error: 'パスワードが正しくありません' });
 });
 
-/** パスワードリセット（ローカルアクセス限定） */
+/** パスワードリセット — ワンタイムトークン方式 */
+// トークンはメモリのみに保持（再起動で無効化）
+let _resetToken = null;       // { token, expiresAt }
+const RESET_TOKEN_TTL = 5 * 60 * 1000; // 5分
+
+// Step1: トークン発行 → サーバーコンソールに出力
+app.post('/api/request-reset', (req, res) => {
+  const token = crypto.randomBytes(20).toString('hex');
+  _resetToken = { token, expiresAt: Date.now() + RESET_TOKEN_TTL };
+  console.log('\n' + '='.repeat(60));
+  console.log('[PASSWORD RESET] リセットトークンが発行されました');
+  console.log(`  トークン: ${token}`);
+  console.log(`  有効期限: 5分間`);
+  console.log('='.repeat(60) + '\n');
+  res.json({ success: true });
+});
+
+// Step2: トークン + 新パスワードでリセット実行
 app.post('/api/reset-password', (req, res) => {
-  const ip = req.ip || req.connection.remoteAddress || '';
-  const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
-  if (!isLocal) {
-    return res.status(403).json({ error: 'ローカルアクセスからのみリセット可能です' });
+  const { token, newPassword } = req.body;
+  if (!_resetToken || Date.now() > _resetToken.expiresAt) {
+    _resetToken = null;
+    return res.status(400).json({ error: 'トークンが無効または期限切れです。再度トークンを発行してください' });
   }
-  const { newPassword } = req.body;
+  if (token !== _resetToken.token) {
+    return res.status(401).json({ error: 'トークンが正しくありません' });
+  }
   if (!newPassword || newPassword.length < 4) {
     return res.status(400).json({ error: 'パスワードは4文字以上で入力してください' });
   }
@@ -648,7 +667,8 @@ app.post('/api/reset-password', (req, res) => {
   saved.passwordHash = hashPassword(newPassword);
   APP_PASSWORD_HASH = saved.passwordHash;
   saveSettingsFile(saved);
-  console.log('[Auth] パスワードをリセットしました（ローカルアクセス）');
+  _resetToken = null; // 使い捨て
+  console.log('[Auth] パスワードをリセットしました');
   res.json({ success: true });
 });
 
