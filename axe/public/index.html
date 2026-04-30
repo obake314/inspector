@@ -1369,40 +1369,39 @@
             if (footerEl) footerEl.textContent = safeLabel;
         }
 
+        // ログイン・リセット関連のイベントリスナーは常に登録（passwordRequired 問わず）
+        $('loginBtn').addEventListener('click', doLogin);
+        $('loginPassword').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+        $('forgotPasswordLink').addEventListener('click', e => {
+            e.preventDefault();
+            $('loginPanel').style.display = 'none';
+            $('resetPanel').style.display = '';
+            $('resetStep1').style.display = '';
+            $('resetStep2').style.display = 'none';
+            $('resetError').style.display = 'none';
+            $('resetSuccess').style.display = 'none';
+        });
+        $('backToLoginLink').addEventListener('click', e => {
+            e.preventDefault();
+            $('resetPanel').style.display = 'none';
+            $('loginPanel').style.display = '';
+            $('resetError').style.display = 'none';
+            $('resetSuccess').style.display = 'none';
+            $('resetToken').value = '';
+            $('resetPassword').value = '';
+            $('resetPasswordConfirm').value = '';
+        });
+        $('requestTokenBtn').addEventListener('click', doRequestToken);
+        $('resetBtn').addEventListener('click', doReset);
+        $('resetPasswordConfirm').addEventListener('keydown', e => { if (e.key === 'Enter') doReset(); });
+
         (async function initAuth() {
             try {
                 const { data } = await fetchApiJson(apiUrl('/api/auth-status'), undefined, '/api/auth-status');
                 setAppUpdatedDisplay(data?.appUpdatedLabel);
                 if (!data.passwordRequired) {
                     $('loginOverlay').classList.add('hidden');
-                    return;
                 }
-                // パスワード入力待ち
-                $('loginBtn').addEventListener('click', doLogin);
-                $('loginPassword').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
-                // パスワードリセット
-                $('forgotPasswordLink').addEventListener('click', e => {
-                    e.preventDefault();
-                    $('loginPanel').style.display = 'none';
-                    $('resetPanel').style.display = '';
-                    $('resetStep1').style.display = '';
-                    $('resetStep2').style.display = 'none';
-                    $('resetError').style.display = 'none';
-                    $('resetSuccess').style.display = 'none';
-                });
-                $('backToLoginLink').addEventListener('click', e => {
-                    e.preventDefault();
-                    $('resetPanel').style.display = 'none';
-                    $('loginPanel').style.display = '';
-                    $('resetError').style.display = 'none';
-                    $('resetSuccess').style.display = 'none';
-                    $('resetToken').value = '';
-                    $('resetPassword').value = '';
-                    $('resetPasswordConfirm').value = '';
-                });
-                $('requestTokenBtn').addEventListener('click', doRequestToken);
-                $('resetBtn').addEventListener('click', doReset);
-                $('resetPasswordConfirm').addEventListener('keydown', e => { if (e.key === 'Enter') doReset(); });
             } catch (e) {
                 setAppUpdatedDisplay();
                 $('loginOverlay').classList.add('hidden');
