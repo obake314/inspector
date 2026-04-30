@@ -318,6 +318,8 @@ TOTAL:
 
 - `GET /api/auth-status`
 - `POST /api/login`
+- `POST /api/request-reset`
+- `POST /api/reset-password`
 - `POST /api/settings-get`
 - `POST /api/settings-save`
 - `POST /api/check`
@@ -325,12 +327,22 @@ TOTAL:
 - `POST /api/enhanced-check`
 - `POST /api/ai-evaluate`
 - `POST /api/playwright-check`
+- `GET /api/playwright-check` 等、POST以外のメソッドは JSON 405（`PLAYWRIGHT APIはPOSTのみ対応`）を返す
 - `POST /api/ext-check`
 - `GET /api/sheets-status`
 - `POST /api/export-report`
 - `/axe/` 配下でUIを配信する環境でも、クライアントはroot `/api/...` を優先して呼び出す。
 - API応答がHTML、またはAPI経路のJSON 404だった場合、クライアントは `/api/...` と `/axe/api/...` の反対側候補へ一度だけ再試行する。
 - サーバー側でも `/axe/api/...` を `/api/...` に正規化し、API未定義時はHTMLではなくJSON 404を返す。
+
+### パスワードリセット
+
+- ログイン画面のリセットパネルは2段階方式:
+  1. `POST /api/request-reset` でワンタイムトークンを発行し、サーバーコンソールへ表示する
+  2. `POST /api/reset-password` に `{ token, newPassword }` を送信してパスワードを更新する
+- トークンはメモリ上にのみ保持し、サーバー再起動で無効化される
+- トークン有効期限は5分、使用後は破棄する
+- `newPassword` は4文字以上必須
 
 ## テストコマンド
 

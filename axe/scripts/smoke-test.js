@@ -89,10 +89,69 @@ function checkScoreFormulaPolicy() {
   console.log('ok - score formula policy');
 }
 
+function checkApiAndRescanPolicy() {
+  const html = readFileSync(join(root, 'public', 'index.html'), 'utf8');
+  const server = readFileSync(join(root, 'server.js'), 'utf8');
+
+  const htmlSnippets = [
+    'const apiUrl = (path) => path;',
+    'function getAlternateApiUrl(url)',
+    'buildFetchOptions()',
+    "rescanBatchFromScoreTable('${scanType}', '${viewScope}', this)",
+    'function getBatchScoreRescanContexts(view =',
+    'function buildBatchScoreRescanContext(record, store, view, viewportPreset, navConsistency)',
+    'renderScore !== false',
+    '全ページ'
+  ];
+  htmlSnippets.forEach(snippet => {
+    if (!html.includes(snippet)) {
+      throw new Error(`API/rescan policy check failed: missing ${snippet}`);
+    }
+  });
+
+  const serverSnippets = [
+    "if (req.url.startsWith('/axe/api/'))",
+    "app.all('/api/playwright-check'",
+    'PLAYWRIGHT APIはPOSTのみ対応しています',
+    "app.post('/api/request-reset'",
+    "app.post('/api/reset-password'",
+    'RESET_TOKEN_TTL = 5 * 60 * 1000'
+  ];
+  serverSnippets.forEach(snippet => {
+    if (!server.includes(snippet)) {
+      throw new Error(`API/rescan policy check failed: missing ${snippet}`);
+    }
+  });
+
+  console.log('ok - API/rescan policy');
+}
+
+function checkContrastFallbackPolicy() {
+  const html = readFileSync(join(root, 'public', 'index.html'), 'utf8');
+  const server = readFileSync(join(root, 'server.js'), 'utf8');
+
+  const snippets = [
+    'function getColorContrastOverlapTargets(results, limit = 25)',
+    'function applyColorContrastOverlapFallback(page, results)',
+    'color-contrast-overlap-fallback',
+    'data-a11y-inspector-contrast-target',
+    'await applyColorContrastOverlapFallback(page, results);'
+  ];
+  snippets.forEach(snippet => {
+    if (!server.includes(snippet) && !html.includes(snippet)) {
+      throw new Error(`Contrast fallback policy check failed: missing ${snippet}`);
+    }
+  });
+
+  console.log('ok - contrast fallback policy');
+}
+
 function main() {
   runNodeCheck('server.js', join(root, 'server.js'));
   checkInlineScripts();
   checkScoreFormulaPolicy();
+  checkApiAndRescanPolicy();
+  checkContrastFallbackPolicy();
   runNodeCheck('gas/ReportGenerator.gs', join(root, 'gas', 'ReportGenerator.gs'), readFileSync(join(root, 'gas', 'ReportGenerator.gs'), 'utf8'));
 }
 

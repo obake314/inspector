@@ -11,6 +11,19 @@
   - `viewportPreset` がレスポンスに含まれる
   - `results.violations / passes / incomplete` を返す
 
+## T-SCAN-01b: BASIC color-contrast 重なり補完
+
+- 手順
+  1. axe-core の `color-contrast` が `overlapped by another element` / `背景色を判定できませんでした` で `incomplete` になるページを用意する
+  2. `POST /axe/api/check` with `{url, level: "AA", viewportPreset}` を実行する
+  3. レスポンスとページDOMを確認する
+- 期待結果
+  - `results.incomplete` には元の `color-contrast` 判定不能が根拠として残る
+  - 装飾と判断できる重なり要素の場合、`color-contrast-overlap-fallback` が `results.passes` または `results.violations` に追加される
+  - `color-contrast-overlap-fallback` の tags に `wcag143` が含まれる
+  - 装飾と断定できないテキスト/操作要素が重なっている場合、補完せず `incomplete` のまま残る
+  - BASIC完了後、検査用DOMの `data-a11y-inspector-contrast-target` 属性と一時styleは削除される
+
 ## T-SCAN-02: DEEP SCAN
 
 - 手順
@@ -614,6 +627,32 @@
   - 複数URLまたは一括スキャン由来は一括URL欄へ戻り、URL件数表示も更新される
   - 再セット時に前回結果とUIロックがクリアされ、再度SCANできる
 
+## T-SCAN-61b: 結果表示直後の行別再スキャン
+
+- 手順
+  1. JSON読込を使わず、通常の `SCAN` または `BATCH` を実行する
+  2. 結果表示直後のスコアテーブルを確認する
+  3. BASIC / DEEP / MULTI / PLAY / EXT のいずれかの行別再スキャンを実行する
+- 期待結果
+  - 結果表示直後にスコアテーブルが描画され、再スキャンボタンが表示される
+  - JSON読込を経由しなくても再スキャン対象URLを取得できる
+  - 再スキャン完了後、該当行とTOTAL行が更新される
+  - PC+SP では PC VIEW / SP VIEW の各ブロックで対応するビューだけが更新される
+
+## T-SCAN-61c: BATCH全ページ再スキャン
+
+- 手順
+  1. 2URL以上で一括スキャンを実行する
+  2. 任意URLの詳細を表示し、スコアテーブルの `全ページ` ボタンをクリックする
+  3. PC+SP の場合は PC VIEW と SP VIEW の両方で確認する
+- 期待結果
+  - BATCH結果表示中、各スキャン行に `このページ` と `全ページ` の2操作が表示される
+  - `このページ` は表示中URLのみを再スキャンする
+  - `全ページ` は表示中ビューに対応する成功URLを順次再スキャンする
+  - 1URLでエラーが起きても残りURLの再スキャンは継続される
+  - 完了後、バッチサマリーと現在表示中の詳細が更新される
+  - 一部失敗時は失敗URLの概要がアラート表示され、タイムアウト系は `#timeoutRetryPanel` に記録される
+
 ## T-SCAN-62: UIフォント割り当て
 
 - 手順
@@ -722,6 +761,8 @@
 - 期待結果
   - `server.js` の構文チェックが通る
   - `public/index.html` 内インラインスクリプトの構文チェックが通る
+  - API経路フォールバックと再スキャンUIのポリシーチェックが通る
+  - BASIC color-contrast 重なり補完のポリシーチェックが通る
   - `gas/ReportGenerator.gs` の構文チェックが通る
   - 終了コードが `0` になる
 
