@@ -828,6 +828,224 @@ async function detectPageSignals(page) {
   }
 }
 
+function getWcagTagsForLevel(level) {
+  const tags = ['wcag2a', 'wcag21a', 'wcag22a'];
+  if (level === 'AA' || level === 'AAA') {
+    tags.push('wcag2aa', 'wcag21aa', 'wcag22aa');
+  }
+  if (level === 'AAA') {
+    tags.push('wcag2aaa', 'wcag21aaa', 'wcag22aaa');
+  }
+  return tags;
+}
+
+function getColorContrastOverlapTargets(results, limit = 25) {
+  const overlapRe = /overlapped by another element|background color could not be determined|背景色を判定できません/i;
+  const targets = [];
+  const seen = new Set();
+  (results?.incomplete || []).forEach(rule => {
+    if (rule?.id !== 'color-contrast') return;
+    (rule.nodes || []).forEach(node => {
+      const text = [
+        rule.description, rule.help, node.failureSummary, node.message,
+        ...(node.any || []).map(check => check.message),
+        ...(node.all || []).map(check => check.message),
+        ...(node.none || []).map(check => check.message)
+      ].filter(Boolean).join(' ');
+      if (!overlapRe.test(text)) return;
+      (node.target || []).forEach(selector => {
+        if (!selector || seen.has(selector) || targets.length >= limit) return;
+        seen.add(selector);
+        targets.push({ selector, html: node.html || '', failureSummary: node.failureSummary || '' });
+      });
+    });
+  });
+  return targets;
+}
+
+function createContrastFallbackRule(kind, nodes, summary) {
+  return {
+    id: 'color-contrast-overlap-fallback',
+    impact: kind === 'fail' ? 'serious' : null,
+    tags: ['cat.color', 'wcag2aa', 'wcag143'],
+    description: 'BASIC補完: 重なり要素により背景色を判定できなかったテキストのコントラストを再検査',
+    help: 'コントラスト（重なり要素補完）',
+    helpUrl: '',
+    nodes: nodes.map(node => ({
+      any: [],
+      all: [],
+      none: [],
+      impact: kind === 'fail' ? 'serious' : null,
+      html: node.html || '',
+      target: node.target || [],
+      failureSummary: summary(node)
+    }))
+  };
+}
+
+async function cleanupContrastOverlapFallbackPatch(page) {
+  try {
+    await page.evaluate(() => {
+      document.getElementById('__a11y_inspector_contrast_overlap_patch__')?.remove();
+      document.querySelectorAll('[data-a11y-inspector-contrast-target]').forEach(el => {
+        el.removeAttribute('data-a11y-inspector-contrast-target');
+      });
+    });
+  } catch (_) {}
+}
+
+async function applyColorContrastOverlapFallback(page, results) {
+  const targets = getColorContrastOverlapTargets(results);
+  if (!targets.length) return null;
+
+  let prepared = { patched: [], skipped: [] };
+  try {
+    prepared = await page.evaluate((items) => {
+      const STYLE_ID = '__a11y_inspector_contrast_overlap_patch__';
+      const ATTR = 'data-a11y-inspector-contrast-target';
+
+      function isVisible(el) {
+        if (!el || !(el instanceof Element)) return false;
+        const style = getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) < 0.05) return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      }
+      function describe(el) {
+        const tag = el.tagName.toLowerCase();
+        const id = el.id ? `#${el.id}` : '';
+        const cls = typeof el.className === 'string' && el.className
+          ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.')
+          : '';
+        const text = String(el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+        return `${tag}${id || cls}${text ? ` "${text}"` : ''}`.slice(0, 120);
+      }
+      function isUnsafeBlocker(blocker, target) {
+        if (!blocker || blocker === document.documentElement || blocker === document.body) return false;
+        if (blocker === target || blocker.contains(target) || target.contains(blocker)) return false;
+        const style = getComputedStyle(blocker);
+        if (style.pointerEvents === 'none') return false;
+        if (blocker.getAttribute('aria-hidden') === 'true' || ['presentation', 'none'].includes(blocker.getAttribute('role'))) return false;
+        if (blocker.matches('a[href],button,input,select,textarea,iframe,video,audio,canvas,img,svg,object,[role="button"],[role="link"],[role="dialog"]')) return true;
+        return String(blocker.textContent || '').replace(/\s+/g, ' ').trim().length > 0;
+      }
+      function blockersFor(el) {
+        const rect = el.getBoundingClientRect();
+        const insetX = Math.min(8, Math.max(1, rect.width / 4));
+        const insetY = Math.min(8, Math.max(1, rect.height / 4));
+        const points = [
+          { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
+          { x: rect.left + insetX, y: rect.top + insetY },
+          { x: rect.right - insetX, y: rect.top + insetY },
+          { x: rect.left + insetX, y: rect.bottom - insetY },
+          { x: rect.right - insetX, y: rect.bottom - insetY }
+        ].filter(p => p.x >= 0 && p.y >= 0 && p.x <= innerWidth && p.y <= innerHeight);
+        const blockers = [];
+        points.forEach(point => {
+          const stack = document.elementsFromPoint(point.x, point.y);
+          const targetIndex = stack.findIndex(node => node === el || el.contains(node));
+          if (targetIndex < 0) return;
+          stack.slice(0, targetIndex).forEach(node => {
+            if (!blockers.includes(node)) blockers.push(node);
+          });
+        });
+        return blockers;
+      }
+
+      document.getElementById(STYLE_ID)?.remove();
+      const style = document.createElement('style');
+      style.id = STYLE_ID;
+      style.textContent = `
+        [${ATTR}="true"] {
+          position: relative !important;
+          z-index: 2147483000 !important;
+          isolation: isolate !important;
+        }
+      `;
+      document.head.appendChild(style);
+
+      const patched = [];
+      const skipped = [];
+      items.forEach(item => {
+        let el = null;
+        try {
+          el = document.querySelector(item.selector);
+        } catch (_) {}
+        if (!isVisible(el)) {
+          skipped.push({ ...item, reason: '対象要素が見つからない、または非表示です' });
+          return;
+        }
+        const unsafe = blockersFor(el).filter(blocker => isUnsafeBlocker(blocker, el));
+        if (unsafe.length) {
+          skipped.push({
+            ...item,
+            reason: `装飾とは断定できない重なり要素があります: ${unsafe.slice(0, 3).map(describe).join(', ')}`
+          });
+          return;
+        }
+        el.setAttribute(ATTR, 'true');
+        patched.push(item);
+      });
+      if (!patched.length) style.remove();
+      return { patched, skipped };
+    }, targets);
+
+    if (!prepared.patched.length) {
+      results.contrastOverlapFallback = {
+        attempted: targets.length,
+        patched: 0,
+        skipped: prepared.skipped
+      };
+      return results.contrastOverlapFallback;
+    }
+
+    const retryBuilder = new AxePuppeteer(page);
+    prepared.patched.forEach(item => retryBuilder.include(item.selector));
+    retryBuilder.withRules('color-contrast');
+    const retry = await retryBuilder.analyze();
+
+    const failNodes = (retry.violations || [])
+      .filter(rule => rule.id === 'color-contrast')
+      .flatMap(rule => rule.nodes || []);
+    const passNodes = (retry.passes || [])
+      .filter(rule => rule.id === 'color-contrast')
+      .flatMap(rule => rule.nodes || []);
+
+    if (failNodes.length) {
+      results.violations = results.violations || [];
+      results.violations.push(createContrastFallbackRule('fail', failNodes, node => {
+        const base = node.failureSummary ? ` / ${node.failureSummary}` : '';
+        return `重なり要素を一時補正して再検査しました。コントラスト比が不足しています${base}`;
+      }));
+    }
+    if (passNodes.length) {
+      results.passes = results.passes || [];
+      results.passes.push(createContrastFallbackRule('pass', passNodes, () => (
+        '重なり要素を一時補正して再検査しました。color-contrast は合格です'
+      )));
+    }
+
+    results.contrastOverlapFallback = {
+      attempted: targets.length,
+      patched: prepared.patched.length,
+      skipped: prepared.skipped,
+      passNodes: passNodes.length,
+      failNodes: failNodes.length
+    };
+    return results.contrastOverlapFallback;
+  } catch (error) {
+    results.contrastOverlapFallback = {
+      attempted: targets.length,
+      patched: prepared.patched?.length || 0,
+      skipped: prepared.skipped || [],
+      error: error.message
+    };
+    return results.contrastOverlapFallback;
+  } finally {
+    await cleanupContrastOverlapFallbackPatch(page);
+  }
+}
+
 /**
  * アクセシビリティチェック（axe-core実行）API
  */
@@ -857,16 +1075,11 @@ app.post('/api/check', async (req, res) => {
 	    const builder = new AxePuppeteer(page);
 
     // WCAGレベルに応じたタグ設定の実装
-    const tags = ['wcag2a', 'wcag21a', 'wcag22a'];
-    if (level === 'AA' || level === 'AAA') {
-      tags.push('wcag2aa', 'wcag21aa', 'wcag22aa');
-    }
-    if (level === 'AAA') {
-      tags.push('wcag2aaa', 'wcag21aaa', 'wcag22aaa');
-    }
+    const tags = getWcagTagsForLevel(level);
     builder.withTags(tags);
     
 	    const results = await builder.analyze();
+	    await applyColorContrastOverlapFallback(page, results);
 	    results.pageSignals = pageSignals;
 	    await page.close();
     
@@ -898,13 +1111,7 @@ app.post('/api/batch-check', async (req, res) => {
     console.log(`[Axe Batch] ${urls.length}件の診断開始 (Level ${level}, View ${preset})`);
     browser = await getBrowser();
 
-    const tags = ['wcag2a', 'wcag21a', 'wcag22a'];
-    if (level === 'AA' || level === 'AAA') {
-      tags.push('wcag2aa', 'wcag21aa', 'wcag22aa');
-    }
-    if (level === 'AAA') {
-      tags.push('wcag2aaa', 'wcag21aaa', 'wcag22aaa');
-    }
+    const tags = getWcagTagsForLevel(level);
 
     // 全URLを並列で検査
     const checkOne = async (url) => {
@@ -923,6 +1130,7 @@ app.post('/api/batch-check', async (req, res) => {
         const builder = new AxePuppeteer(page);
         builder.withTags(tags);
         const results = await builder.analyze();
+        await applyColorContrastOverlapFallback(page, results);
         results.pageSignals = pageSignals;
         const navStructure = await page.evaluate(() => {
           const navEls = Array.from(document.querySelectorAll('nav, [role="navigation"]'));

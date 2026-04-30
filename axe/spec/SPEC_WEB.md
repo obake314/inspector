@@ -1,6 +1,6 @@
 # SPEC_WEB
 
-最終更新: 2026-04-29（キャッシュ無効化・改善計画フィルタリング・MULTIトークン削減・改善計画Excelシート・Sheetsシート追加）
+最終更新: 2026-04-30（BASIC color-contrast 重なり補完再検査）
 
 ## 対象
 
@@ -16,6 +16,7 @@
 - 出力: `{ success, viewportPreset, results: { violations[], passes[], incomplete[] } }`
 - クライアント側タイムアウト: 6分
 - **キャッシュ無効化**: Puppeteer ページ生成直後に `page.setCacheEnabled(false)` を呼び出し、メモリ・ディスクキャッシュをバイパスして常に最新ページを取得する
+- **color-contrast 重なり補完**: axe-core の `color-contrast` が `overlapped by another element` 等で `incomplete` になった場合、該当セレクタだけを対象にスキャン用DOMへ一時パッチ（`position: relative; z-index; isolation`）を当て、`color-contrast` だけを再実行する。再検査結果は `color-contrast-overlap-fallback` として `violations` / `passes` に追加し、元の `incomplete` は根拠として残す。テキストや操作部品など装飾と断定できない重なり要素がある場合は補正せず `incomplete` のまま残す。再検査後は一時パッチを削除し、本番ページには変更を残さない。
 
 ### DEEP SCAN
 
