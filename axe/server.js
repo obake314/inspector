@@ -4231,6 +4231,23 @@ app.post('/api/enhanced-check', async (req, res) => {
     const withTimeout = (fn, ms = 30000) =>
       Promise.race([fn(), new Promise(r => setTimeout(() => r({ status: 'error', message: 'タイムアウト', violations: [] }), ms))]);
 
+    // SC単位のタイムアウト可観測性: 開始/完了/タイムアウトをログに出力
+    const _deepStart = Date.now();
+    let _lastCompletedSc = null;
+    const runSc = async (label, fn, ms = 30000) => {
+      const elapsed = Date.now() - _deepStart;
+      console.log(`[DEEP] 開始 SC ${label} (経過 ${(elapsed/1000).toFixed(1)}s)`);
+      const result = await Promise.race([
+        fn().then(r => { _lastCompletedSc = label; return r; }),
+        new Promise(r => setTimeout(() => {
+          console.warn(`[DEEP] タイムアウト SC ${label} (経過 ${((Date.now()-_deepStart)/1000).toFixed(1)}s, 最終完了: ${_lastCompletedSc || 'なし'})`);
+          r({ status: 'error', message: `タイムアウト (SC ${label})`, violations: [] });
+        }, ms))
+      ]);
+      console.log(`[DEEP] 完了 SC ${label} → ${result?.status || '?'} (経過 ${((Date.now()-_deepStart)/1000).toFixed(1)}s)`);
+      return result;
+    };
+
     // 中間リロード用ヘルパー: analytics/WebSocket 常時接続サイトで networkidle2 が永久待機するのを防ぐため
     // 'load' イベント + 20s タイムアウトを使用（JS実行は完了、ネットワーク常時接続の影響を受けない）
     const reloadPage = () => page.goto(url, { waitUntil: 'load', timeout: 20000 }).catch(() => {});
@@ -4238,156 +4255,113 @@ app.post('/api/enhanced-check', async (req, res) => {
     const results = [];
 
     // 1-1
-    results.push(await withTimeout(() => check_1_4_10_reflow(page)));
-    // viewport リセット確認
+    results.push(await runSc('1.4.10', () => check_1_4_10_reflow(page)));
     await applyViewportPreset(page, preset).catch(() => {});
 
     // 1-2
-    results.push(await withTimeout(() => check_2_5_8_target_size(page)));
+    results.push(await runSc('2.5.8', () => check_2_5_8_target_size(page)));
 
-    // 2.1.2 はヘッドレス環境の誤検知リスクが高いため PLAY スキャン(Playwright)に委譲
     results.push({ sc: '2.1.2', name: 'キーボードトラップなし', status: 'manual_required', message: 'PLAYスキャンで確認してください', violations: [] });
 
-    // ページ再読み込みでキーボード状態リセット
     await reloadPage();
     await new Promise(r => setTimeout(r, 1000));
 
     // 1-4
-    results.push(await withTimeout(() => check_2_4_1_skip_link(page)));
-
-    // 1-5 SC 2.3.3 は AAA β停止中のため実行しない
-    // if (includeAAA) results.push(await withTimeout(() => check_2_3_3_animation(page)));
+    results.push(await runSc('2.4.1', () => check_2_4_1_skip_link(page)));
 
     // 1-6
-    results.push(await withTimeout(() => check_1_4_12_text_spacing(page)));
+    results.push(await runSc('1.4.12', () => check_1_4_12_text_spacing(page)));
 
-    // ページ再読み込み（スタイルリセット）
     await reloadPage();
     await new Promise(r => setTimeout(r, 1000));
 
-    // 1-7 (2つの結果を返す)
-    const focusObscured = await withTimeout(() => check_2_4_11_12_focus_obscured(page));
+    // 1-7
+    const focusObscured = await runSc('2.4.11/12', () => check_2_4_11_12_focus_obscured(page));
     if (Array.isArray(focusObscured)) results.push(...focusObscured);
     else results.push(focusObscured);
 
-    // ページ再読み込み
     await reloadPage();
     await new Promise(r => setTimeout(r, 1000));
 
     // 1-8
-    results.push(await withTimeout(() => check_3_2_1_2_unexpected_change(page)));
+    results.push(await runSc('3.2.1/3.2.2', () => check_3_2_1_2_unexpected_change(page)));
 
-    // ページ再読み込み
     await reloadPage();
     await new Promise(r => setTimeout(r, 1000));
 
     // 1-9
-    results.push(await withTimeout(() => check_3_3_1_error_identification(page)));
+    results.push(await runSc('3.3.1', () => check_3_3_1_error_identification(page)));
 
-    // ページ再読み込み（Phase 2用）
     await reloadPage();
     await new Promise(r => setTimeout(r, 1000));
 
     // --- Phase 2 ---
     console.log('[Enhanced] Phase 2 検査中...');
 
-    // 2-1
-    results.push(await withTimeout(() => check_2_1_1_keyboard_operable(page)));
+    results.push(await runSc('2.1.1', () => check_2_1_1_keyboard_operable(page)));
 
-    // 2-2 (2つの結果)
-    const focusVisible = await withTimeout(() => check_2_4_7_focus_visible(page));
+    // 2-2
+    const focusVisible = await runSc('2.4.7', () => check_2_4_7_focus_visible(page));
     if (Array.isArray(focusVisible)) results.push(...focusVisible);
     else results.push(focusVisible);
 
-    // ページ再読み込み（フォーカス状態リセット）
     await reloadPage();
     await new Promise(r => setTimeout(r, 1000));
 
-    // 2-3
-    results.push(await withTimeout(() => check_2_4_3_focus_order(page)));
+    results.push(await runSc('2.4.3', () => check_2_4_3_focus_order(page)));
 
-    // ページ再読み込み
     await reloadPage();
     await new Promise(r => setTimeout(r, 1000));
 
-    // 2-4
-    results.push(await withTimeout(() => check_1_3_2_meaningful_sequence(page)));
+    results.push(await runSc('1.3.2', () => check_1_3_2_meaningful_sequence(page)));
+    results.push(await runSc('1.3.3', () => check_1_3_3_sensory_characteristics(page)));
 
-    // 2-4b
-    results.push(await withTimeout(() => check_1_3_3_sensory_characteristics(page)));
-
-    // ページ再読み込み
     await reloadPage();
     await new Promise(r => setTimeout(r, 1000));
 
-    // 2-5
-    results.push(await withTimeout(() => check_1_4_4_text_resize(page)));
+    results.push(await runSc('1.4.4', () => check_1_4_4_text_resize(page)));
+    results.push(await runSc('1.2.x', () => check_1_2_x_media_captions(page)));
+    results.push(await runSc('1.2.3', () => check_1_2_3_audio_description(page)));
+    results.push(await runSc('2.2.2', () => check_2_2_2_pause_stop(page)));
+    results.push(await runSc('3.3.8', () => check_3_3_8_accessible_authentication(page)));
+    results.push(await runSc('2.3.1', () => check_2_3_1_three_flashes(page)));
 
-    // 2-6
-    results.push(await withTimeout(() => check_1_2_x_media_captions(page)));
-
-    // 2-6b SC 1.2.3 専用検査
-    results.push(await withTimeout(() => check_1_2_3_audio_description(page)));
-
-    // 2-7
-    results.push(await withTimeout(() => check_2_2_2_pause_stop(page)));
-
-    // 2-8
-    results.push(await withTimeout(() => check_3_3_8_accessible_authentication(page)));
-
-    // 2-9 (SC 2.3.1)
-    results.push(await withTimeout(() => check_2_3_1_three_flashes(page)));
-
-    // ページ再読み込み（Phase 3用）
     await reloadPage();
     await new Promise(r => setTimeout(r, 1000));
 
     // --- Phase 3 ---
     console.log('[Enhanced] Phase 3 検査中...');
 
-    // 3-1
-    results.push(await withTimeout(() => check_1_4_13_hover_content(page)));
+    results.push(await runSc('1.4.13', () => check_1_4_13_hover_content(page)));
 
-    // ページ再読み込み
     await reloadPage();
     await new Promise(r => setTimeout(r, 1000));
 
-    // 3-2
-    results.push(await withTimeout(() => check_1_4_1_use_of_color(page)));
+    results.push(await runSc('1.4.1', () => check_1_4_1_use_of_color(page)));
+    results.push(await runSc('1.4.3', () => check_1_4_3_text_contrast(page)));
+    results.push(await runSc('1.4.5', () => check_1_4_5_images_of_text(page)));
+    results.push(await runSc('2.2.1', () => check_2_2_1_timing_adjustable(page)));
 
-    // 3-2b SC 1.4.3 テキストコントラスト（Puppeteer DOM計算）
-    results.push(await withTimeout(() => check_1_4_3_text_contrast(page)));
-
-    // 3-3
-    results.push(await withTimeout(() => check_1_4_5_images_of_text(page)));
-
-    // 3-4
-    results.push(await withTimeout(() => check_2_2_1_timing_adjustable(page)));
-
-    // 3-5
     await reloadPage();
     await new Promise(r => setTimeout(r, 1000));
-    results.push(await withTimeout(() => check_3_3_3_error_suggestion(page)));
+    results.push(await runSc('3.3.3', () => check_3_3_3_error_suggestion(page)));
+    results.push(await runSc('2.5.1/7', () => check_2_5_1_7_gestures(page)));
 
-    // 3-6
-    results.push(await withTimeout(() => check_2_5_1_7_gestures(page)));
-
-    // ページ再読み込み（Section A用）
     await reloadPage();
     await new Promise(r => setTimeout(r, 1000));
 
-    // --- Section A: 新規チェック (A/AA) ---
+    // --- Section A ---
     console.log('[Enhanced] Section A 新規チェック中...');
 
-    results.push(await withTimeout(() => check_2_5_3_label_in_name(page)));
-    results.push(await withTimeout(() => check_1_3_4_orientation(page)));
-    results.push(await withTimeout(() => check_1_3_5_input_purpose(page)));
-    results.push(await withTimeout(() => check_2_5_2_pointer_cancellation(page)));
-    results.push(await withTimeout(() => check_2_5_4_motion_actuation(page)));
-    results.push(await withTimeout(() => check_3_2_6_consistent_help(page)));
-    results.push(await withTimeout(() => check_3_3_7_redundant_entry(page)));
-    results.push(await withTimeout(() => check_2_4_4_link_purpose(page)));
-    results.push(await withTimeout(() => check_aria_attributes(page)));
+    results.push(await runSc('2.5.3', () => check_2_5_3_label_in_name(page)));
+    results.push(await runSc('1.3.4', () => check_1_3_4_orientation(page)));
+    results.push(await runSc('1.3.5', () => check_1_3_5_input_purpose(page)));
+    results.push(await runSc('2.5.2', () => check_2_5_2_pointer_cancellation(page)));
+    results.push(await runSc('2.5.4', () => check_2_5_4_motion_actuation(page)));
+    results.push(await runSc('3.2.6', () => check_3_2_6_consistent_help(page)));
+    results.push(await runSc('3.3.7', () => check_3_3_7_redundant_entry(page)));
+    results.push(await runSc('2.4.4', () => check_2_4_4_link_purpose(page)));
+    results.push(await runSc('ARIA', () => check_aria_attributes(page)));
 
     await page.close();
 

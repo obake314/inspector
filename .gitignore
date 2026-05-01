@@ -6,7 +6,7 @@
 ._*
 
 # Custom folder icons
-Icon
+Icon
 
 # Volume root files
 .DocumentRevisions-V100
@@ -18,7 +18,5 @@ Icon
 .com.apple.timemachine.donotpresent
 axe/plan.md
 axe/plan
-axe/spec
-axe/test
 axe/log
 .claude/scheduled_tasks.lock
