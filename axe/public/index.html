@@ -1022,6 +1022,24 @@
                     if (item?.ref) resolved.add(item.ref);
                 }
             }
+            // 現在のスキャン統合結果で pass/na と判定されている SC も解決済みとみなす
+            if (lastResults) {
+                const scope = getDecisionScope(lastResults, 'pc');
+                const hasMulti = Object.keys(aiResults || {}).length > 0;
+                const nav = currentMode === 'batch' ? batchNavConsistency : null;
+                const scMap = buildTotalScMap(
+                    lastResults,
+                    lastEnhancedResults || null,
+                    hasMulti ? aiResults : null,
+                    lastPlayResults || null,
+                    lastExtResults || null,
+                    nav,
+                    scope
+                );
+                for (const [sc, entry] of Object.entries(scMap)) {
+                    if (entry.result === 'pass' || entry.result === 'na') resolved.add(sc);
+                }
+            }
             return resolved;
         }
 
@@ -2326,9 +2344,10 @@
             const toList = (value, maxItems = 6, maxText = 240) => (
                 Array.isArray(value) ? value : []
             ).map(item => toText(item, maxText)).filter(Boolean).slice(0, maxItems);
+            const priorityOrder = { high: 0, medium: 1, low: 2 };
             const priorityActions = (Array.isArray(plan.priorityActions) ? plan.priorityActions : [])
                 .filter(action => action && typeof action === 'object')
-                .slice(0, 6)
+                .slice(0, 12)
                 .map(action => ({
                     priority: ['high', 'medium', 'low'].includes(action.priority) ? action.priority : 'medium',
                     title: toText(action.title, 160),
@@ -2337,7 +2356,9 @@
                     relatedSc: toList(action.relatedSc, 6, 40),
                     sources: toList(action.sources, 6, 40)
                 }))
-                .filter(action => action.title || action.reason || action.steps.length);
+                .filter(action => action.title || action.reason || action.steps.length)
+                .sort((a, b) => (priorityOrder[a.priority] ?? 1) - (priorityOrder[b.priority] ?? 1))
+                .slice(0, 6);
             const normalized = {
                 summary: toText(plan.summary, 700),
                 priorityActions,
@@ -4537,16 +4558,28 @@
                 }
 
                 // MULTIは原則 unverified のSCのみ補完する。
-                // ただし 1.4.1 は DEEP が視覚差分、MULTI が意味依存を補うため、MULTI fail を補足的に反映する。
+                // ただし MULTI_SUPPLEMENTAL_FAIL_SC に含まれる SC は:
+                //   - MULTI fail  → BASIC pass を fail に引き上げる（意味依存の問題）
+                //   - MULTI unverified → BASIC pass を unverified に引き下げる（AI が要確認と判断）
                 const allowSupplementalMultiFail = source === 'MULTI'
                     && MULTI_SUPPLEMENTAL_FAIL_SC.has(sc)
                     && result === 'fail'
                     && cur
                     && cur.result === 'pass';
-                if (source === 'MULTI' && cur && cur.result !== 'unverified' && !allowSupplementalMultiFail) return;
+                const allowSupplementalMultiUnverified = source === 'MULTI'
+                    && MULTI_SUPPLEMENTAL_FAIL_SC.has(sc)
+                    && result === 'unverified'
+                    && cur
+                    && cur.result === 'pass';
+                if (source === 'MULTI' && cur && cur.result !== 'unverified' && !allowSupplementalMultiFail && !allowSupplementalMultiUnverified) return;
                 const authority = SC_AUTHORITY[sc];
                 if (!cur) {
                     scMap[sc] = { result, impact: impact || null, source, dkey: renderDkey };
+                    return;
+                }
+                // MULTI supplemental unverified: pass → unverified に引き下げる特例
+                if (allowSupplementalMultiUnverified) {
+                    scMap[sc] = { result: 'unverified', impact: cur.impact || null, source, dkey: renderDkey };
                     return;
                 }
                 // 権威スキャンの結果は他のfail/passより優先（ただしimpactは最も深刻な値を保持）
@@ -5090,7 +5123,12 @@
                 </div>`;
             }).join('');
 
-            return `<div class="item-card ${decisionClass}" data-impact="${impact||''}" data-default-impact="${impact||'serious'}">
+            // 合格カードの背景色クラス: 全スキャン一致 vs 非権威スキャンが不合格を示す
+            const passVariantClass = consolidatedStatus === 'pass'
+                ? (sources.some(s => s.status === 'fail') ? 'item-card-pass-conflict' : 'item-card-pass-clean')
+                : '';
+
+            return `<div class="item-card ${decisionClass} ${passVariantClass}" data-impact="${impact||''}" data-default-impact="${impact||'serious'}">
                 <div class="item-header" onclick="toggleItemCard(this)">
                     ${lvBadge}${scBadge}
                     <span class="item-title">${escapeHtml(titleText)}</span>
@@ -5998,7 +6036,7 @@
         }
 
         function appendImprovementPlanRows(rows, improvementPlan, itemNo, viewLabel = '') {
-            const plan = normalizeImprovementPlanClient(improvementPlan);
+            const plan = filterPlanByResolved(normalizeImprovementPlanClient(improvementPlan));
             if (!plan) return itemNo;
             const prefix = viewLabel ? `${viewLabel} ` : '';
             if (plan.summary) {
@@ -6242,7 +6280,8 @@
             try {
                 const baseUrl = lastResults.url;
                 const timestamp = lastResults.timestamp || new Date().toISOString();
-                const pcRows = buildReportRows(lastResults, baseUrl, aiResults, lastEnhancedResults, batchNavConsistency, lastPlayResults, lastExtResults, lastImprovementPlan, 'PC VIEW');
+                // シングルページモードでは navConsistency は使用しない（UI スコアと一致させるため）
+                const pcRows = buildReportRows(lastResults, baseUrl, aiResults, lastEnhancedResults, null, lastPlayResults, lastExtResults, lastImprovementPlan, 'PC VIEW');
                 const pageDataList = [{ url: baseUrl, rows: pcRows }];
                 const pageSheetsData = [{ url: baseUrl, sheetRows: buildSampleSheetData(pcRows, baseUrl).sheetRows, timestamp }];
 

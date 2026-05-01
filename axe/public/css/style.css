@@ -1340,6 +1340,16 @@ margin-bottom: 6px;
 .item-card:last-child {
   border-bottom: none;
 }
+/* 合格タブ: 全スキャン合格（意見一致） */
+.item-card.item-card-pass-clean {
+  border-left-color: var(--color-multi);
+  background: #f0faf6;
+}
+/* 合格タブ: 権威でないスキャンが不合格を示す（意見相違） */
+.item-card.item-card-pass-conflict {
+  border-left-color: var(--color-moderate);
+  background: #fffbf0;
+}
 
 .item-header {
   display: flex;
