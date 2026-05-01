@@ -549,7 +549,7 @@ async function callOpenAIAPI(prompt, imageBase64 = null, modelKey = 'gpt-4o') {
 
   // OpenAI 系は json_object モードで確実に JSON を返させる。
   // プロンプト側で {"results":[...]} ラッパーを要求し、抽出側で配列を取り出す。
-  const systemMessages = [{ role: 'system', content: 'Respond ONLY with valid JSON in the format {"results":[...]}. No markdown fences, no explanation.' }];
+  const systemMessages = [{ role: 'system', content: 'Respond ONLY with valid JSON in the format {"results":[...]}. No markdown fences, no explanation. All text fields (reason, evidence, suggestion, title, summary, steps, etc.) must be written in Japanese.' }];
   const responseFormatParam = { response_format: { type: 'json_object' } };
 
   let completion;
@@ -4798,6 +4798,7 @@ app.post('/api/ai-evaluate', async (req, res) => {
     }));
 
     const prompt = `あなたはプロのアクセシビリティ監査員です。
+すべての出力（reason, evidence, suggestion, title, summary, steps, manualChecks, quickWins 等すべてのテキストフィールド）は必ず日本語で記述してください。英語は使用しないでください。
 MULTI SCANの役割は、AIが得意な自然言語・視覚的文脈の項目だけを評価し、BASIC/EXT/DEEP/PLAYの自動検査結果を補強・ファクトチェックすることです。
 自動ツールで確定しているfail/pass/not_applicableと矛盾する判定を避け、failの場合は何が違反かと改善案を具体的に書いてください。
 証拠が足りない場合は推測でpass/failにせず、必ずmanual_requiredにしてください。
