@@ -5718,29 +5718,73 @@ async function pw_check_4_1_2_accessible_names(page) {
     ];
     const nameless = [];
     const seen = new Set();
+    function isHiddenFromAccessibilityTree(el) {
+      for (let node = el; node && node.nodeType === Node.ELEMENT_NODE; node = node.parentElement) {
+        if (node.getAttribute('aria-hidden') === 'true' || node.hasAttribute('hidden') || node.hasAttribute('inert')) return true;
+        const style = getComputedStyle(node);
+        if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') return true;
+      }
+      return false;
+    }
+    function collectAccessibleText(node, includeHidden = false, visited = new Set()) {
+      if (!node || visited.has(node)) return '';
+      visited.add(node);
+      if (node.nodeType === Node.TEXT_NODE) return node.textContent || '';
+      if (node.nodeType !== Node.ELEMENT_NODE) return '';
+      if (!includeHidden && isHiddenFromAccessibilityTree(node)) return '';
+      const tag = node.tagName;
+      if (tag === 'IMG') return node.getAttribute('alt') || '';
+      if (node.getAttribute('aria-hidden') === 'true' && !includeHidden) return '';
+      if (node.getAttribute('aria-label')) return node.getAttribute('aria-label');
+      return Array.from(node.childNodes).map(child => collectAccessibleText(child, includeHidden, visited)).join(' ');
+    }
+    function getLabelText(el) {
+      if ('labels' in el && el.labels && el.labels.length) {
+        const text = Array.from(el.labels)
+          .map(labelEl => collectAccessibleText(labelEl).trim())
+          .filter(Boolean)
+          .join(' ');
+        if (text) return text;
+      }
+      if (el.id) {
+        const labelEl = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+        const text = labelEl ? collectAccessibleText(labelEl).trim() : '';
+        if (text) return text;
+      }
+      const closestLabel = el.closest('label');
+      return closestLabel ? collectAccessibleText(closestLabel).trim() : '';
+    }
+    function getAccessibleName(el) {
+      const ariaLabelledby = (el.getAttribute('aria-labelledby') || '').trim();
+      if (ariaLabelledby) {
+        const text = ariaLabelledby.split(/\s+/)
+          .map(id => document.getElementById(id))
+          .filter(Boolean)
+          .map(ref => collectAccessibleText(ref, true).trim())
+          .filter(Boolean)
+          .join(' ');
+        if (text) return text;
+      }
+      const ariaLabel = el.getAttribute('aria-label');
+      if (ariaLabel && ariaLabel.trim()) return ariaLabel;
+      const tag = el.tagName;
+      if (tag === 'INPUT') {
+        const type = (el.getAttribute('type') || 'text').toLowerCase();
+        if (type === 'image') return el.getAttribute('alt') || el.getAttribute('title') || '';
+        if (['button', 'submit', 'reset'].includes(type)) return el.getAttribute('value') || el.value || '';
+        return getLabelText(el) || el.getAttribute('title') || el.getAttribute('placeholder') || '';
+      }
+      if (tag === 'SELECT' || tag === 'TEXTAREA') {
+        return getLabelText(el) || el.getAttribute('title') || el.getAttribute('placeholder') || '';
+      }
+      return collectAccessibleText(el).trim() || el.getAttribute('title') || el.getAttribute('placeholder') || '';
+    }
     for (const sel of selectors) {
       for (const el of document.querySelectorAll(sel)) {
         if (seen.has(el)) continue;
         seen.add(el);
-        function getAccessibleText(node) {
-          if (node.getAttribute && node.getAttribute('aria-hidden') === 'true') return '';
-          // img要素はalt属性がアクセシブルネームになる（accname-1.1）
-          if (node.tagName === 'IMG') return node.getAttribute('alt') || '';
-          // aria-labelを持つ子要素はその値を使う
-          if (node !== el && node.getAttribute && node.getAttribute('aria-label')) return node.getAttribute('aria-label');
-          let text = '';
-          for (const child of node.childNodes) {
-            if (child.nodeType === Node.TEXT_NODE) text += child.textContent;
-            else if (child.nodeType === Node.ELEMENT_NODE) text += getAccessibleText(child);
-          }
-          return text;
-        }
-        const ariaLabelledby = el.getAttribute('aria-labelledby');
-        const label = el.getAttribute('aria-label')
-          ? el.getAttribute('aria-label')
-          : ariaLabelledby
-            ? (document.getElementById(ariaLabelledby)?.textContent || '')
-            : getAccessibleText(el).trim() || el.getAttribute('title') || el.getAttribute('placeholder');
+        if (isHiddenFromAccessibilityTree(el)) continue;
+        const label = getAccessibleName(el);
         if (!label || !label.trim()) {
           const tag = el.tagName.toLowerCase();
           const id = el.id ? `#${el.id}` : '';
