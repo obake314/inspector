@@ -1060,6 +1060,104 @@ async function getImageLinkAffordanceCandidates(page, limit = 20) {
   }
 }
 
+async function getJapaneseAltQualityCandidates(page, limit = 20) {
+  try {
+    return await page.evaluate((maxItems) => {
+      const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+      const escapeCss = (value) => {
+        if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(String(value));
+        return String(value).replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+      };
+      const hasJapanese = (value) => /[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff]/.test(String(value || ''));
+      const normalizeDigits = (value) => String(value || '').replace(/[０-９]/g, ch =>
+        String.fromCharCode(ch.charCodeAt(0) - 0xfee0)
+      );
+      const isNumericOnly = (value) => /^[0-9]+$/.test(normalizeDigits(value).replace(/\s+/g, ''));
+      const isHiddenByStyle = (el) => {
+        if (!el || el.nodeType !== 1) return true;
+        const style = getComputedStyle(el);
+        return style.display === 'none' ||
+          style.visibility === 'hidden' ||
+          Number(style.opacity) === 0 ||
+          el.hidden ||
+          el.getAttribute('aria-hidden') === 'true';
+      };
+      const isVisibleElement = (el, minWidth = 8, minHeight = 8) => {
+        if (isHiddenByStyle(el)) return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width >= minWidth && rect.height >= minHeight;
+      };
+      const cssPath = (el) => {
+        const parts = [];
+        let current = el;
+        while (current && current.nodeType === 1 && current !== document.body && parts.length < 5) {
+          let part = current.tagName.toLowerCase();
+          if (current.id) {
+            part += `#${escapeCss(current.id)}`;
+            parts.unshift(part);
+            break;
+          }
+          const className = normalizeText(current.className).split(' ').filter(Boolean)[0];
+          if (className) part += `.${escapeCss(className)}`;
+          const parent = current.parentElement;
+          if (parent) {
+            const siblings = Array.from(parent.children).filter(child => child.tagName === current.tagName);
+            if (siblings.length > 1) part += `:nth-of-type(${siblings.indexOf(current) + 1})`;
+          }
+          parts.unshift(part);
+          current = parent;
+        }
+        return parts.join(' > ');
+      };
+
+      const lang = normalizeText(document.documentElement.getAttribute('lang')).toLowerCase();
+      const ogLocale = normalizeText(document.querySelector('meta[property="og:locale"], meta[name="og:locale"]')?.getAttribute('content')).toLowerCase();
+      const bodyText = normalizeText(document.body?.innerText || '').slice(0, 4000);
+      const isJapanesePage = /^ja(?:[-_]|$)/i.test(lang) || /^ja(?:[-_]|$)/i.test(ogLocale) || hasJapanese(bodyText);
+      const candidates = [];
+      if (!isJapanesePage) {
+        return { isJapanesePage, lang, ogLocale, candidates };
+      }
+
+      const images = Array.from(document.querySelectorAll('img'));
+      for (const img of images) {
+        if (candidates.length >= maxItems) break;
+        if (!isVisibleElement(img)) continue;
+        const role = normalizeText(img.getAttribute('role')).toLowerCase();
+        if (role === 'presentation' || role === 'none') continue;
+        if (img.getAttribute('aria-hidden') === 'true') continue;
+
+        const alt = img.getAttribute('alt');
+        if (alt === null || alt === '') continue;
+        const trimmedAlt = normalizeText(alt);
+        if (!trimmedAlt) continue;
+
+        const numericOnly = isNumericOnly(trimmedAlt);
+        const missingJapanese = !hasJapanese(trimmedAlt);
+        if (!numericOnly && !missingJapanese) continue;
+
+        const rect = img.getBoundingClientRect();
+        const src = normalizeText(img.getAttribute('src') || '').split('/').pop().replace(/[?#].*$/, '').slice(0, 80);
+        const reason = numericOnly
+          ? '日本語ページ内の画像altが数字のみです。代替テキストとして意味を説明できていない可能性があります。'
+          : '日本語ページ内の画像altに日本語が含まれていません。固有名詞等で妥当な場合を除き、利用者に伝わる日本語説明か確認してください。';
+        candidates.push({
+          selector: cssPath(img),
+          src,
+          alt: trimmedAlt.slice(0, 160),
+          issue: numericOnly ? 'numeric_only' : 'no_japanese',
+          size: `${Math.round(rect.width)}x${Math.round(rect.height)}`,
+          inLink: !!img.closest('a[href]'),
+          reason
+        });
+      }
+      return { isJapanesePage, lang, ogLocale, candidates };
+    }, limit);
+  } catch (error) {
+    return { isJapanesePage: false, lang: '', ogLocale: '', candidates: [], error: error.message };
+  }
+}
+
 function getWcagTagsForLevel(level) {
   const tags = ['wcag2a', 'wcag21a', 'wcag22a'];
   if (level === 'AA' || level === 'AAA') {
@@ -4730,7 +4828,7 @@ function relevantToolFindingsForAI(toolResults, ref) {
 function getMultiVerificationMethodForAI(item) {
   const ref = item?.ref || '';
   const methods = {
-    '1.1.1': '画像リストの各imgを以下の順で評価する。【スキップ条件（違反にしない）】isHidden=trueは評価不要。role="presentation"またはrole="none"は評価不要。ariaLabelまたはariaLabelledbyが存在すればalt欠落でもpass。【隣接テキストによる装飾判定 - 最優先】同一リンク（a要素）内にscreen-reader-text・sr-only・visually-hidden等のSRテキストスパンがある場合、または同一li・div・figure・article等の親要素内に同じ内容を伝える可視テキスト（p・span・figcaption・h2・h3等）がある場合、その画像は装飾扱いであり alt="" はWCAG準拠（pass）。隣接テキストが画像と同じ情報（例：動物名・タイトル・リンク先）を提供している場合は絶対にfailにしてはならない。これは冗長なalt値を避けるためのWCAGベストプラクティスである。【alt=""（空）- 最重要】alt=""は意図的な装飾画像の宣言であり、それ自体はWCAG準拠（pass）。たとえ画像が意味を持つように見えても、alt=""を持つ画像を単独でfailにしてはならない。例外はinLink=trueかつBASICのrelevantToolFindingsにlink-name違反がある場合のみ（その場合はリンク名無しとして扱う）。【alt=null（属性なし）】上記スキップ条件を満たさない場合はfail。BASICがすでにfailを出している場合は違反内容を具体化する。【alt値の品質評価（最重要）】BASICが構造的には問題なしと判定した画像について、alt値が意味を持つかを確認する: (1)ファイル名・拡張子を含む（"image001.jpg" "photo.png"等）→fail、(2)汎用語のみのalt（"image" "img" "photo" "pic" "画像" "写真" "バナー" "アイコン" "図" 等）→fail、(3)【重要】汎用語＋連番のパターン（"Image2" "Image3" "img01" "photo_3" "pic2"等、単語に数字を付けただけのもの）は意味のある代替テキストではないのでfail、(4)スクリーンショットで画像が確認できれば内容との一致を評価。全画像がスキップまたは適切なalt/aria名を持つ場合はpass。一部確認不能ならmanual_required。',
+    '1.1.1': '画像リストの各imgを以下の順で評価する。【スキップ条件（違反にしない）】isHidden=trueは評価不要。role="presentation"またはrole="none"は評価不要。ariaLabelまたはariaLabelledbyが存在すればalt欠落でもpass。【隣接テキストによる装飾判定 - 最優先】同一リンク（a要素）内にscreen-reader-text・sr-only・visually-hidden等のSRテキストスパンがある場合、または同一li・div・figure・article等の親要素内に同じ内容を伝える可視テキスト（p・span・figcaption・h2・h3等）がある場合、その画像は装飾扱いであり alt="" はWCAG準拠（pass）。隣接テキストが画像と同じ情報（例：動物名・タイトル・リンク先）を提供している場合は絶対にfailにしてはならない。これは冗長なalt値を避けるためのWCAGベストプラクティスである。【alt=""（空）- 最重要】alt=""は意図的な装飾画像の宣言であり、それ自体はWCAG準拠（pass）。たとえ画像が意味を持つように見えても、alt=""を持つ画像を単独でfailにしてはならない。例外はinLink=trueかつBASICのrelevantToolFindingsにlink-name違反がある場合のみ（その場合はリンク名無しとして扱う）。【alt=null（属性なし）】上記スキップ条件を満たさない場合はfail。BASICがすでにfailを出している場合は違反内容を具体化する。【alt値の品質評価（最重要）】BASICが構造的には問題なしと判定した画像について、alt値が意味を持つかを確認する: (1)ファイル名・拡張子を含む（"image001.jpg" "photo.png"等）→fail、(2)汎用語のみのalt（"image" "img" "photo" "pic" "画像" "写真" "バナー" "アイコン" "図" 等）→fail、(3)【重要】汎用語＋連番のパターン（"Image2" "Image3" "img01" "photo_3" "pic2"等、単語に数字を付けただけのもの）は意味のある代替テキストではないのでfail、(4)日本語ページalt品質候補がある場合、数字のみaltは意味不明としてfail候補、altに日本語がないものは固有名詞・サービス名・ブランド名など妥当な例外がなければmanual_requiredにする。全画像がスキップまたは適切なalt/aria名を持つ場合はpass。一部確認不能ならmanual_required。',
     '1.2.1': 'audio/video/iframe等のメディアをHTMLと画面から探す。音声のみコンテンツがあり、近接する文字起こし・テキスト代替・説明リンクが確認できればpass。メディア内容の聴取が必要ならmanual_required。メディアが無ければnot_applicable。',
     '1.2.2': '収録済み動画があるか確認し、track kind="captions"、字幕ボタン、キャプション付きプレーヤー、字幕/文字起こしリンクを証拠にする。動画があるが字幕の有無をHTML/画面で確認できなければmanual_required。',
     '1.2.3': '動画に音声解説または同等のメディア代替があるか、リンク・説明・track・プレーヤー表示から確認する。映像内容の理解が必要で証拠が無い場合はmanual_required。動画が無ければnot_applicable。',
@@ -4863,9 +4961,16 @@ app.post('/api/ai-evaluate', async (req, res) => {
     const imgAltList = await page.evaluate(() => {
       return Array.from(document.querySelectorAll('img')).slice(0, 20).map(img => {
         const alt = img.getAttribute('alt');
+        const hasJapanese = (value) => /[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff]/.test(String(value || ''));
+        const normalizeDigits = (value) => String(value || '').replace(/[０-９]/g, ch =>
+          String.fromCharCode(ch.charCodeAt(0) - 0xfee0)
+        );
+        const altText = alt === null ? '' : String(alt).trim();
         return {
           src: (img.getAttribute('src') || '').split('/').pop().replace(/[?#].*$/, '').slice(0, 50),
           alt: alt,           // null=属性なし, ''=装飾(空alt), string=値あり
+          altHasJapanese: hasJapanese(altText),
+          altNumericOnly: !!altText && /^[0-9]+$/.test(normalizeDigits(altText).replace(/\s+/g, '')),
           ariaLabel: img.getAttribute('aria-label') || null,
           ariaLabelledby: img.getAttribute('aria-labelledby') || null,
           role: img.getAttribute('role') || null,
@@ -4875,6 +4980,9 @@ app.post('/api/ai-evaluate', async (req, res) => {
         };
       });
     });
+    const japaneseAltQuality = targetScSet.has('1.1.1')
+      ? await getJapaneseAltQualityCandidates(page, 20)
+      : { isJapanesePage: false, candidates: [] };
     const imageLinkAffordanceList = targetScSet.has('2.4.4')
       ? await getImageLinkAffordanceCandidates(page, 20)
       : [];
@@ -4982,6 +5090,7 @@ ${JSON.stringify(toolResults)}
 ## HTML（抜粋）
 ${shortHtml}
 ${targetScSet.has('1.1.1') ? `\n## 画像リスト（alt評価用、最大20件）\n${JSON.stringify(imgAltList)}\n` : ''}
+${targetScSet.has('1.1.1') ? `\n## 日本語ページalt品質候補（最大20件）\n${JSON.stringify(japaneseAltQuality)}\n` : ''}
 ${targetScSet.has('2.4.4') ? `\n## 画像リンクのクリック可能性候補（最大20件）\n${JSON.stringify(imageLinkAffordanceList)}\n` : ''}
 ## 検証方法ガイド（wcag番号→判定手順）
 ${JSON.stringify(methodGuide)}
@@ -6846,6 +6955,31 @@ async function ext_check_2_1_1_scrollable(page) {
   }
 }
 
+/** EXT: SC 1.1.1 - 日本語ページのalt品質（ヒューマンチェック候補） */
+async function ext_check_1_1_1_japanese_alt_quality(page) {
+  try {
+    const result = await getJapaneseAltQualityCandidates(page, 20);
+    const candidates = Array.isArray(result.candidates) ? result.candidates : [];
+    const violations = candidates.map(item =>
+      `${item.selector} (${item.size}, alt="${item.alt}", src="${item.src || ''}") - ${item.reason}`
+    );
+    return {
+      source: 'EXT_NATIVE',
+      sc: '1.1.1',
+      status: violations.length === 0 ? 'pass' : 'manual_required',
+      violations: violations.slice(0, 20),
+      message: !result.isJapanesePage
+        ? '日本語ページとして判定されなかったため、altの日本語有無チェックは対象外です'
+        : violations.length === 0
+          ? '日本語ページ内で、数字のみまたは日本語を含まないalt候補は検出されませんでした'
+          : `${violations.length}件の画像altで日本語ページ向けの手動確認が必要です`,
+      name: 'SC 1.1.1: 日本語ページのalt品質'
+    };
+  } catch (e) {
+    return { source: 'EXT_NATIVE', sc: '1.1.1', status: 'error', violations: [], message: e.message };
+  }
+}
+
 /** EXT: SC 2.4.4 - 画像リンクのクリック可能性（ヒューマンチェック候補） */
 async function ext_check_2_4_4_image_link_affordance(page) {
   try {
@@ -7023,6 +7157,7 @@ app.post('/api/ext-check', async (req, res) => {
     results.push(await withTimeout(() => ext_check_4_1_1_dup_id(page)));
     results.push(await withTimeout(() => ext_check_2_4_1_landmarks(page)));
     results.push(await withTimeout(() => ext_check_2_1_1_scrollable(page)));
+    results.push(await withTimeout(() => ext_check_1_1_1_japanese_alt_quality(page)));
     results.push(await withTimeout(() => ext_check_2_4_4_image_link_affordance(page)));
     results.push(await withTimeout(() => ext_check_2_4_6_heading_order(page)));
 

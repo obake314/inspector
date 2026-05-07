@@ -357,7 +357,7 @@
                             <input type="checkbox" id="playScanOpt" class="scan-option-checkbox" checked>
                             <span class="scan-option-text scan-option-text-play">PLAYWRIGHT</span>
                         </label>
-                        <label class="scan-option" id="extScanLabel" title="IBM Equal Access Checker + Lighthouse相当の独自検査 + CDP（Chrome DevTools Protocol）イベントリスナー解析を組み合わせた拡張検査です。&#10;IBM Equal Access: axe-coreとは異なるルールセットで追加の違反を検出&#10;ネイティブ検査: SC 4.1.1(重複ID), 2.4.1(ランドマーク), 2.1.1(スクロール領域), 2.4.4(画像リンクのクリック可能性), 2.4.6(見出し順序)&#10;CDP拡張: SC 2.1.4(キーボードイベントリスナー検出)&#10;APIコスト不要・所要時間：2〜4分">
+                        <label class="scan-option" id="extScanLabel" title="IBM Equal Access Checker + Lighthouse相当の独自検査 + CDP（Chrome DevTools Protocol）イベントリスナー解析を組み合わせた拡張検査です。&#10;IBM Equal Access: axe-coreとは異なるルールセットで追加の違反を検出&#10;ネイティブ検査: SC 1.1.1(日本語ページのalt品質), 4.1.1(重複ID), 2.4.1(ランドマーク), 2.1.1(スクロール領域), 2.4.4(画像リンクのクリック可能性), 2.4.6(見出し順序)&#10;CDP拡張: SC 2.1.4(キーボードイベントリスナー検出)&#10;APIコスト不要・所要時間：2〜4分">
                             <input type="checkbox" id="extScanOpt" class="scan-option-checkbox" checked>
                             <span class="scan-option-text scan-option-text-ext">EXT</span>
                         </label>
@@ -387,7 +387,7 @@
                             <input type="checkbox" id="batchPlayOpt" class="scan-option-checkbox" checked>
                             <span class="scan-option-text scan-option-text-play">PLAYWRIGHT</span>
                         </label>
-                        <label class="scan-option" id="batchExtLabel" title="IBM Equal Access + Lighthouse相当検査 + 画像リンクのクリック可能性 + CDP拡張。APIコスト不要・所要時間：2〜4分（URL1件あたり）">
+                        <label class="scan-option" id="batchExtLabel" title="IBM Equal Access + Lighthouse相当検査 + 日本語ページのalt品質 + 画像リンクのクリック可能性 + CDP拡張。APIコスト不要・所要時間：2〜4分（URL1件あたり）">
                             <input type="checkbox" id="batchExtOpt" class="scan-option-checkbox" checked>
                             <span class="scan-option-text scan-option-text-ext">EXT</span>
                         </label>
@@ -4595,6 +4595,7 @@
             const lim = lo[targetLevel] || 2;
             const scSet = new Set(getTargetScList());
             const MULTI_SUPPLEMENTAL_FAIL_SC = new Set(['1.1.1', '1.4.1']);
+            const EXT_SUPPLEMENTAL_UNVERIFIED_SC = new Set(['1.1.1']);
             const autoPassRefs = getAutoDetectedPassRefs(basicResults);
 
             // キーボード操作SCはPLAY、アクセシビリティ名/ロールSCはEXTが権威スキャン
@@ -4631,6 +4632,11 @@
                     && result === 'unverified'
                     && cur
                     && cur.result === 'pass';
+                const allowSupplementalExtUnverified = source === 'EXT'
+                    && EXT_SUPPLEMENTAL_UNVERIFIED_SC.has(sc)
+                    && result === 'unverified'
+                    && cur
+                    && cur.result === 'pass';
                 if (source === 'MULTI' && cur && cur.result !== 'unverified' && !allowSupplementalMultiFail && !allowSupplementalMultiUnverified) return;
                 const authority = SC_AUTHORITY[sc];
                 if (!cur) {
@@ -4639,6 +4645,10 @@
                 }
                 // MULTI supplemental unverified: pass → unverified に引き下げる特例
                 if (allowSupplementalMultiUnverified) {
+                    scMap[sc] = { result: 'unverified', impact: cur.impact || null, source, dkey: renderDkey };
+                    return;
+                }
+                if (allowSupplementalExtUnverified) {
                     scMap[sc] = { result: 'unverified', impact: cur.impact || null, source, dkey: renderDkey };
                     return;
                 }
@@ -4859,6 +4869,7 @@
         function buildScUnifiedMap(basic, multi, deep, play, ext, scSet, lim, lo, navConsistency = null, decisionScope = null) {
             const STATUS_RANK = { fail: 0, pass: 1, unverified: 2, na: 3 };
             const MULTI_SUPPLEMENTAL_FAIL_SC = new Set(['1.1.1', '1.4.1']);
+            const EXT_SUPPLEMENTAL_UNVERIFIED_SC = new Set(['1.1.1']);
             const autoPassRefs = getAutoDetectedPassRefs(basic);
             const SC_AUTHORITY = {
                 '2.1.1':'PLAY','2.1.2':'PLAY','2.1.4':'PLAY',
@@ -4894,6 +4905,15 @@
                         && sourceEntry.status === 'fail'
                         && selected
                         && selected.status === 'pass';
+                    const allowSupplementalExtUnverified = sourceEntry.src === 'EXT'
+                        && EXT_SUPPLEMENTAL_UNVERIFIED_SC.has(entry.sc)
+                        && sourceEntry.status === 'unverified'
+                        && selected
+                        && selected.status === 'pass';
+                    if (allowSupplementalExtUnverified) {
+                        selected = sourceEntry;
+                        return;
+                    }
                     if (sourceEntry.src === 'MULTI' && selected && selected.status !== 'unverified' && !allowSupplementalMultiFail) return;
                     if (!selected) {
                         selected = sourceEntry;
