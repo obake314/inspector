@@ -357,7 +357,7 @@
                             <input type="checkbox" id="playScanOpt" class="scan-option-checkbox" checked>
                             <span class="scan-option-text scan-option-text-play">PLAYWRIGHT</span>
                         </label>
-                        <label class="scan-option" id="extScanLabel" title="IBM Equal Access Checker + Lighthouse相当の独自検査 + CDP（Chrome DevTools Protocol）イベントリスナー解析を組み合わせた拡張検査です。&#10;IBM Equal Access: axe-coreとは異なるルールセットで追加の違反を検出&#10;ネイティブ検査: SC 4.1.1(重複ID), 2.4.1(ランドマーク), 2.1.1(スクロール領域), 2.4.6(見出し順序)&#10;CDP拡張: SC 2.1.4(キーボードイベントリスナー検出)&#10;APIコスト不要・所要時間：2〜4分">
+                        <label class="scan-option" id="extScanLabel" title="IBM Equal Access Checker + Lighthouse相当の独自検査 + CDP（Chrome DevTools Protocol）イベントリスナー解析を組み合わせた拡張検査です。&#10;IBM Equal Access: axe-coreとは異なるルールセットで追加の違反を検出&#10;ネイティブ検査: SC 4.1.1(重複ID), 2.4.1(ランドマーク), 2.1.1(スクロール領域), 2.4.4(画像リンクのクリック可能性), 2.4.6(見出し順序)&#10;CDP拡張: SC 2.1.4(キーボードイベントリスナー検出)&#10;APIコスト不要・所要時間：2〜4分">
                             <input type="checkbox" id="extScanOpt" class="scan-option-checkbox" checked>
                             <span class="scan-option-text scan-option-text-ext">EXT</span>
                         </label>
@@ -387,7 +387,7 @@
                             <input type="checkbox" id="batchPlayOpt" class="scan-option-checkbox" checked>
                             <span class="scan-option-text scan-option-text-play">PLAYWRIGHT</span>
                         </label>
-                        <label class="scan-option" id="batchExtLabel" title="IBM Equal Access + Lighthouse相当検査 + CDP拡張。APIコスト不要・所要時間：2〜4分（URL1件あたり）">
+                        <label class="scan-option" id="batchExtLabel" title="IBM Equal Access + Lighthouse相当検査 + 画像リンクのクリック可能性 + CDP拡張。APIコスト不要・所要時間：2〜4分（URL1件あたり）">
                             <input type="checkbox" id="batchExtOpt" class="scan-option-checkbox" checked>
                             <span class="scan-option-text scan-option-text-ext">EXT</span>
                         </label>
@@ -909,6 +909,7 @@
         const manualDecisions   = new Map(); // key → 'ok'|'ng'|'hold'
         const manualImpacts     = new Map(); // key → 'critical'|'serious'|'moderate'|'minor'（NG時の重要度）
         const locationDecisions = new Map(); // key → 'ok'|'ng'|'hold'（検出箇所単位）
+        const NAV_CONSISTENCY_DECISION_KEYS = ['BATCH:NAV_CONSISTENCY:SC:3.2.3', 'BATCH:NAV_CONSISTENCY:SC:3.2.4'];
 
         window.setLocationDecision = (key, val, btnEl) => {
             if (locationDecisions.get(key) === val) {
@@ -925,12 +926,34 @@
             }
         };
 
-        // navConsistencyBar 用：3.2.3 / 3.2.4 を同時にスコープなしで設定
+        function buildSingleNavConsistency(results, suffix = 'pc') {
+            if (!results) return null;
+            const targetScs = new Set(getTargetScList());
+            if (!targetScs.has('3.2.3') && !targetScs.has('3.2.4')) return null;
+            const url = String(results.url || $('urlInput')?.value || '').trim();
+            const viewLabel = suffix === 'sp' ? 'SP VIEW' : 'PC VIEW';
+            return {
+                sc: '3.2.3 / 3.2.4',
+                title: 'ナビゲーション / コンポーネントの一貫性',
+                result: 'manual_required',
+                comparedUrls: url ? [url] : [],
+                issues: [],
+                message: '単一スキャンではページ間比較ができないため、ヒューマンチェックで判定してください',
+                singleManual: true,
+                viewLabel
+            };
+        }
+
+        function getActiveNavConsistency(results = lastResults, suffix = 'pc') {
+            if (currentMode === 'batch') return suffix === 'sp' ? batchMobileNavConsistency : batchNavConsistency;
+            return buildSingleNavConsistency(results, suffix);
+        }
+
+        // navConsistencyBar 用：3.2.3 / 3.2.4 を同時に設定
         window.setNavConsistencyDecision = (val, btnEl) => {
-            const keys = ['BATCH:NAV_CONSISTENCY:SC:3.2.3', 'BATCH:NAV_CONSISTENCY:SC:3.2.4'];
-            const current = manualDecisions.get(keys[0]);
+            const current = manualDecisions.get(NAV_CONSISTENCY_DECISION_KEYS[0]);
             const newVal = current === val ? null : val;
-            keys.forEach(k => {
+            NAV_CONSISTENCY_DECISION_KEYS.forEach(k => {
                 if (newVal) {
                     manualDecisions.set(k, newVal);
                     if (newVal === 'ng') manualImpacts.set(k, 'moderate');
@@ -956,6 +979,10 @@
                         batchMobileNavConsistency
                     );
                 }
+            }
+            if (currentMode !== 'batch' && lastMobileScanSnapshot?.basic) {
+                const sp = lastMobileScanSnapshot;
+                renderAllTabs('sp', sp.basic, sp.deep || null, sp.multi || {}, sp.play || null, sp.ext || null);
             }
         };
 
@@ -1026,7 +1053,7 @@
             if (lastResults) {
                 const scope = getDecisionScope(lastResults, 'pc');
                 const hasMulti = Object.keys(aiResults || {}).length > 0;
-                const nav = currentMode === 'batch' ? batchNavConsistency : null;
+                const nav = getActiveNavConsistency(lastResults, 'pc');
                 const scMap = buildTotalScMap(
                     lastResults,
                     lastEnhancedResults || null,
@@ -1067,7 +1094,7 @@
                         multiAiData: doMulti ? aiResults : null,
                         playResults: lastPlayResults,
                         extResults: lastExtResults,
-                        navConsistency: currentMode === 'batch' ? batchNavConsistency : null
+                        navConsistency: getActiveNavConsistency(lastResults, 'pc')
                     },
                     multiTokenLimited: lastMultiTokenLimited,
                     multiIssue: lastMultiIssue
@@ -1090,7 +1117,12 @@
                         navConsistency: batchMobileNavConsistency
                     };
                 }
-                if (lastMobileScanSnapshot) return { ...lastMobileScanSnapshot, navConsistency: null };
+                if (lastMobileScanSnapshot) {
+                    return {
+                        ...lastMobileScanSnapshot,
+                        navConsistency: getActiveNavConsistency(lastMobileScanSnapshot.basic, 'sp')
+                    };
+                }
                 return null;
             })();
             if (spData) {
@@ -1659,6 +1691,7 @@
                     renderImprovementPlanPanel();
                 }
             }
+            renderNavBar();
             $('results').classList.add('visible');
             $('exportArea').classList.add('visible');
         }
@@ -1923,11 +1956,11 @@
             const COL_WIDTHS = [8, 36, 8, 6, 22, 36, 28, 16, 16, 10].map(w => ({ wch: w }));
             const COVER_WIDTHS = [8, 50, 12, 12, 16, 8, 10, 10].map(w => ({ wch: w }));
 
-            const pcRows = buildReportRows(lastResults, url, aiResults, lastEnhancedResults, batchNavConsistency, lastPlayResults, lastExtResults, lastImprovementPlan, 'PC VIEW');
+            const pcRows = buildReportRows(lastResults, url, aiResults, lastEnhancedResults, getActiveNavConsistency(lastResults, 'pc'), lastPlayResults, lastExtResults, lastImprovementPlan, 'PC VIEW');
             const pageDataList = [{ url, rows: pcRows }];
             if (lastMobileScanSnapshot) {
                 const sp = lastMobileScanSnapshot;
-                const spRows = buildReportRows(sp.basic, url, sp.multi || {}, sp.deep || null, null, sp.play || null, sp.ext || null, sp.improvementPlan || null, 'SP VIEW');
+                const spRows = buildReportRows(sp.basic, url, sp.multi || {}, sp.deep || null, getActiveNavConsistency(sp.basic, 'sp'), sp.play || null, sp.ext || null, sp.improvementPlan || null, 'SP VIEW');
                 pageDataList.push({ url: url + ' (SP)', rows: spRows });
             }
 
@@ -1943,7 +1976,7 @@
 
             if (lastMobileScanSnapshot) {
                 const sp = lastMobileScanSnapshot;
-                const spRows = buildReportRows(sp.basic, url, sp.multi || {}, sp.deep || null, null, sp.play || null, sp.ext || null, sp.improvementPlan || null, 'SP VIEW');
+                const spRows = buildReportRows(sp.basic, url, sp.multi || {}, sp.deep || null, getActiveNavConsistency(sp.basic, 'sp'), sp.play || null, sp.ext || null, sp.improvementPlan || null, 'SP VIEW');
                 const spSheet = buildSampleSheetData(spRows, url);
                 const spWs = XLSX.utils.aoa_to_sheet(spSheet.sheetRows);
                 spWs['!cols'] = COL_WIDTHS;
@@ -2272,6 +2305,7 @@
                         lastMobileScanSnapshot.ext || null
                     );
                 }
+                renderNavBar();
             }
             renderImprovementPlanPanel();
             renderScanEstimate();
@@ -2542,7 +2576,7 @@
             }
 
             try {
-                const filteredItems = getFilteredAiItemsForTargetLevel(lastResults, batchNavConsistency);
+                const filteredItems = getFilteredAiItemsForTargetLevel(lastResults, getActiveNavConsistency(lastResults, 'pc'));
 
                 if (!silent) status.textContent = `${filteredItems.length}項目 SCORING...（1-2分かかります）`;
 
@@ -2947,16 +2981,26 @@
         function renderNavBar() {
             const existing = $('navConsistencyBar');
             if (existing) existing.remove();
-            const nc = batchNavConsistency;
+            const barSuffix = currentMode === 'single' && getViewportMode() === 'mobile' ? 'sp' : 'pc';
+            const barResults = barSuffix === 'sp' ? (lastMobileScanSnapshot?.basic || lastResults) : lastResults;
+            const nc = getActiveNavConsistency(barResults, barSuffix);
             if (!nc) return;
 
-            const navDec = manualDecisions.get('BATCH:NAV_CONSISTENCY:SC:3.2.3') || null;
+            const navDec = manualDecisions.get(NAV_CONSISTENCY_DECISION_KEYS[0]) || null;
+            const isSingleManual = !!nc.singleManual;
 
             // 表示上の結果：manualDecision を優先し、なければスキャン結果を使う
-            const effectivePass = navDec === 'ok' ? true
-                : navDec === 'ng' ? false
-                : navDec === 'hold' ? null   // null = 保留（未確定）
-                : nc.result === 'pass';
+            const rawState = nc.result === 'pass' ? 'pass'
+                : nc.result === 'not_applicable' ? 'na'
+                : nc.result === 'manual_required' ? 'unverified'
+                : 'fail';
+            const effectiveState = navDec === 'ok' ? 'pass'
+                : navDec === 'ng' ? 'fail'
+                : navDec === 'hold' ? 'hold'
+                : rawState;
+            const effectivePass = effectiveState === 'pass' ? true
+                : effectiveState === 'fail' ? false
+                : null;
 
             // バーのクラス
             const barStateClass = effectivePass === true ? 'is-pass'
@@ -2969,7 +3013,7 @@
             // 結果テキスト
             const resultLabel = effectivePass === true ? '合格'
                 : effectivePass === false ? '不合格'
-                : '保留';
+                : navDec === 'hold' ? '保留' : '未検証';
 
             // 不合格の場合のみ差分詳細を表示（OK上書きなら詳細は折りたたむ）
             let issueHtml = '';
@@ -2982,6 +3026,19 @@
                     </div>`
                 ).join('');
             }
+            if (isSingleManual && effectivePass !== true) {
+                issueHtml += `<div class="nav-bar-issue">${escapeHtml(nc.message || 'ヒューマンチェックで判定してください')}</div>`;
+            }
+
+            const metaText = isSingleManual
+                ? `${escapeHtml(nc.viewLabel || 'SINGLE')} / 対象URL: ${escapeHtml((nc.comparedUrls || [])[0] || '-')}`
+                : `比較URL: ${(nc.comparedUrls||[]).length}件`;
+            const okText = effectivePass === true
+                ? (navDec === 'ok' ? '合格（ヒューマンチェックによる上書き）' : '合格')
+                : '';
+            const holdText = effectivePass === null
+                ? (navDec === 'hold' ? '保留中（未確定）' : 'ヒューマンチェック待ち')
+                : '';
 
             const navDecBtns = `<div class="nav-bar-decision-btns" onclick="event.stopPropagation()">
                 <button class="decision-btn${navDec==='ok'?' active-ok':''}" onclick="setNavConsistencyDecision('ok',this)">OK</button>
@@ -2994,9 +3051,9 @@
             bar.className = `nav-bar ${barStateClass} ${decClass}`;
             bar.innerHTML = `<span class="nav-bar-main">SC ${escapeHtml(nc.sc||'3.2.3/3.2.4')}　${escapeHtml(nc.title||'ナビゲーション一貫性')}</span>
                 <span class="nav-bar-result">${resultLabel}</span>
-                <span class="nav-bar-meta">比較URL: ${(nc.comparedUrls||[]).length}件</span>
-                ${effectivePass === true ? '<span class="nav-bar-ok">合格（ヒューマンチェックによる上書き）</span>' : ''}
-                ${effectivePass === null ? '<span class="nav-bar-ok" style="color:var(--color-moderate)">保留中（未確定）</span>' : ''}
+                <span class="nav-bar-meta">${metaText}</span>
+                ${okText ? `<span class="nav-bar-ok">${okText}</span>` : ''}
+                ${holdText ? `<span class="nav-bar-ok" style="color:var(--color-moderate)">${holdText}</span>` : ''}
                 ${issueHtml}
                 ${navDecBtns}`;
             const resultsEl = $('results');
@@ -3628,6 +3685,7 @@
             } finally {
                 scanInProgress = false;
                 renderTimeoutRetryPanel();
+                refreshScoreTable();
                 btn.classList.remove('loading');
                 btn.disabled = false;
             }
@@ -3983,6 +4041,7 @@
                 if (runMobile && mobileSnapshot) {
                     renderAllTabs('sp', mobileSnapshot.basic, mobileSnapshot.deep || null, mobileSnapshot.multi || {}, mobileSnapshot.play || null, mobileSnapshot.ext || null);
                 }
+                renderNavBar();
                 renderImprovementPlanPanel();
                 $('results').classList.add('visible');
                 $('exportArea').classList.add('visible');
@@ -3993,6 +4052,7 @@
             } finally {
                 scanInProgress = false;
                 renderTimeoutRetryPanel();
+                refreshScoreTable();
                 btn.classList.remove('loading');
                 btn.disabled = false;
                 // 完了後2秒でプログレス非表示
@@ -4952,7 +5012,7 @@
 
             // 3.2.3/3.2.4 は navConsistencyBar 専用SC — 詳細カードでは操作不可
             const isNavSc = sc === '3.2.3' || sc === '3.2.4';
-            const navDecRaw = isNavSc ? (manualDecisions.get('BATCH:NAV_CONSISTENCY:SC:3.2.3') || null) : null;
+            const navDecRaw = isNavSc ? (manualDecisions.get(dkey) || manualDecisions.get(NAV_CONSISTENCY_DECISION_KEYS[0]) || null) : null;
             const dec = isNavSc ? navDecRaw : (dkey ? manualDecisions.get(dkey) : null);
 
             const decisionClass = dec === 'ok' ? 'item-card-dec-ok' : dec === 'ng' ? 'item-card-dec-ng' : dec === 'hold' ? 'item-card-dec-hold' : '';
@@ -5037,17 +5097,25 @@
                 } else if (type === 'nav') {
                     const compared = data.comparedUrls || [];
                     const issues = data.issues || [];
-                    summary = status === 'pass'
+                    summary = data.singleManual
+                        ? (data.message || '単一スキャンではページ間比較ができないため、ヒューマンチェックで判定してください')
+                        : status === 'pass'
                         ? '全ページでナビゲーション構造が一致しています'
                         : (issues[0]?.message || data.message || 'ナビゲーション構造に差分があります');
-                    countText = compared.length ? `比較URL：${compared.length}件` : '';
+                    countText = data.singleManual
+                        ? (compared[0] ? `対象URL：${compared[0]}` : '単一スキャン')
+                        : compared.length ? `比較URL：${compared.length}件` : '';
                     const issueRows = issues.flatMap(iss => [
                         iss.message || '',
                         iss.urls?.length ? `対象URL: ${iss.urls.join(' ↔ ')}` : '',
                         iss.missing?.length ? `消えたリンク: ${iss.missing.join(', ')}` : '',
                         iss.added?.length ? `追加リンク: ${iss.added.join(', ')}` : ''
                     ]).filter(Boolean);
-                    locs = (issueRows.length ? issueRows : compared.map(u => `比較URL: ${u}`)).slice(0, 8);
+                    const fallbackRows = data.singleManual
+                        ? compared.map(u => `対象URL: ${u}`)
+                        : compared.map(u => `比較URL: ${u}`);
+                    locs = (issueRows.length ? issueRows : fallbackRows).slice(0, 8);
+                    if (data.singleManual) toolLabel = 'ヒューマンチェック';
                 }
                 return {
                     statusTone: status === 'fail' ? 'fail'
@@ -5148,7 +5216,7 @@
             const lim   = lo[targetLevel] || 2;
             const decisionScope = getDecisionScope(basic, suffix);
             const effectiveNavConsistency = navConsistency === undefined
-                ? (currentMode === 'batch' ? batchNavConsistency : null)
+                ? getActiveNavConsistency(basic, suffix)
                 : navConsistency;
 
             // decisionを適用してバケットを決定するヘルパー
@@ -5387,7 +5455,7 @@
             const extData     = state.extResults   !== undefined ? state.extResults   : (extEnabled ? lastExtResults : null);
             const navConsistency = state.navConsistency !== undefined
                 ? state.navConsistency
-                : (currentMode === 'batch' ? batchNavConsistency : null);
+                : getActiveNavConsistency(basicResults, viewScope);
             const decisionScope = options.decisionScope || getDecisionScope(basicResults, scoreBodyId === 'scanScoreBodyMobile' ? 'sp' : 'pc');
             const multiBlockingIssue = isBlockingMultiIssue(multiIssue) ? multiIssue : null;
 
@@ -5522,7 +5590,8 @@
             const targetLevelNum = levelOrder[targetLevel] || 2;
             const autoPassRefs = getAutoDetectedPassRefs(basicResults);
             // navConsistency が pass 済みなら 3.2.3 / 3.2.4 を AI 評価対象から除外
-            if (navConsistency?.result === 'pass') {
+            const navDecision = manualDecisions.get(NAV_CONSISTENCY_DECISION_KEYS[0]) || null;
+            if (navConsistency?.result === 'pass' || navDecision === 'ok') {
                 autoPassRefs.add('3.2.3');
                 autoPassRefs.add('3.2.4');
             }
@@ -5592,7 +5661,7 @@
                     multi: sp.multi || {},
                     play: sp.play || null,
                     ext: sp.ext || null,
-                    navConsistency: null,
+                    navConsistency: getActiveNavConsistency(sp.basic, 'sp'),
                     syncPrimary: primaryIsMobileOnly
                 };
             }
@@ -5607,7 +5676,7 @@
                 multi: aiResults || {},
                 play: lastPlayResults || null,
                 ext: lastExtResults || null,
-                navConsistency: null,
+                navConsistency: getActiveNavConsistency(lastResults, 'pc'),
                 syncPrimary: true
             };
         }
@@ -6172,7 +6241,9 @@
                 if (type === 'nav') {
                     const compared = data.comparedUrls || [];
                     const issues = data.issues || [];
-                    info.detail = status === 'pass'
+                    info.detail = data.singleManual
+                        ? (data.message || '単一スキャンではページ間比較ができないため、ヒューマンチェックで判定してください')
+                        : status === 'pass'
                         ? '全ページでナビゲーション構造が一致しています'
                         : (issues[0]?.message || data.message || 'ナビゲーション構造に差分があります');
                     info.locations = (issues.flatMap(iss => [
@@ -6185,9 +6256,10 @@
                             iss.missing?.length ? `消えたリンク: ${iss.missing.join(', ')}` : '',
                             iss.added?.length ? `追加リンク: ${iss.added.join(', ')}` : ''
                         ]).filter(Boolean)
-                        : compared.map(u => `比較URL: ${u}`))
+                        : compared.map(u => `${data.singleManual ? '対象URL' : '比較URL'}: ${u}`))
                         .slice(0, 8);
                     info.count = issues.length ? String(issues.length) : '';
+                    if (data.singleManual) info.source = 'MANUAL';
                     return info;
                 }
                 if (src === 'MANUAL') {
@@ -6280,14 +6352,13 @@
             try {
                 const baseUrl = lastResults.url;
                 const timestamp = lastResults.timestamp || new Date().toISOString();
-                // シングルページモードでは navConsistency は使用しない（UI スコアと一致させるため）
-                const pcRows = buildReportRows(lastResults, baseUrl, aiResults, lastEnhancedResults, null, lastPlayResults, lastExtResults, lastImprovementPlan, 'PC VIEW');
+                const pcRows = buildReportRows(lastResults, baseUrl, aiResults, lastEnhancedResults, getActiveNavConsistency(lastResults, 'pc'), lastPlayResults, lastExtResults, lastImprovementPlan, 'PC VIEW');
                 const pageDataList = [{ url: baseUrl, rows: pcRows }];
                 const pageSheetsData = [{ url: baseUrl, sheetRows: buildSampleSheetData(pcRows, baseUrl).sheetRows, timestamp }];
 
                 if (lastMobileScanSnapshot) {
                     const sp = lastMobileScanSnapshot;
-                    const spRows = buildReportRows(sp.basic, baseUrl, sp.multi || {}, sp.deep || null, null, sp.play || null, sp.ext || null, sp.improvementPlan || null, 'SP VIEW');
+                    const spRows = buildReportRows(sp.basic, baseUrl, sp.multi || {}, sp.deep || null, getActiveNavConsistency(sp.basic, 'sp'), sp.play || null, sp.ext || null, sp.improvementPlan || null, 'SP VIEW');
                     pageDataList.push({ url: baseUrl + ' (SP)', rows: spRows });
                     pageSheetsData.push({ url: baseUrl + ' (SP)', sheetRows: buildSampleSheetData(spRows, baseUrl).sheetRows, timestamp });
                 }

@@ -867,6 +867,199 @@ async function detectPageSignals(page) {
   }
 }
 
+async function getImageLinkAffordanceCandidates(page, limit = 20) {
+  try {
+    return await page.evaluate((maxItems) => {
+      const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+      const escapeCss = (value) => {
+        if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(String(value));
+        return String(value).replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+      };
+      const isHiddenByStyle = (el) => {
+        if (!el || el.nodeType !== 1) return true;
+        const style = getComputedStyle(el);
+        return style.display === 'none' ||
+          style.visibility === 'hidden' ||
+          Number(style.opacity) === 0 ||
+          el.hidden ||
+          el.getAttribute('aria-hidden') === 'true';
+      };
+      const isVisibleElement = (el, minWidth = 2, minHeight = 2) => {
+        if (isHiddenByStyle(el)) return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width >= minWidth && rect.height >= minHeight;
+      };
+      const isVisibleTextNode = (node) => {
+        const text = normalizeText(node.textContent);
+        if (!text) return false;
+        const parent = node.parentElement;
+        if (!parent || isHiddenByStyle(parent)) return false;
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const rect = range.getBoundingClientRect();
+        if (typeof range.detach === 'function') range.detach();
+        return rect.width >= 2 && rect.height >= 2;
+      };
+      const getVisibleText = (el) => {
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        const parts = [];
+        while (walker.nextNode()) {
+          if (isVisibleTextNode(walker.currentNode)) {
+            parts.push(normalizeText(walker.currentNode.textContent));
+          }
+        }
+        return normalizeText(parts.join(' '));
+      };
+      const colorHasVisibleAlpha = (color) => {
+        if (!color || color === 'transparent') return false;
+        const m = color.match(/rgba?\(([^)]+)\)/i);
+        if (!m) return true;
+        const parts = m[1].split(',').map(part => part.trim());
+        return parts.length < 4 || Number(parts[3]) > 0.05;
+      };
+      const hasFrameCue = (el) => {
+        if (!el || el === document.body || el === document.documentElement) return false;
+        const style = getComputedStyle(el);
+        const hasBorder = ['Top', 'Right', 'Bottom', 'Left'].some(side => {
+          const width = parseFloat(style[`border${side}Width`] || '0');
+          const borderStyle = style[`border${side}Style`];
+          return width >= 1 && borderStyle && borderStyle !== 'none' && borderStyle !== 'hidden';
+        });
+        const hasOutline = parseFloat(style.outlineWidth || '0') >= 1 &&
+          style.outlineStyle && style.outlineStyle !== 'none' && style.outlineStyle !== 'hidden';
+        const hasShadow = !!(style.boxShadow && style.boxShadow !== 'none') ||
+          !!(style.filter && /drop-shadow/i.test(style.filter));
+        const hasBackground = colorHasVisibleAlpha(style.backgroundColor);
+        return hasBorder || hasOutline || hasShadow || hasBackground;
+      };
+      const cssPath = (el) => {
+        const parts = [];
+        let current = el;
+        while (current && current.nodeType === 1 && current !== document.body && parts.length < 5) {
+          let part = current.tagName.toLowerCase();
+          if (current.id) {
+            part += `#${escapeCss(current.id)}`;
+            parts.unshift(part);
+            break;
+          }
+          const className = normalizeText(current.className).split(' ').filter(Boolean)[0];
+          if (className) part += `.${escapeCss(className)}`;
+          const parent = current.parentElement;
+          if (parent) {
+            const siblings = Array.from(parent.children).filter(child => child.tagName === current.tagName);
+            if (siblings.length > 1) part += `:nth-of-type(${siblings.indexOf(current) + 1})`;
+          }
+          parts.unshift(part);
+          current = parent;
+        }
+        return parts.join(' > ');
+      };
+      const getImageAlt = (link) => {
+        const img = link.querySelector('img');
+        if (img) return img.getAttribute('alt');
+        const roleImg = link.querySelector('[role="img"]');
+        if (roleImg) return roleImg.getAttribute('aria-label') || roleImg.getAttribute('title');
+        const svg = link.querySelector('svg');
+        if (svg) {
+          const title = svg.querySelector('title');
+          return title ? title.textContent : (svg.getAttribute('aria-label') || null);
+        }
+        return null;
+      };
+      const hasAdjacentVisibleLabel = (link) => {
+        const parent = link.parentElement;
+        if (!parent || parent === document.body || parent === document.documentElement) return false;
+        const parentRect = parent.getBoundingClientRect();
+        const linkRect = link.getBoundingClientRect();
+        const visual = link.querySelector('img, svg, canvas, [role="img"]');
+        const visualRect = visual ? visual.getBoundingClientRect() : { width: 0, height: 0 };
+        const effectiveWidth = Math.max(linkRect.width, visualRect.width);
+        const effectiveHeight = Math.max(linkRect.height, visualRect.height);
+        if (parentRect.width > effectiveWidth * 2 || parentRect.height > effectiveHeight * 2.5) return false;
+        const parentText = getVisibleText(parent);
+        const linkText = getVisibleText(link);
+        return parentText && parentText !== linkText && parentText.replace(linkText, '').trim().length >= 2;
+      };
+      const candidates = [];
+      const links = Array.from(document.querySelectorAll('a[href]'));
+      for (const link of links) {
+        if (candidates.length >= maxItems) break;
+        if (isHiddenByStyle(link)) continue;
+
+        const href = normalizeText(link.getAttribute('href'));
+        if (!href || href.startsWith('#') || href.startsWith('javascript:')) continue;
+
+        const rect = link.getBoundingClientRect();
+        const images = Array.from(link.querySelectorAll('img, picture img, svg, canvas, [role="img"]'))
+          .filter(el => isVisibleElement(el, 8, 8));
+        const linkStyle = getComputedStyle(link);
+        const hasBackgroundImage = !!(linkStyle.backgroundImage && linkStyle.backgroundImage !== 'none');
+        if (!images.length && !hasBackgroundImage) continue;
+
+        const imageBounds = images.reduce((acc, img) => {
+          const imgRect = img.getBoundingClientRect();
+          return {
+            width: Math.max(acc.width, imgRect.width),
+            height: Math.max(acc.height, imgRect.height)
+          };
+        }, { width: 0, height: 0 });
+        const effectiveWidth = Math.max(rect.width, imageBounds.width);
+        const effectiveHeight = Math.max(rect.height, imageBounds.height);
+        if (effectiveWidth < 24 || effectiveHeight < 24) continue;
+
+        const visibleText = getVisibleText(link);
+        if (visibleText.length >= 2) continue;
+
+        const imageArea = images.reduce((sum, img) => {
+          const imgRect = img.getBoundingClientRect();
+          return sum + Math.max(0, imgRect.width) * Math.max(0, imgRect.height);
+        }, 0);
+        const linkArea = Math.max(1, effectiveWidth * effectiveHeight);
+        const imageDominant = hasBackgroundImage || imageArea / linkArea >= 0.45;
+        if (!imageDominant) continue;
+
+        const parent = link.closest('figure, article, li, div, section');
+        const parentRect = parent ? parent.getBoundingClientRect() : null;
+        const parentFramesLink = !!(parent && parentRect &&
+          parentRect.width <= rect.width * 1.35 &&
+          parentRect.height <= rect.height * 1.8 &&
+          hasFrameCue(parent));
+        if (hasFrameCue(link) || parentFramesLink || hasAdjacentVisibleLabel(link)) continue;
+
+        const alt = getImageAlt(link);
+        const accessibleName = normalizeText([
+          link.getAttribute('aria-label'),
+          link.getAttribute('title'),
+          alt
+        ].filter(Boolean).join(' '));
+        const identityText = normalizeText([
+          accessibleName,
+          link.getAttribute('id'),
+          link.getAttribute('class')
+        ].join(' '));
+        const inHeaderNav = !!link.closest('header, nav, [role="banner"], [role="navigation"]');
+        const isHomeishHref = /^(\/|\.\/|#|https?:\/\/[^/?#]+\/?(?:[?#].*)?)$/i.test(href);
+        if (inHeaderNav && isHomeishHref && /(logo|ロゴ|brand|ブランド|home|ホーム|トップ)/i.test(identityText)) {
+          continue;
+        }
+
+        candidates.push({
+          selector: cssPath(link),
+          href: href.slice(0, 160),
+          accessibleName: accessibleName || null,
+          imageAlt: alt,
+          size: `${Math.round(effectiveWidth)}x${Math.round(effectiveHeight)}`,
+          reason: '画像のみのリンクで、通常時にリンク・ボタン・カードとして分かる枠線、背景、影、下線、可視ラベルが弱い可能性があります。',
+          snippet: normalizeText(link.outerHTML).slice(0, 180)
+        });
+      }
+      return candidates;
+    }, limit);
+  } catch (error) {
+    return [];
+  }
+}
+
 function getWcagTagsForLevel(level) {
   const tags = ['wcag2a', 'wcag21a', 'wcag22a'];
   if (level === 'AA' || level === 'AAA') {
@@ -4545,7 +4738,7 @@ function getMultiVerificationMethodForAI(item) {
     '1.3.3': 'DEEP結果に感覚依存らしい指示文候補があればそれを優先確認しつつ、「右の」「左の」「上の」「丸い」「赤い」「音が鳴ったら」など、位置・形・色・音だけで操作を指示する文言を探す。テキスト名やラベルも併記されていればpass、感覚的特徴だけならfail。',
     '1.4.1': 'DEEP結果で本文リンク識別とナビゲーション current/selected の視覚差分を先に確認し、その上で色語・凡例・必須/エラー/成功表示・操作指示の意味依存を確認する。「赤いボタン」「緑が完了」等、色だけで情報や操作を伝える場合はfail。文字・アイコン・形状・ラベルも併用されていればpass。証拠不足ならmanual_required。',
     '1.4.5': 'スクリーンショットとimg/背景画像から、本文や操作説明が画像化されていないか確認する。ロゴ等の例外を除き、読ませる目的の文字画像があればfail。画像内文字の有無が不確実ならmanual_required。',
-    '2.4.4': 'リンクテキストと直近の見出し・段落・aria-label/titleを見て目的が分かるか確認する。「こちら」「詳細」「click here」等が文脈なしで並ぶ場合はfail。【画像のみのリンク】inLink=trueのimgがある場合、そのaltがリンク先を説明しているか確認する。alt="Image2"・alt="Image4"・alt="img01"等のファイル名パターン（汎用語＋数字）はリンク目的を説明せずfail（SC 2.4.4違反）。alt=""または属性なしの画像のみのリンクもfail。DEEPまたはBASICで画像リンクのalt問題が検出されていればそれを証拠として使用する。リンクが無ければnot_applicable。',
+    '2.4.4': 'リンクテキストと直近の見出し・段落・aria-label/titleを見て目的が分かるか確認する。「こちら」「詳細」「click here」等が文脈なしで並ぶ場合はfail。【画像のみのリンク】inLink=trueのimgがある場合、そのaltがリンク先を説明しているか確認する。alt="Image2"・alt="Image4"・alt="img01"等のファイル名パターン（汎用語＋数字）はリンク目的を説明せずfail（SC 2.4.4違反）。alt=""または属性なしの画像のみのリンクもfail。DEEPまたはBASICで画像リンクのalt問題が検出されていればそれを証拠として使用する。【画像リンクのクリック可能性】「画像リンクのクリック可能性候補」またはEXT_NATIVEの同名結果は、自動違反ではなくヒューマンチェック候補として扱う。スクリーンショット/HTMLで通常時に可視ラベル、下線、枠線、背景、影、ボタン/カード表現などの視覚的手がかりが確認できればpass。確認できない場合はmanual_requiredにし、候補のselectorと「可視ラベル、下線、枠線、ボタン風スタイル等を追加してクリック可能性を示す」改善案を書く。リンクが無ければnot_applicable。',
     '2.4.5': '検索、サイトマップ、グローバルナビ、パンくず、関連リンクなど、ページへ到達する複数手段の証拠を探す。単一ページ証拠ではサイト全体を確認できない場合はmanual_required。',
     '3.2.3': '複数ページ比較またはツール結果がある場合だけ、ナビゲーション順序・構成の一貫性を判定する。単一ページだけではmanual_required。明確な比較結果があればそれを尊重する。',
     '3.2.4': '同じ機能を持つコンポーネントの名称・ラベル・アイコンが一貫しているか、ツール結果や画面上の繰り返し要素で確認する。サイト横断確認が必要ならmanual_required。',
@@ -4645,6 +4838,7 @@ app.post('/api/ai-evaluate', async (req, res) => {
       }
     }
     if (!loaded) throw new Error('ページの読み込みに失敗しました');
+    const targetScSet = new Set(safeCheckItems.map(item => item.ref).filter(Boolean));
     
     // 少し待機
     await new Promise(r => setTimeout(r, 2000));
@@ -4681,9 +4875,11 @@ app.post('/api/ai-evaluate', async (req, res) => {
         };
       });
     });
+    const imageLinkAffordanceList = targetScSet.has('2.4.4')
+      ? await getImageLinkAffordanceCandidates(page, 20)
+      : [];
 
     await page.close();
-    const targetScSet = new Set(safeCheckItems.map(item => item.ref).filter(Boolean));
     const toolResults = buildToolResultsForAI({ basicResults, extResults, deepResults, playResults, targetScSet });
     const toolResultCounts = toolResultCountsForAI(toolResults);
     _lastAiDebug = {
@@ -4786,6 +4982,7 @@ ${JSON.stringify(toolResults)}
 ## HTML（抜粋）
 ${shortHtml}
 ${targetScSet.has('1.1.1') ? `\n## 画像リスト（alt評価用、最大20件）\n${JSON.stringify(imgAltList)}\n` : ''}
+${targetScSet.has('2.4.4') ? `\n## 画像リンクのクリック可能性候補（最大20件）\n${JSON.stringify(imageLinkAffordanceList)}\n` : ''}
 ## 検証方法ガイド（wcag番号→判定手順）
 ${JSON.stringify(methodGuide)}
 
@@ -6649,6 +6846,30 @@ async function ext_check_2_1_1_scrollable(page) {
   }
 }
 
+/** EXT: SC 2.4.4 - 画像リンクのクリック可能性（ヒューマンチェック候補） */
+async function ext_check_2_4_4_image_link_affordance(page) {
+  try {
+    const candidates = await getImageLinkAffordanceCandidates(page, 20);
+    const violations = candidates.map(item => {
+      const name = item.accessibleName ? `name="${item.accessibleName}"` : 'name未確認';
+      const alt = item.imageAlt === null ? 'altなし/対象外' : `alt="${item.imageAlt}"`;
+      return `${item.selector} (${item.size}, ${name}, ${alt}, href="${item.href}") - ${item.reason}`;
+    });
+    return {
+      source: 'EXT_NATIVE',
+      sc: '2.4.4',
+      status: violations.length === 0 ? 'pass' : 'manual_required',
+      violations: violations.slice(0, 20),
+      message: violations.length === 0
+        ? '画像のみのリンクでクリック可能性の視覚的手がかりが弱い候補は検出されませんでした'
+        : `${violations.length}件の画像リンクでクリック可能性の手動確認が必要です`,
+      name: 'SC 2.4.4: 画像リンクのクリック可能性'
+    };
+  } catch (e) {
+    return { source: 'EXT_NATIVE', sc: '2.4.4', status: 'error', violations: [], message: e.message };
+  }
+}
+
 /** EXT: SC 2.4.6 - 見出し階層順序（Lighthouse相当） */
 async function ext_check_2_4_6_heading_order(page) {
   try {
@@ -6802,6 +7023,7 @@ app.post('/api/ext-check', async (req, res) => {
     results.push(await withTimeout(() => ext_check_4_1_1_dup_id(page)));
     results.push(await withTimeout(() => ext_check_2_4_1_landmarks(page)));
     results.push(await withTimeout(() => ext_check_2_1_1_scrollable(page)));
+    results.push(await withTimeout(() => ext_check_2_4_4_image_link_affordance(page)));
     results.push(await withTimeout(() => ext_check_2_4_6_heading_order(page)));
 
     // CDP拡張検査
