@@ -3697,7 +3697,7 @@ async function check_1_4_1_use_of_color(page) {
 async function check_1_4_3_text_contrast(page) {
   try {
     const result = await page.evaluate(() => {
-      const SR_ONLY_RE = /\b(sr-only|screen-reader(-text)?|visually-hidden|visually_hidden|assistive-text|offscreen|hidden-text)\b/i;
+      const SR_ONLY_RE = /(^|[\s_-])(sr-only|screen-reader|screenreader|screen-reader-text|visually-hidden|visuallyhidden|visually_hidden|hidden-visually|u-hidden-visually|a11y-hidden|assistive-text|accessible-hidden|reader-only|offscreen|hidden-text)([\s_-]|$)/i;
       function parseCssColor(c) {
         if (!c || c === 'transparent') return null;
         const m = c.match(/rgba?\((\d+\.?\d*),\s*(\d+\.?\d*),\s*(\d+\.?\d*)(?:,\s*([\d.]+))?\s*\)/i);
@@ -3724,22 +3724,61 @@ async function check_1_4_3_text_contrast(page) {
         }
         return [255, 255, 255];
       }
-      function isSrOnly(el) {
-        if (SR_ONLY_RE.test(el.className || '') || SR_ONLY_RE.test(el.id || '')) return true;
-        const r = el.getBoundingClientRect();
-        return r.width <= 1 && r.height <= 1;
-      }
       function isLargeText(style) {
         const fs = parseFloat(style.fontSize) || 16;
         const fw = style.fontWeight === 'bold' ? 700 : (parseInt(style.fontWeight, 10) || 400);
         return fs >= 24 || (fs >= 18.67 && fw >= 700);
+      }
+      function hasSrOnlyMarker(el) {
+        const marker = [
+          el.id,
+          el.getAttribute('class'),
+          el.getAttribute('data-testid'),
+          el.getAttribute('data-test')
+        ].filter(Boolean).join(' ');
+        return SR_ONLY_RE.test(marker);
+      }
+      function isVisuallyHiddenByCss(el, style = getComputedStyle(el)) {
+        const rect = el.getBoundingClientRect();
+        const tiny = rect.width <= 1 && rect.height <= 1;
+        const clipped = style.clip !== 'auto'
+          || (style.clipPath && style.clipPath !== 'none')
+          || /rect\(|inset\(/i.test(style.clip || style.clipPath || '');
+        const offscreen = Math.abs(parseFloat(style.left) || 0) > 999 || Math.abs(parseFloat(style.top) || 0) > 999;
+        return tiny && (style.overflow === 'hidden' || clipped || offscreen || style.position === 'absolute' || style.position === 'fixed');
+      }
+      function isIgnoredContrastElement(el) {
+        for (let current = el; current && current !== document.body && current.nodeType === Node.ELEMENT_NODE; current = current.parentElement) {
+          if (current.getAttribute('aria-hidden') === 'true' || current.hasAttribute('hidden') || current.hasAttribute('inert')) return true;
+          if (hasSrOnlyMarker(current)) return true;
+          const style = getComputedStyle(current);
+          if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse' || parseFloat(style.opacity) < 0.1) return true;
+          if (isVisuallyHiddenByCss(current, style)) return true;
+        }
+        return false;
+      }
+      function visibleTextForDesc(el, maxLength = 30) {
+        const parts = [];
+        function walk(node) {
+          if (parts.join(' ').length >= maxLength) return;
+          if (node.nodeType === Node.TEXT_NODE) {
+            const text = String(node.textContent || '').replace(/\s+/g, ' ').trim();
+            if (text) parts.push(text);
+            return;
+          }
+          if (node.nodeType !== Node.ELEMENT_NODE) return;
+          if (node !== el && isIgnoredContrastElement(node)) return;
+          Array.from(node.childNodes).forEach(walk);
+        }
+        walk(el);
+        return parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, maxLength);
       }
       function desc(el) {
         const tag = el.tagName.toLowerCase();
         const id  = el.id ? `#${el.id}` : '';
         const cls = typeof el.className === 'string' && el.className
           ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
-        const txt = String(el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 30);
+        const txt = visibleTextForDesc(el);
         return `${tag}${id || cls}${txt ? ` "${txt}"` : ''}`.slice(0, 100);
       }
 
@@ -3759,7 +3798,7 @@ async function check_1_4_3_text_contrast(page) {
         if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) < 0.1) continue;
         const rect = el.getBoundingClientRect();
         if (rect.width < 1 || rect.height < 1) continue;
-        if (isSrOnly(el)) continue;
+        if (isIgnoredContrastElement(el)) continue;
         const fg = parseCssColor(style.color);
         if (!fg) continue;
         const bg = resolveBg(el);
@@ -4235,58 +4274,74 @@ async function check_3_3_7_redundant_entry(page) {
     const result = await page.evaluate(() => {
       // マルチステップのパターンを検出
       const stepIndicators = document.querySelectorAll('[class*="step" i], [class*="wizard" i], [class*="progress" i], [aria-current="step"]');
-      const forms = document.querySelectorAll('form');
-      const issues = [];
+      const forms = Array.from(document.querySelectorAll('form'));
+      const checkItems = [];
 
       if (stepIndicators.length > 0) {
         // マルチステップ確認
-        issues.push(`マルチステップUIを検出(${stepIndicators.length}個の要素): 前ステップの入力値が再要求されていないか手動確認が必要`);
+        checkItems.push(`マルチステップUIを検出(${stepIndicators.length}個の要素): 前ステップの入力値が再要求されていないか手動確認が必要`);
       }
       if (forms.length > 1) {
-        // 同一ページに複数フォーム: 同じフィールドが重複してないか
-        const allInputNames = [];
-        const duplicates = [];
-        for (const form of forms) {
-          for (const inp of form.querySelectorAll('input[name]:not([type="hidden"]):not([type="submit"])')) {
-            const n = inp.name;
-            if (allInputNames.includes(n)) {
-              if (!duplicates.includes(n)) duplicates.push(n);
-            } else {
-              allInputNames.push(n);
-            }
+        // 同一ページに複数フォームがある場合のみ、自由入力系の同名フィールドを確認候補にする。
+        // checkbox/radio の同一 name や name[] は通常の選択肢グループなので冗長入力扱いしない。
+        const fieldMap = new Map();
+        const isChoiceType = type => ['checkbox', 'radio'].includes(type);
+        const isIgnoredControl = el => {
+          const tag = el.tagName.toLowerCase();
+          const type = (el.type || tag).toLowerCase();
+          if (el.disabled || el.readOnly) return true;
+          if (['hidden', 'submit', 'button', 'reset', 'image', 'file'].includes(type)) return true;
+          if (isChoiceType(type)) return true;
+          if (/\[\]$/.test(el.name || '')) return true;
+          return false;
+        };
+        forms.forEach((form, formIndex) => {
+          for (const field of form.querySelectorAll('input[name], textarea[name], select[name]')) {
+            if (isIgnoredControl(field)) continue;
+            const name = String(field.name || '').trim();
+            if (!name) continue;
+            const type = field.tagName.toLowerCase() === 'select' ? 'select' : (field.type || field.tagName).toLowerCase();
+            const key = `${name}::${type}`;
+            if (!fieldMap.has(key)) fieldMap.set(key, { name, type, formIndexes: new Set() });
+            fieldMap.get(key).formIndexes.add(formIndex);
           }
-        }
+        });
+        const duplicates = Array.from(fieldMap.values())
+          .filter(item => item.formIndexes.size > 1)
+          .map(item => item.name);
         if (duplicates.length > 0) {
-          issues.push(`複数フォームで同名フィールドが重複: ${duplicates.slice(0, 5).join(', ')} — 冗長な入力の可能性`);
+          checkItems.push(`複数フォームで自由入力系の同名フィールドを検出: ${duplicates.slice(0, 5).join(', ')} — 同一プロセス内の再入力か手動確認が必要`);
         }
       }
 
       // autocomplete で前入力値を再利用しているか
-      const requiredInputs = document.querySelectorAll('input[required]:not([type="hidden"]):not([type="submit"])');
+      const requiredInputs = document.querySelectorAll('input[required]:not([type="hidden"]):not([type="submit"]):not([type="checkbox"]):not([type="radio"])');
       let noAutocomplete = 0;
       for (const inp of requiredInputs) {
         const ac = inp.getAttribute('autocomplete');
         if (!ac || ac === 'off') noAutocomplete++;
       }
       if (noAutocomplete > 2 && stepIndicators.length > 0) {
-        issues.push(`必須フィールド${noAutocomplete}個でautocompleteなし: マルチステップでの再入力を強いている可能性`);
+        checkItems.push(`必須フィールド${noAutocomplete}個でautocompleteなし: マルチステップで再入力を強いていないか手動確認が必要`);
       }
 
-      return { issues, hasMultiStep: stepIndicators.length > 0, formCount: forms.length };
+      return { checkItems, hasMultiStep: stepIndicators.length > 0, formCount: forms.length };
     });
 
-    if (result.issues.length === 0 && !result.hasMultiStep) {
-      return { sc: '3.3.7', name: '冗長な入力', status: 'pass', message: 'マルチステップフォームは検出されませんでした', violations: [] };
+    if (result.checkItems.length === 0) {
+      return {
+        sc: '3.3.7',
+        name: '冗長な入力',
+        status: 'pass',
+        message: '冗長な再入力を示す強いシグナルは検出されませんでした',
+        violations: []
+      };
     }
     return {
       sc: '3.3.7', name: '冗長な入力',
-      // マルチステップ UI がある場合のみ同名フィールド重複を fail とする
-      // step indicator なし = 独立したフォームの共存（ログイン + 問い合わせ等）であり 3.3.7 対象外
-      status: (result.issues.some(i => i.includes('重複')) && result.hasMultiStep) ? 'fail' : 'manual_required',
-      message: result.issues.length === 0
-        ? 'マルチステップUI検出 — 手動確認を推奨'
-        : `${result.issues.length}件の問題を検出`,
-      violations: result.issues
+      status: 'manual_required',
+      message: `${result.checkItems.length}件の冗長入力チェック候補を検出（自動不合格にはしません）`,
+      violations: result.checkItems
     };
   } catch (e) {
     return { sc: '3.3.7', name: '冗長な入力', status: 'error', message: e.message, violations: [] };
@@ -4844,7 +4899,7 @@ function getMultiVerificationMethodForAI(item) {
     '3.3.1': 'フォーム送信前後の可視エラー、aria-invalid、role="alert"、エラー文言、入力項目との関連付けを確認する。フォームが無ければnot_applicable。安全に送信できずエラー状態を作れない場合はmanual_required。',
     '3.3.3': '入力エラーに対して修正提案が具体的に出るか確認する。例、形式、必須理由、許容値などがあればpass。フォームはあるがエラー状態を確認できない場合はmanual_required。',
     '3.3.4': '法律・金融・データ変更・試験等の重要送信フォームか確認し、取消・確認・修正ステップの証拠を探す。該当フォームが無ければnot_applicable。送信フロー確認が必要ならmanual_required。',
-    '3.3.7': '同じ情報の再入力を求めるフォームや複数ステップの重複入力を探す。autocompleteや前入力の再利用が見える場合はpass。ページ単体でフローを追えない場合はmanual_required。',
+    '3.3.7': '同じ情報の再入力を求めるフォームや複数ステップの重複入力を探す。checkbox/radio の同一 name、name[] の配列フィールド、同一フォーム内の選択肢グループ、独立した複数フォームの同名項目は、それだけでは冗長入力ではないためfailにしない。DEEPのmanual_required候補だけで不合格にせず、同一プロセス内で同じ自由入力を再入力させている証拠がある場合のみfail。autocompleteや前入力の再利用が見える場合はpass。ページ単体でフローを追えない場合はmanual_required。',
     '3.3.8': 'ログイン/認証フォームに、記憶テスト・CAPTCHA・パズル等の認知機能テストがあるか確認する。代替手段が無ければfail。認証UIが無ければnot_applicable。'
   };
   return methods[ref] || 'HTML、スクリーンショット、各自動スキャン結果から判断できる証拠だけで判定する。証拠不足ならmanual_requiredにする。';
@@ -6438,42 +6493,144 @@ async function pw_check_1_3_5_input_purpose(page) {
   }
 }
 
-/** SC 3.3.2 - ラベルまたは説明（フォーム入力） */
+/** SC 3.3.2 - ラベルまたは説明（フォーム入力・必須表示） */
 async function pw_check_3_3_2_labels(page) {
   try {
-    const issues = await page.evaluate(() => {
+    const result = await page.evaluate(() => {
+      const REQUIRED_WORD_RE = /(必須|要入力|required|mandatory)/i;
+      const REQUIRED_MARK_RE = /[*＊]/;
+      const ALL_REQUIRED_RE = /(すべて|全て|全項目|全フィールド|all)\s*(の)?\s*(項目|フィールド|入力欄|fields?)?.{0,24}(必須|required|mandatory)|(必須|required|mandatory).{0,24}(すべて|全て|全項目|全フィールド|all)/i;
+      const cssEscape = window.CSS && typeof window.CSS.escape === 'function'
+        ? window.CSS.escape.bind(window.CSS)
+        : value => String(value).replace(/["\\]/g, '\\$&');
+      const snap = el => {
+        const h = el.outerHTML.replace(/\s+/g, ' ').trim();
+        return h.length > 120 ? h.slice(0, 117) + '...' : h;
+      };
+      function isVisible(el) {
+        if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
+        for (let node = el; node && node.nodeType === Node.ELEMENT_NODE; node = node.parentElement) {
+          const s = getComputedStyle(node);
+          if (s.display === 'none' || s.visibility === 'hidden' || s.visibility === 'collapse') return false;
+          if (node.hasAttribute('hidden') || node.getAttribute('aria-hidden') === 'true') return false;
+        }
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 || rect.height > 0 || el.getClientRects().length > 0;
+      }
+      function pseudoText(el) {
+        if (!el || el.nodeType !== Node.ELEMENT_NODE) return '';
+        const parts = [];
+        ['::before', '::after'].forEach(pseudo => {
+          const raw = getComputedStyle(el, pseudo).content;
+          if (!raw || raw === 'none' || raw === 'normal' || /^url\(/i.test(raw)) return;
+          parts.push(raw.replace(/^["']|["']$/g, ''));
+        });
+        return parts.join(' ');
+      }
+      function visibleText(el) {
+        if (!el || el.nodeType !== Node.ELEMENT_NODE || !isVisible(el)) return '';
+        const own = (el.innerText || el.textContent || '').trim();
+        const title = (el.getAttribute('title') || '').trim();
+        const childPseudo = Array.from(el.querySelectorAll('*'))
+          .slice(0, 40)
+          .map(child => isVisible(child) ? pseudoText(child) : '')
+          .filter(Boolean)
+          .join(' ');
+        return `${own} ${title} ${pseudoText(el)} ${childPseudo}`.replace(/\s+/g, ' ').trim();
+      }
+      function labelElementsFor(el) {
+        const labels = [];
+        if ('labels' in el && el.labels) labels.push(...Array.from(el.labels));
+        if (el.id) {
+          const explicit = document.querySelector(`label[for="${cssEscape(el.id)}"]`);
+          if (explicit) labels.push(explicit);
+        }
+        const wrapped = el.closest('label');
+        if (wrapped) labels.push(wrapped);
+        return [...new Set(labels)];
+      }
+      function describedByText(el) {
+        const ids = (el.getAttribute('aria-describedby') || '')
+          .split(/\s+/)
+          .map(id => id.trim())
+          .filter(Boolean);
+        return ids.map(id => document.getElementById(id)).map(visibleText).filter(Boolean).join(' ');
+      }
+      function fieldContextText(el) {
+        const parts = [
+          ...labelElementsFor(el).map(visibleText),
+          describedByText(el),
+          el.getAttribute('placeholder') || '',
+          el.getAttribute('title') || ''
+        ];
+        const fieldset = el.closest('fieldset');
+        if (fieldset) {
+          const legend = fieldset.querySelector('legend');
+          if (legend) parts.push(visibleText(legend));
+        }
+        let node = el.parentElement;
+        let depth = 0;
+        while (node && node !== document.body && node.tagName !== 'FORM' && depth < 4) {
+          const controls = node.querySelectorAll('input:not([type="hidden"]), textarea, select').length;
+          const text = visibleText(node);
+          if (controls <= 3 && text.length <= 240) parts.push(text);
+          node = node.parentElement;
+          depth += 1;
+        }
+        return parts.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+      }
+      function formHasAllRequiredInstruction(el) {
+        const form = el.closest('form');
+        if (!form) return false;
+        const text = visibleText(form).slice(0, 2000);
+        return ALL_REQUIRED_RE.test(text);
+      }
+      function hasRequiredCue(el) {
+        const contextText = fieldContextText(el);
+        if (REQUIRED_WORD_RE.test(contextText) || REQUIRED_MARK_RE.test(contextText)) return true;
+        return formHasAllRequiredInstruction(el);
+      }
+      function controlLabel(el, type) {
+        const tag = el.tagName.toLowerCase();
+        const id = el.id ? `#${el.id}` : '';
+        const name = el.name ? `[name="${el.name}"]` : '';
+        return `${tag}${id}${name} (type="${type}")`;
+      }
       const inputs = Array.from(document.querySelectorAll('input, textarea, select')).filter(el => {
-        const s = getComputedStyle(el);
-        return s.display !== 'none' && s.visibility !== 'hidden' && !el.disabled;
+        return isVisible(el) && !el.disabled && !el.readOnly;
       });
       const unlabeled = [];
+      const missingRequiredIndicators = [];
       inputs.forEach(el => {
         const type = (el.type || 'text').toLowerCase();
         if (['hidden', 'submit', 'button', 'reset', 'image'].includes(type)) return;
-        const hasLabel = el.id && document.querySelector(`label[for="${el.id}"]`);
+        const hasLabel = labelElementsFor(el).length > 0;
         const hasAriaLabel = el.getAttribute('aria-label');
         const hasAriaLabelledBy = el.getAttribute('aria-labelledby');
         const hasTitle = el.getAttribute('title');
         const hasPlaceholder = el.getAttribute('placeholder');
-        const isWrapped = el.closest('label');
-        if (!hasLabel && !hasAriaLabel && !hasAriaLabelledBy && !hasTitle && !hasPlaceholder && !isWrapped) {
-          const tag = el.tagName.toLowerCase();
-          const id = el.id ? `#${el.id}` : '';
-          const name = el.name ? `[name="${el.name}"]` : '';
-          const h = el.outerHTML.replace(/\s+/g, ' ').trim();
-          const snippet = h.length > 120 ? h.slice(0, 117) + '...' : h;
-          unlabeled.push(`${tag}${id}${name} (type="${type}") にラベルなし | ${snippet}`);
+        const hasDescription = el.getAttribute('aria-describedby');
+        if (!hasLabel && !hasAriaLabel && !hasAriaLabelledBy && !hasTitle && !hasPlaceholder && !hasDescription) {
+          unlabeled.push(`${controlLabel(el, type)} にラベルなし | ${snap(el)}`);
+        }
+        const isRequired = el.required || (el.getAttribute('aria-required') || '').toLowerCase() === 'true';
+        if (isRequired && !hasRequiredCue(el)) {
+          missingRequiredIndicators.push(`${controlLabel(el, type)} に必須表示なし | ${snap(el)}`);
         }
       });
-      return unlabeled;
+      return { unlabeled, missingRequiredIndicators };
     });
+    const issues = [
+      ...result.unlabeled,
+      ...result.missingRequiredIndicators
+    ];
     return {
       sc: '3.3.2',
       status: issues.length === 0 ? 'pass' : 'fail',
       violations: issues.slice(0, 10),
       message: issues.length === 0
-        ? 'フォーム入力すべてにラベルまたは説明があります'
-        : `${issues.length}個の入力欄にラベルや説明がありません`
+        ? 'フォーム入力すべてにラベル・説明・必須表示があります'
+        : `${issues.length}個の入力欄にラベル、説明、または必須表示の不足があります`
     };
   } catch (e) {
     return { sc: '3.3.2', status: 'error', violations: [], message: e.message };

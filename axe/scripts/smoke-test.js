@@ -146,12 +146,66 @@ function checkContrastFallbackPolicy() {
   console.log('ok - contrast fallback policy');
 }
 
+function checkScreenReaderContrastPolicy() {
+  const server = readFileSync(join(root, 'server.js'), 'utf8');
+  const snippets = [
+    'function isIgnoredContrastElement(el)',
+    'function visibleTextForDesc(el',
+    "current.getAttribute('aria-hidden') === 'true'",
+    'hasSrOnlyMarker(current)',
+    'isIgnoredContrastElement(node)'
+  ];
+  snippets.forEach(snippet => {
+    if (!server.includes(snippet)) {
+      throw new Error(`Screen-reader contrast policy check failed: missing ${snippet}`);
+    }
+  });
+  console.log('ok - screen-reader contrast policy');
+}
+
+function checkRequiredIndicatorPolicy() {
+  const server = readFileSync(join(root, 'server.js'), 'utf8');
+  const snippets = [
+    'const REQUIRED_WORD_RE = /(必須|要入力|required|mandatory)/i;',
+    'const ALL_REQUIRED_RE =',
+    'function hasRequiredCue(el)',
+    'missingRequiredIndicators.push',
+    '必須表示なし'
+  ];
+  snippets.forEach(snippet => {
+    if (!server.includes(snippet)) {
+      throw new Error(`Required indicator policy check failed: missing ${snippet}`);
+    }
+  });
+  console.log('ok - required indicator policy');
+}
+
+function checkRedundantEntryPolicy() {
+  const server = readFileSync(join(root, 'server.js'), 'utf8');
+  const snippets = [
+    'checkbox/radio の同一 name や name[] は通常の選択肢グループ',
+    "if (isChoiceType(type)) return true;",
+    "if (/\\[\\]$/.test(el.name || '')) return true;",
+    "status: 'manual_required',",
+    'DEEPのmanual_required候補だけで不合格にせず'
+  ];
+  snippets.forEach(snippet => {
+    if (!server.includes(snippet)) {
+      throw new Error(`Redundant entry policy check failed: missing ${snippet}`);
+    }
+  });
+  console.log('ok - redundant entry policy');
+}
+
 function main() {
   runNodeCheck('server.js', join(root, 'server.js'));
   checkInlineScripts();
   checkScoreFormulaPolicy();
   checkApiAndRescanPolicy();
   checkContrastFallbackPolicy();
+  checkScreenReaderContrastPolicy();
+  checkRequiredIndicatorPolicy();
+  checkRedundantEntryPolicy();
   runNodeCheck('gas/ReportGenerator.gs', join(root, 'gas', 'ReportGenerator.gs'), readFileSync(join(root, 'gas', 'ReportGenerator.gs'), 'utf8'));
 }
 

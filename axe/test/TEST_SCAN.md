@@ -548,9 +548,10 @@
 ## T-SCAN-53: PLAY SCAN 新項目 - フォームラベル（3.3.2）
 
 - 手順
-  1. ラベルなし input がある / ラベルがある ページで PLAY SCAN を実行
+  1. ラベルなし input がある / ラベルがある / `required` だが必須表示がないページで PLAY SCAN を実行
 - 期待結果
   - ラベルなし要素がある場合: `sc: "3.3.2"`, `status: "fail"`, violationsにその要素のセレクタが含まれる
+  - `required` / `aria-required="true"` の入力欄に、ラベル・近接説明・placeholder/title・`aria-describedby`・フォーム全体説明のいずれにも「必須」等の表示がない場合: `status: "fail"`、violations に `必須表示なし` が含まれる
   - すべてラベルあり: `status: "pass"`
 
 ## T-SCAN-54: EXT SCAN エンドポイント基本動作
@@ -852,12 +853,25 @@
 
 - 手順
   1. `class="screen-reader-text"` を持つ要素が 1.4.12 のテキスト間隔適用後にクリップされるページで DEEP SCAN を実行する
-  2. 通常時は画面外にあり、`:focus` で画面内に表示されるスキップリンクを含むページで DEEP / PLAY SCAN を実行する
-  3. CSS上に `@keyframes internSlideFade` が存在するが、現在ページ上の要素に `animation-name: internSlideFade` が適用されていないページで DEEP SCAN を実行する
-  4. 別名の keyframes を現在ページ上の要素に `animation-duration > 0` で適用して DEEP SCAN を実行する
+  2. `class="screen-reader-text" aria-hidden="true"` の低コントラストテキストを、通常表示テキストの子要素として含むページで DEEP SCAN を実行する
+  3. 通常時は画面外にあり、`:focus` で画面内に表示されるスキップリンクを含むページで DEEP / PLAY SCAN を実行する
+  4. CSS上に `@keyframes internSlideFade` が存在するが、現在ページ上の要素に `animation-name: internSlideFade` が適用されていないページで DEEP SCAN を実行する
+  5. 別名の keyframes を現在ページ上の要素に `animation-duration > 0` で適用して DEEP SCAN を実行する
 - 期待結果
   - `screen-reader-text` / `sr-only` / `visually-hidden` 等のスクリーンリーダー専用要素は 1.4.12 のクリップ違反に含まれない
+  - `screen-reader-text` / `sr-only` / `visually-hidden` / `aria-hidden="true"` 等の非表示補助テキストは 1.4.3 のコントラスト違反に含まれず、親要素の違反文にもそのテキストが混ざらない
   - 通常時に隠れていてもfocus時に表示される要素は 2.4.11 / 2.4.12 の違反にならない
   - focus時にも `display:none` / `visibility:hidden` / `opacity:0` / 0×0 / clipping のままの要素は違反になる
   - 現在ページで未使用の keyframes は 2.3.1 の点滅候補に含まれない
   - 現在ページで実際に適用されている allowlist外の点滅候補 keyframes は引き続き検出される
+
+## T-SCAN-77: DEEP/MULTI 3.3.7 選択肢グループ誤検知抑制
+
+- 手順
+  1. `name="contact_purpose[]"` や `name="axe_web-info[]"` など、同一 `name[]` を持つ複数 checkbox を同一フォーム内に配置する
+  2. 同一 `name` の radio グループも配置して DEEP SCAN を実行する
+  3. MULTI SCAN に DEEP 結果を渡して実行する
+- 期待結果
+  - checkbox/radio の同一 `name` や `name[]` は SC 3.3.7 の「複数フォームで同名フィールドが重複」違反に含まれない
+  - DEEP は選択肢グループだけを根拠に `fail` を返さない
+  - MULTI は DEEP の確認候補だけを根拠に、選択肢グループを冗長入力として `fail` にしない

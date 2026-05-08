@@ -1,6 +1,6 @@
 # SPEC_WEB
 
-最終更新: 2026-04-30（BASIC color-contrast 重なり補完再検査）
+最終更新: 2026-05-08（PLAY 3.3.2 必須表示チェック追加 / DEEP 1.4.3 SR専用テキスト除外）
 
 ## 対象
 
@@ -25,6 +25,7 @@
 - 出力: `{ success, viewportPreset, results: [{ sc, name, status, message, violations[] }], includeAAA }`
 - **キャッシュ無効化**: Puppeteer ページ生成直後に `page.setCacheEnabled(false)` を呼び出す（BASIC と共通）
 - SC 1.4.12 テキスト間隔検査では、class/id/data属性に `screen-reader-text` / `sr-only` / `visually-hidden` 等のスクリーンリーダー専用マーカーを持つ要素とその配下をクリップ判定から除外する
+- SC 1.4.3 コントラスト検査では、`aria-hidden="true"`、`hidden`、`inert`、および class/id/data属性に `screen-reader-text` / `sr-only` / `visually-hidden` 等のスクリーンリーダー専用マーカーを持つ要素とその配下を除外する。親要素の検出文にも除外対象テキストを混ぜない
 - SC 2.5.8 ターゲットサイズ検査では、class/id/data属性に `sr-only` / `screen-reader` / `screen-reader-text` / `visually-hidden` / `assistive-text` 等のスクリーンリーダー専用マーカーを持つ要素とその配下を24×24px判定から除外する
 - SC 2.3.1 点滅検査では、現在ページ上の要素に実際に適用され、`animation-duration > 0` の `animation-name` に対応する keyframes のみを点滅候補にする。WordPress標準 lightbox 由来の `turn-on-visibility` / `turn-off-visibility` / `lightbox-zoom-in` / `lightbox-zoom-out` keyframes は除外する
 - SC 2.4.11 / 2.4.12 フォーカス隠れ検査では、通常時の表示状態ではなく、Tabで実際にfocusした後の表示状態を判定する。通常時は隠れていてもfocus時に表示される要素は違反にしない
@@ -98,7 +99,7 @@
 | ページ言語 | 3.1.1 | `<html lang>` の有無・形式を確認 |
 | 文字キーショートカット | 2.1.4 | `accesskey` 属性の有無を検出 |
 | 入力目的の特定 | 1.3.5 | フォーム入力の `autocomplete` 属性の有無を確認 |
-| フォームラベル | 3.3.2 | 入力欄に `<label>` / `aria-label` / `aria-labelledby` / `title` があるか確認 |
+| フォームラベル | 3.3.2 | 入力欄に `<label>` / `aria-label` / `aria-labelledby` / `title` 等があるか確認し、`required` / `aria-required="true"` の入力欄はラベル、近接説明、placeholder/title、`aria-describedby`、またはフォーム全体説明に「必須」等の必須表示があるか確認 |
 | 名前の中のラベル | 2.5.3 | 表示テキストと `aria-label` の不一致を検出 |
 | アクセシブルネーム監査 | 4.1.2 | `page.accessibility.snapshot()` でインタラクティブ要素の名前・ロールを検証 |
 | ステータスメッセージ | 4.1.3 | aria-live / role=status / role=alert の有無を確認 |

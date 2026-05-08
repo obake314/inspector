@@ -128,7 +128,7 @@ MULTI は以下の18項目のみを直接評価します（自然言語・視覚
 | 1.3.5 | 入力目的の特定 | `BASIC` は `axe-core` の `autocomplete` 系ルール。`EXT` は IBM ACE の `WCAG20_Input_Autocomplete` / `WCAG21_Input_Autocomplete`。`DEEP` は `check_1_3_5_input_purpose()` で `name / email / tel / postal-code` 等をヒントから推定し、期待される `autocomplete` を照合。`PLAY` は visible な `input / textarea / select` の `autocomplete` 欠落を幅広く fail にする。 |
 | 1.4.1 | 色の使用 | `DEEP` の `check_1_4_1_use_of_color()` が主担当で、本文中インラインリンクとナビゲーション current/selected 状態について、通常時の下線、太さ差、サイズ差、枠線、背景塗り、色差 `3:1` を確認する。`MULTI` は「赤いボタン」「緑が完了」等の色語・凡例・必須/エラー表示の意味依存を補助判定し、`1.4.1` は `DEEP fail` または `MULTI fail` のどちらでも TOTAL fail になる。 |
 | 1.4.2 | 音声の制御 | `AUTO_PASS(noMedia)` 対応。音声・動画が存在しない場合は合格扱い。メディアがある場合の専用自動判定ロジックはコード上にないため、実質 `未検証` のまま残る。 |
-| 1.4.3 | コントラスト（最低限） | `BASIC` の `axe-core` によるコントラスト判定が主力（◎）。`EXT` は IBM ACE の `IBMA_Color_Contrast_WCAG2AA` ルールをSC 1.4.3 にマッピングし、ACEが検出した違反を集約する（◯）。`DEEP` は `check_1_4_3_text_contrast()` で可視テキスト最大150件をサンプリングし、前景色と解決済み背景色の輝度差から WCAG 閾値（通常テキスト 4.5:1、大きいテキスト ≥18pt/≥14pt bold で 3:1）を計算する。ただし CSS 変数・グラデーション・`background-image` 上のテキストは正確に解決できないため参考値として扱い（△）、確定判定は BASIC axe-core を優先する。 |
+| 1.4.3 | コントラスト（最低限） | `BASIC` の `axe-core` によるコントラスト判定が主力（◎）。`EXT` は IBM ACE の `IBMA_Color_Contrast_WCAG2AA` ルールをSC 1.4.3 にマッピングし、ACEが検出した違反を集約する（◯）。`DEEP` は `check_1_4_3_text_contrast()` で可視テキスト最大150件をサンプリングし、前景色と解決済み背景色の輝度差から WCAG 閾値（通常テキスト 4.5:1、大きいテキスト ≥18pt/≥14pt bold で 3:1）を計算する。`aria-hidden="true"`、`hidden`、`inert`、および `screen-reader-text` / `sr-only` / `visually-hidden` 等のSR専用要素は対象外。ただし CSS 変数・グラデーション・`background-image` 上のテキストは正確に解決できないため参考値として扱い（△）、確定判定は BASIC axe-core を優先する。 |
 | 1.4.4 | テキストのサイズ変更 | `BASIC` は `axe-core` タグ、`EXT` は IBM ACE の `WCAG21_Style_Viewport` を SC 1.4.4 にマッピング（◯）、`DEEP` は `check_1_4_4_text_resize()` で `html` の `font-size` を 200% にし、`overflow:hidden` によるクリップと横スクロールを検出する。 |
 | 1.4.5 | 文字画像 | `DEEP` の `check_1_4_5_images_of_text()` が `canvas`、長い `img[alt]`、`background-image` を手掛かりに「文字画像の可能性」を抽出し `manual_required` を返す（▲）。画像内容を実際には読めないため確定 fail にはできず、手動確認のトリガーにとどまる。`MULTI` はスクリーンショットと画像リストから、ロゴ等の例外を除く本文・説明用の文字画像を文脈評価する（◯）。 |
 | 1.4.10 | リフロー | `DEEP` の `check_1_4_10_reflow()` が viewport を `320x256` に縮め、`scrollWidth > 320` と右端にはみ出す要素を列挙して fail 判定する。 |
@@ -164,10 +164,10 @@ MULTI は以下の18項目のみを直接評価します（自然言語・視覚
 | 3.2.4 | 一貫した識別性 | `BATCH` が権威。`navStructure` 比較でリンクテキスト差分や順序差分を拾い、同一機能の名称不一致の強いシグナルとして利用する。`MULTI` は繰り返し要素の名称・ラベル・アイコンの一貫性を補助判定する。 |
 | 3.2.6 | 一貫したヘルプ | `DEEP` の `check_3_2_6_consistent_help()` が `header` / `footer` / `nav` の中に `help/support/faq/contact/tel/mailto` を探し、見つからなければ fail、header/footer 自体が無ければ `manual_required`。`MULTI` は複数ページ比較があれば位置の一貫性を評価する。 |
 | 3.3.1 | エラーの特定 | `AUTO_PASS(noForm)` 対応。`DEEP` の `check_3_3_1_error_identification()` が全フォームを空送信し、`aria-invalid`、`role="alert"`、`error` 系クラス、`aria-describedby` / `aria-errormessage` の関連付けを確認する。`MULTI` は可視エラー、関連付け、フォーム文脈を補助評価する。 |
-| 3.3.2 | ラベルまたは説明 | `BASIC` は `axe-core`、`EXT` は IBM ACE の `WCAG22_Label_Tooltip_Required`、`PLAY` の `pw_check_3_3_2_labels()` は visible な `input / textarea / select` について `label`、`aria-label`、`aria-labelledby`、`title`、`placeholder`、label wrapping のいずれも無いものを fail にする。 |
+| 3.3.2 | ラベルまたは説明 | `BASIC` は `axe-core`、`EXT` は IBM ACE の `WCAG22_Label_Tooltip_Required`、`PLAY` の `pw_check_3_3_2_labels()` は visible な `input / textarea / select` について `label`、`aria-label`、`aria-labelledby`、`title`、`placeholder`、`aria-describedby`、label wrapping のいずれも無いものを fail にする。さらに `required` / `aria-required="true"` の入力欄は、ラベル・近接するフィールド領域・説明文・placeholder/title・フォーム全体説明のいずれかに「必須」等の表示が無い場合も fail にする。 |
 | 3.3.3 | エラー修正の提案 | `AUTO_PASS(noForm)` 対応。`DEEP` の `check_3_3_3_error_suggestion()` が空送信後のエラー文言を見て、「入力」「選択」「確認」などの具体的修正指示を含むかを判定し、エラーが出なければ `manual_required`。`MULTI` は例示や許容形式まで含めて文脈評価する。 |
 | 3.3.4 | エラー回避（法的・金融・データ） | `AUTO_PASS(noForm)` 対応。コード上の直接自動判定は `MULTI` のみで、法律・金融・データ変更・試験等の重要送信フォームかを文脈で見た上で、取消、確認、修正、undo などの証拠を探す。単一ページで送信フローが見えなければ `manual_required`。 |
-| 3.3.7 | 冗長な入力 | `AUTO_PASS(noForm)` 対応。`DEEP` の `check_3_3_7_redundant_entry()` が multi-step UI、複数フォーム間の同名フィールド重複、multi-step 下での `autocomplete` 欠落を確認し、強い重複は fail、それ以外は `manual_required`。`MULTI` は実際の再入力強要かどうかを文脈で補助判定する。 |
+| 3.3.7 | 冗長な入力 | `AUTO_PASS(noForm)` 対応。`DEEP` の `check_3_3_7_redundant_entry()` が multi-step UI、複数フォーム間の自由入力系同名フィールド、multi-step 下での `autocomplete` 欠落を確認候補として検出する。checkbox/radio の同一 `name`、`name[]` の配列フィールド、同一フォーム内の選択肢グループは冗長入力扱いしない。DEEP単体では自動不合格にせず `manual_required` にとどめ、`MULTI` は実際の再入力強要かどうかを文脈で補助判定する。 |
 | 3.3.8 | 認証（最低限） | `AUTO_PASS(noAuth)` 対応。`DEEP` の `check_3_3_8_accessible_authentication()` が password、OTP、passkey ボタン、認証 form を検出し、認証 UI が無ければ `not_applicable`、password 型なら `autocomplete` と CAPTCHA の有無を確認、OTP/passkey 型は `manual_required`。`MULTI` は認知機能テストや代替手段の有無を文脈評価する。 |
 | 4.1.2 | 名前、役割、値 | `BASIC` は `axe-core` の name/role/value ルール。`EXT` は IBM ACE の `Rpt_Aria_ValidRole`、`Rpt_Aria_RequiredProperties`、`Rpt_Aria_ValidPropertyValue`。`PLAY` の `pw_check_4_1_2_accessible_names()` がインタラクティブ要素のアクセシブルネーム欠落を fail。`DEEP` の `check_aria_attributes()` は toggle 候補に `aria-expanded` が無い場合を fail とし、同SCに集約する。 |
 | 4.1.3 | ステータスメッセージ | `BASIC` は `axe-core` の status message ルール。`PLAY` の `pw_check_4_1_3_status_messages()` が `aria-live` / `role="status"` / `role="alert"` と、live region 外にある動的クラス要素を比較する。`DEEP` の `check_aria_attributes()` は form や動的通知クラスがあるのに `aria-live` / `role="alert"` 系リージョンが見当たらない場合を `manual_required` にする。 |
@@ -235,7 +235,7 @@ MULTI は以下の18項目のみを直接評価します（自然言語・視覚
 |:---|:---|:---|
 | 2.4.7 | 中 | focus indicator の検出は outline / box-shadow / border の CSS 差分に依存するため、JS による class 切り替えや SVG focus 表示を見落とす |
 | 2.1.1 | 低〜中 | 最大 60 回の Tab のみで判定するため、Tab 到達可能でも実際には機能しないカスタムコンポーネントの問題を見落とす |
-| 3.3.2 | 中 | `placeholder` を label 代替として検出しているが、WCAG 上 placeholder 単独はラベルの代替として不十分であるため、ここを合格と判定しているのは緩すぎる可能性がある |
+| 3.3.2 | 中 | `placeholder` を label 代替として検出しているが、WCAG 上 placeholder 単独はラベルの代替として不十分であるため、ここを合格と判定しているのは緩すぎる可能性がある。必須表示は DOM と CSS 疑似要素から確認するため、画像だけで示した必須マークは手動確認が必要 |
 | 4.1.3 | 中 | `aria-live` リージョン外の動的更新クラスを find するが、実際にアナウンスが行われるかブラウザの AT 実装まで追うことができない |
 
 #### MULTI (AI/LLM)
