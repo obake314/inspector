@@ -100,12 +100,12 @@
 | ページ言語 | 3.1.1 | `<html lang>` の有無・形式を確認 |
 | 文字キーショートカット | 2.1.4 | `accesskey` 属性の有無を検出 |
 | 入力目的の特定 | 1.3.5 | フォーム入力の `autocomplete` 属性の有無を確認 |
-| フォームラベル | 3.3.2 | 入力欄に `<label>` / `aria-label` / `aria-labelledby` / `title` 等があるか確認し、`required` / `aria-required="true"` の入力欄はラベル、近接説明、placeholder/title、`aria-describedby`、またはフォーム全体説明に「必須」等の必須表示があるか確認 |
+| フォームラベル | 3.3.2 | 入力欄に `<label>` / `aria-label` / `aria-labelledby` / `title` 等があるか確認し、`required` / `aria-required="true"` の入力欄はラベル、近接説明、placeholder/title、`aria-describedby`、またはフォーム全体説明に「必須」等の必須表示があるか確認。ただし検索フォームの `required` は空検索防止として扱い、必須表示なしだけでは fail にしない |
 | 名前の中のラベル | 2.5.3 | 表示テキストと `aria-label` の不一致を検出 |
 | アクセシブルネーム監査 | 4.1.2 | `page.accessibility.snapshot()` でインタラクティブ要素の名前・ロールを検証 |
 | ステータスメッセージ | 4.1.3 | aria-live / role=status / role=alert の有無を確認 |
 | 見出し・ラベル | 2.4.6 | 空見出し・ラベル未設定フォームを検出 |
-| 情報と関係性 | 1.3.1 | テーブルヘッダー欠落・fieldset未使用ラジオグループを検出 |
+| 情報と関係性 | 1.3.1 | テーブルヘッダー欠落・fieldset/role=group未使用の選択肢グループを検出。フォーム単位で判定し、プライバシーポリシー同意など自己完結した同意チェックボックスは除外 |
 | 意味のある順序 | 1.3.2 | 主要な本文・フォーム・表で CSS `order` と視覚的な上戻りを順序ずれシグナルとして検出 |
 | 感覚的特徴 | 1.3.3 | 感覚依存らしい操作指示文を抽出し、候補があれば `manual_required`（スコア上は未検証扱い） |
 | フォーカス表示（全要素） | 2.4.7 | フォーカス可能要素と、その label / 親 / 隣接する見た目要素に、十分な太さ・コントラストを持つ outline / box-shadow / border / background 変化があるか確認（最大40要素） |

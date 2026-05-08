@@ -6409,6 +6409,34 @@ async function pw_check_1_3_1_info_relationships(page) {
   const issues = await page.evaluate(() => {
     const snap = el => { const h = el.outerHTML.replace(/\s+/g, ' ').trim(); return h.length > 120 ? h.slice(0, 117) + '...' : h; };
     const issues = [];
+    const CONSENT_CHECKBOX_RE = /(同意|承諾|確認|プライバシーポリシー|個人情報|利用規約|規約|送信|申し込み|申込|agree|accept|privacy|policy|terms|consent)/i;
+    function visibleText(el) {
+      if (!el || el.nodeType !== Node.ELEMENT_NODE) return '';
+      const s = getComputedStyle(el);
+      if (s.display === 'none' || s.visibility === 'hidden' || s.visibility === 'collapse') return '';
+      return (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+    }
+    function labelText(el) {
+      const labels = [];
+      if ('labels' in el && el.labels) labels.push(...Array.from(el.labels));
+      const wrapped = el.closest('label');
+      if (wrapped) labels.push(wrapped);
+      const text = [...new Set(labels)].map(visibleText).filter(Boolean).join(' ');
+      return text || el.getAttribute('aria-label') || el.value || '';
+    }
+    function hasSemanticGroup(elements) {
+      return elements.some(el => {
+        const group = el.closest('fieldset, [role="group"], [role="radiogroup"]');
+        return group && elements.every(item => group.contains(item));
+      });
+    }
+    function isStandaloneConsentCheckboxGroup(elements) {
+      const labels = elements.map(labelText).map(text => text.replace(/\s+/g, ' ').trim()).filter(Boolean);
+      if (labels.length !== elements.length) return false;
+      const normalized = labels.map(text => text.replace(/[（(]\s*必須\s*[）)]/g, '').trim());
+      if (new Set(normalized).size === 1 && normalized[0].length >= 8) return true;
+      return labels.every(text => text.length >= 8 && CONSENT_CHECKBOX_RE.test(text));
+    }
     document.querySelectorAll('table').forEach(table => {
       const isLayout = table.getAttribute('role') === 'presentation' || table.getAttribute('role') === 'none';
       if (!isLayout && !table.querySelector('th') && !table.querySelector('[scope]') && !table.querySelector('[role="columnheader"]')) {
@@ -6417,15 +6445,23 @@ async function pw_check_1_3_1_info_relationships(page) {
         issues.push(`table${id}${cls} にヘッダーセルなし | ${snap(table)}`);
       }
     });
-    const seen = new Set();
-    document.querySelectorAll('input[type="radio"], input[type="checkbox"]').forEach(el => {
+    const forms = Array.from(document.querySelectorAll('form'));
+    const groups = new Map();
+    Array.from(document.querySelectorAll('input[type="radio"], input[type="checkbox"]')).forEach(el => {
       const name = el.getAttribute('name');
-      if (!name || seen.has(name)) return;
-      const group = document.querySelectorAll(`input[name="${CSS.escape(name)}"]`);
-      if (group.length > 1 && !el.closest('fieldset')) {
-        seen.add(name);
-        issues.push(`input[name="${name}"] グループ（${group.length}件）にfieldsetなし | ${snap(el)}`);
-      }
+      if (!name || el.disabled) return;
+      const type = (el.type || '').toLowerCase();
+      const form = el.form || el.closest('form');
+      const formIndex = form ? forms.indexOf(form) : -1;
+      const key = `${formIndex}:${type}:${name}`;
+      if (!groups.has(key)) groups.set(key, { name, type, elements: [] });
+      groups.get(key).elements.push(el);
+    });
+    groups.forEach(group => {
+      if (group.elements.length <= 1) return;
+      if (hasSemanticGroup(group.elements)) return;
+      if (group.type === 'checkbox' && isStandaloneConsentCheckboxGroup(group.elements)) return;
+      issues.push(`input[name="${group.name}"] ${group.type}グループ（${group.elements.length}件）にfieldset/role=groupなし | ${snap(group.elements[0])}`);
     });
     return [...new Set(issues)];
   });
@@ -6810,6 +6846,7 @@ async function pw_check_3_3_2_labels(page) {
       const REQUIRED_WORD_RE = /(必須|要入力|required|mandatory)/i;
       const REQUIRED_MARK_RE = /[*＊]/;
       const ALL_REQUIRED_RE = /(すべて|全て|全項目|全フィールド|all)\s*(の)?\s*(項目|フィールド|入力欄|fields?)?.{0,24}(必須|required|mandatory)|(必須|required|mandatory).{0,24}(すべて|全て|全項目|全フィールド|all)/i;
+      const SEARCH_WORD_RE = /(検索|search|キーワード|keyword|query)/i;
       const cssEscape = window.CSS && typeof window.CSS.escape === 'function'
         ? window.CSS.escape.bind(window.CSS)
         : value => String(value).replace(/["\\]/g, '\\$&');
@@ -6900,6 +6937,23 @@ async function pw_check_3_3_2_labels(page) {
         if (REQUIRED_WORD_RE.test(contextText) || REQUIRED_MARK_RE.test(contextText)) return true;
         return formHasAllRequiredInstruction(el);
       }
+      function isSearchQueryControl(el, type) {
+        const form = el.closest('form');
+        const formButtonsText = form ? Array.from(form.querySelectorAll('button, input[type="submit"], input[type="button"]'))
+          .map(btn => visibleText(btn) || btn.value || btn.getAttribute('aria-label') || btn.title || '')
+          .join(' ') : '';
+        const contextText = [
+          fieldContextText(el),
+          formButtonsText,
+          form ? (form.getAttribute('role') || '') : '',
+          el.getAttribute('role') || '',
+          el.getAttribute('aria-label') || '',
+          el.name || '',
+          el.id || ''
+        ].join(' ');
+        return (type === 'search' || !!el.closest('[role="search"], search') || form?.getAttribute('role') === 'search')
+          && SEARCH_WORD_RE.test(contextText);
+      }
       function controlLabel(el, type) {
         const tag = el.tagName.toLowerCase();
         const id = el.id ? `#${el.id}` : '';
@@ -6924,7 +6978,7 @@ async function pw_check_3_3_2_labels(page) {
           unlabeled.push(`${controlLabel(el, type)} にラベルなし | ${snap(el)}`);
         }
         const isRequired = el.required || (el.getAttribute('aria-required') || '').toLowerCase() === 'true';
-        if (isRequired && !hasRequiredCue(el)) {
+        if (isRequired && !hasRequiredCue(el) && !isSearchQueryControl(el, type)) {
           missingRequiredIndicators.push(`${controlLabel(el, type)} に必須表示なし | ${snap(el)}`);
         }
       });
@@ -6934,13 +6988,17 @@ async function pw_check_3_3_2_labels(page) {
       ...result.unlabeled,
       ...result.missingRequiredIndicators
     ];
+    const issueSummary = [
+      result.unlabeled.length > 0 ? `ラベル/説明なし ${result.unlabeled.length}件` : '',
+      result.missingRequiredIndicators.length > 0 ? `必須表示なし ${result.missingRequiredIndicators.length}件` : ''
+    ].filter(Boolean).join('、');
     return {
       sc: '3.3.2',
       status: issues.length === 0 ? 'pass' : 'fail',
       violations: issues.slice(0, 10),
       message: issues.length === 0
         ? 'フォーム入力すべてにラベル・説明・必須表示があります'
-        : `${issues.length}個の入力欄にラベル、説明、または必須表示の不足があります`
+        : `${issues.length}個の入力欄に不足があります（${issueSummary}）`
     };
   } catch (e) {
     return { sc: '3.3.2', status: 'error', violations: [], message: e.message };

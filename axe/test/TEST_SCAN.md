@@ -552,7 +552,18 @@
 - 期待結果
   - ラベルなし要素がある場合: `sc: "3.3.2"`, `status: "fail"`, violationsにその要素のセレクタが含まれる
   - `required` / `aria-required="true"` の入力欄に、ラベル・近接説明・placeholder/title・`aria-describedby`・フォーム全体説明のいずれにも「必須」等の表示がない場合: `status: "fail"`、violations に `必須表示なし` が含まれる
+  - `type="search"` / `role="search"` など検索フォームとして識別できる入力欄の `required` は空検索防止として扱い、必須表示なしだけでは fail にしない
   - すべてラベルあり: `status: "pass"`
+
+## T-SCAN-53A: PLAY SCAN 1.3.1 同意チェックボックス誤検知抑制
+
+- 手順
+  1. 同じ `name="checkbox-policy[]"` を持つプライバシーポリシー同意チェックボックスを、別フォームまたは同一ページ内に複数配置する
+  2. 複数選択肢の checkbox/radio グループも配置して PLAY SCAN を実行する
+- 期待結果
+  - 自己完結した同意チェックボックスは `fieldset` なしだけでは `1.3.1` の fail にしない
+  - 同じ `name` の判定はページ全体ではなくフォーム単位で行う
+  - 複数選択肢の checkbox/radio グループに `fieldset` / `role=group` がない場合は `violations` に `fieldset/role=groupなし` が含まれる
 
 ## T-SCAN-54: EXT SCAN エンドポイント基本動作
 

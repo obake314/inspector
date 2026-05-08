@@ -167,8 +167,10 @@ function checkRequiredIndicatorPolicy() {
   const server = readFileSync(join(root, 'server.js'), 'utf8');
   const snippets = [
     'const REQUIRED_WORD_RE = /(必須|要入力|required|mandatory)/i;',
+    'const SEARCH_WORD_RE =',
     'const ALL_REQUIRED_RE =',
     'function hasRequiredCue(el)',
+    'function isSearchQueryControl(el, type)',
     'missingRequiredIndicators.push',
     '必須表示なし'
   ];
@@ -178,6 +180,23 @@ function checkRequiredIndicatorPolicy() {
     }
   });
   console.log('ok - required indicator policy');
+}
+
+function checkInfoRelationshipsPolicy() {
+  const server = readFileSync(join(root, 'server.js'), 'utf8');
+  const snippets = [
+    'const CONSENT_CHECKBOX_RE =',
+    'function hasSemanticGroup(elements)',
+    'function isStandaloneConsentCheckboxGroup(elements)',
+    "const key = `${formIndex}:${type}:${name}`",
+    'fieldset/role=groupなし'
+  ];
+  snippets.forEach(snippet => {
+    if (!server.includes(snippet)) {
+      throw new Error(`Info relationships policy check failed: missing ${snippet}`);
+    }
+  });
+  console.log('ok - info relationships policy');
 }
 
 function checkRedundantEntryPolicy() {
@@ -225,6 +244,7 @@ function main() {
   checkContrastFallbackPolicy();
   checkScreenReaderContrastPolicy();
   checkRequiredIndicatorPolicy();
+  checkInfoRelationshipsPolicy();
   checkRedundantEntryPolicy();
   checkFocusIndicatorPolicy();
   runNodeCheck('gas/ReportGenerator.gs', join(root, 'gas', 'ReportGenerator.gs'), readFileSync(join(root, 'gas', 'ReportGenerator.gs'), 'utf8'));

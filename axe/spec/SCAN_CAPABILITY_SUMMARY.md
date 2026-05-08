@@ -121,7 +121,7 @@ MULTI は以下の18項目のみを直接評価します（自然言語・視覚
 | 1.2.3 | 音声解説またはメディア代替（収録済） | `AUTO_PASS(noMedia)` 対応。`DEEP` の `check_1_2_3_audio_description()` が `track[kind="descriptions"]`、`aria-describedby`、近接する「音声解説」「テキスト版」等の文言、装飾動画の `muted` を確認し、埋め込み動画は `unverified`、証拠なしは fail。`MULTI` は説明版や同等テキスト代替の存在を文脈評価する。 |
 | 1.2.4 | キャプション（ライブ） | `AUTO_PASS(noMedia)` 対応。専用のライブ判定ロジックはなく、`DEEP` は `check_1_2_x_media_captions()` の複合判定を流用する。ライブ性の判定はコード上では持たず、該当メディアがある場合は他の証拠が薄ければ未検証寄りになる。 |
 | 1.2.5 | 音声解説（収録済） | `AUTO_PASS(noMedia)` 対応。`DEEP` は `check_1_2_x_media_captions()` の複合判定を流用し、専用の 1.2.5 判定は持たない。厳密な音声解説の有無は `check_1_2_3_audio_description()` と `MULTI` の証拠確認に実質依存する。 |
-| 1.3.1 | 情報と関係性 | `BASIC` は `axe-core` の構造系ルール。`EXT` は IBM ACE の `Input_ExplicitLabel`、`Fieldset_HasLegend`、`Table_Structure`、`List_UseMarkup` などを SC 1.3.1 に集約。`PLAY` は `pw_check_1_3_1_info_relationships()` でデータテーブルのヘッダー欠落と radio/checkbox グループの `fieldset` 欠落を確認。 |
+| 1.3.1 | 情報と関係性 | `BASIC` は `axe-core` の構造系ルール。`EXT` は IBM ACE の `Input_ExplicitLabel`、`Fieldset_HasLegend`、`Table_Structure`、`List_UseMarkup` などを SC 1.3.1 に集約。`PLAY` は `pw_check_1_3_1_info_relationships()` でデータテーブルのヘッダー欠落と radio/checkbox グループの `fieldset` / `role=group` 欠落を確認する。グループ判定はフォーム単位で行い、プライバシーポリシー同意など自己完結した同意チェックボックスは `fieldset` なしだけでは fail にしない。 |
 | 1.3.2 | 意味のある順序 | `DEEP` と `PLAY` は共通の `check_1_3_2_meaningful_sequence()` を使い、`header/nav/footer/aside` を除く主要な本文・フォーム・表で、非ゼロの CSS `order` と単一カラム領域での大きな視覚的「上戻り」を順序ずれシグナルとして fail 判定する。`BASIC` / `EXT` / `MULTI` に専用ロジックはない。 |
 | 1.3.3 | 感覚的特徴 | `EXT` は IBM ACE の `WCAG20_Text_Emoticons` を 1.3.3 に集約するが補助的。`DEEP` と `PLAY` は `check_1_3_3_sensory_characteristics()` で「右の」「赤い」「丸い」「音が鳴ったら」等の感覚依存らしい指示文候補を抽出し、候補があれば `manual_required`。`MULTI` が最終的に、ラベル名や見出し名が併記されているかまで文脈判断する。 |
 | 1.3.4 | 表示の向き | `DEEP` の `check_1_3_4_orientation()` が `@media (orientation: ...)` 内の `display:none` / `visibility:hidden`、および `body` の `transform: rotate(...)` を検出し、方向固定の疑いを fail にする。 |
@@ -164,7 +164,7 @@ MULTI は以下の18項目のみを直接評価します（自然言語・視覚
 | 3.2.4 | 一貫した識別性 | `BATCH` が権威。`navStructure` 比較でリンクテキスト差分や順序差分を拾い、同一機能の名称不一致の強いシグナルとして利用する。`MULTI` は繰り返し要素の名称・ラベル・アイコンの一貫性を補助判定する。 |
 | 3.2.6 | 一貫したヘルプ | `DEEP` の `check_3_2_6_consistent_help()` が `header` / `footer` / `nav` の中に `help/support/faq/contact/tel/mailto` を探し、見つからなければ fail、header/footer 自体が無ければ `manual_required`。`MULTI` は複数ページ比較があれば位置の一貫性を評価する。 |
 | 3.3.1 | エラーの特定 | `AUTO_PASS(noForm)` 対応。`DEEP` の `check_3_3_1_error_identification()` が全フォームを空送信し、`aria-invalid`、`role="alert"`、`error` 系クラス、`aria-describedby` / `aria-errormessage` の関連付けを確認する。`MULTI` は可視エラー、関連付け、フォーム文脈を補助評価する。 |
-| 3.3.2 | ラベルまたは説明 | `BASIC` は `axe-core`、`EXT` は IBM ACE の `WCAG22_Label_Tooltip_Required`、`PLAY` の `pw_check_3_3_2_labels()` は visible な `input / textarea / select` について `label`、`aria-label`、`aria-labelledby`、`title`、`placeholder`、`aria-describedby`、label wrapping のいずれも無いものを fail にする。さらに `required` / `aria-required="true"` の入力欄は、ラベル・近接するフィールド領域・説明文・placeholder/title・フォーム全体説明のいずれかに「必須」等の表示が無い場合も fail にする。 |
+| 3.3.2 | ラベルまたは説明 | `BASIC` は `axe-core`、`EXT` は IBM ACE の `WCAG22_Label_Tooltip_Required`、`PLAY` の `pw_check_3_3_2_labels()` は visible な `input / textarea / select` について `label`、`aria-label`、`aria-labelledby`、`title`、`placeholder`、`aria-describedby`、label wrapping のいずれも無いものを fail にする。さらに `required` / `aria-required="true"` の入力欄は、ラベル・近接するフィールド領域・説明文・placeholder/title・フォーム全体説明のいずれかに「必須」等の表示が無い場合も fail にする。ただし、サイト内検索など検索フォームとして識別できる `type="search"` / `role="search"` の入力欄は、空検索防止のための `required` とみなし、必須表示なしだけでは fail にしない。 |
 | 3.3.3 | エラー修正の提案 | `AUTO_PASS(noForm)` 対応。`DEEP` の `check_3_3_3_error_suggestion()` が空送信後のエラー文言を見て、「入力」「選択」「確認」などの具体的修正指示を含むかを判定し、エラーが出なければ `manual_required`。`MULTI` は例示や許容形式まで含めて文脈評価する。 |
 | 3.3.4 | エラー回避（法的・金融・データ） | `AUTO_PASS(noForm)` 対応。コード上の直接自動判定は `MULTI` のみで、法律・金融・データ変更・試験等の重要送信フォームかを文脈で見た上で、取消、確認、修正、undo などの証拠を探す。単一ページで送信フローが見えなければ `manual_required`。 |
 | 3.3.7 | 冗長な入力 | `AUTO_PASS(noForm)` 対応。`DEEP` の `check_3_3_7_redundant_entry()` が multi-step UI、複数フォーム間の自由入力系同名フィールド、multi-step 下での `autocomplete` 欠落を確認候補として検出する。checkbox/radio の同一 `name`、`name[]` の配列フィールド、同一フォーム内の選択肢グループは冗長入力扱いしない。DEEP単体では自動不合格にせず `manual_required` にとどめ、`MULTI` は実際の再入力強要かどうかを文脈で補助判定する。 |
@@ -235,7 +235,7 @@ MULTI は以下の18項目のみを直接評価します（自然言語・視覚
 |:---|:---|:---|
 | 2.4.7 | 中 | focus indicator の検出は outline / box-shadow / border / background の CSS 差分に依存するため、JS による class 切り替えや SVG focus 表示を見落とす可能性がある。一方で透明 input + label 装飾型のフォームは label / 親 / 隣接要素まで確認する |
 | 2.1.1 | 低〜中 | 最大 60 回の Tab のみで判定するため、Tab 到達可能でも実際には機能しないカスタムコンポーネントの問題を見落とす |
-| 3.3.2 | 中 | `placeholder` を label 代替として検出しているが、WCAG 上 placeholder 単独はラベルの代替として不十分であるため、ここを合格と判定しているのは緩すぎる可能性がある。必須表示は DOM と CSS 疑似要素から確認するため、画像だけで示した必須マークは手動確認が必要 |
+| 3.3.2 | 中 | `placeholder` を label 代替として検出しているが、WCAG 上 placeholder 単独はラベルの代替として不十分であるため、ここを合格と判定しているのは緩すぎる可能性がある。必須表示は DOM と CSS 疑似要素から確認するため、画像だけで示した必須マークは手動確認が必要。検索フォームの `required` は空検索防止として扱い、必須表示不足の fail から除外する |
 | 4.1.3 | 中 | `aria-live` リージョン外の動的更新クラスを find するが、実際にアナウンスが行われるかブラウザの AT 実装まで追うことができない |
 
 #### MULTI (AI/LLM)
