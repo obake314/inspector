@@ -2443,6 +2443,55 @@ async function check_2_4_7_focus_visible(page) {
   try {
     // --- step1: 未フォーカス時のスタイルを収集 ---
     const preData = await page.evaluate(() => {
+      function isTransparent(c) {
+        return !c || c === 'transparent' || /rgba?\(\s*\d+,\s*\d+,\s*\d+,\s*0\s*\)/.test(c);
+      }
+      function effectiveBg(el) {
+        let node = el;
+        while (node && node !== document.documentElement) {
+          const bg = window.getComputedStyle(node).backgroundColor;
+          if (!isTransparent(bg)) return bg;
+          node = node.parentElement;
+        }
+        return 'rgb(255,255,255)';
+      }
+      function uniqueElements(items) {
+        const seen = new Set();
+        return items.filter(el => {
+          if (!el || seen.has(el) || el.nodeType !== Node.ELEMENT_NODE) return false;
+          seen.add(el);
+          return true;
+        });
+      }
+      function visualCandidates(el) {
+        return uniqueElements([
+          el,
+          el.closest('label'),
+          el.closest('[class*="control" i], [class*="field" i], [class*="input" i], [class*="checkbox" i], [class*="radio" i]'),
+          el.parentElement,
+          el.nextElementSibling,
+          el.previousElementSibling
+        ]);
+      }
+      function styleSnap(el) {
+        const s = window.getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+        return {
+          outlineWidth:  parseFloat(s.outlineWidth) || 0,
+          outlineStyle:  s.outlineStyle,
+          outlineColor:  s.outlineColor,
+          boxShadow:     s.boxShadow,
+          backgroundColor: s.backgroundColor,
+          borderWidth:   parseFloat(s.borderWidth) || 0,
+          borderColor:   s.borderColor,
+          display:       s.display,
+          visibility:    s.visibility,
+          opacity:       parseFloat(s.opacity) || 0,
+          width:         rect.width,
+          height:        rect.height,
+          adjBg:         effectiveBg(el.parentElement || el)
+        };
+      }
       function snap(el) {
         const s = window.getComputedStyle(el);
         const tag = el.tagName.toLowerCase();
@@ -2462,7 +2511,11 @@ async function check_2_4_7_focus_visible(page) {
           boxShadow:     s.boxShadow,
           backgroundColor: s.backgroundColor,
           borderWidth:   parseFloat(s.borderWidth) || 0,
-          borderColor:   s.borderColor
+          borderColor:   s.borderColor,
+          opacity:       parseFloat(s.opacity) || 0,
+          width:         el.getBoundingClientRect().width,
+          height:        el.getBoundingClientRect().height,
+          candidates:    visualCandidates(el).map(styleSnap)
         };
       }
       return Array.from(document.querySelectorAll(
@@ -2511,6 +2564,43 @@ async function check_2_4_7_focus_visible(page) {
           }
           return 'rgb(255,255,255)';
         }
+        function uniqueElements(items) {
+          const seen = new Set();
+          return items.filter(el => {
+            if (!el || seen.has(el) || el.nodeType !== Node.ELEMENT_NODE) return false;
+            seen.add(el);
+            return true;
+          });
+        }
+        function visualCandidates(el) {
+          return uniqueElements([
+            el,
+            el.closest('label'),
+            el.closest('[class*="control" i], [class*="field" i], [class*="input" i], [class*="checkbox" i], [class*="radio" i]'),
+            el.parentElement,
+            el.nextElementSibling,
+            el.previousElementSibling
+          ]);
+        }
+        function styleSnap(el) {
+          const s = window.getComputedStyle(el);
+          const rect = el.getBoundingClientRect();
+          return {
+            outlineWidth:    parseFloat(s.outlineWidth) || 0,
+            outlineStyle:    s.outlineStyle,
+            outlineColor:    s.outlineColor,
+            boxShadow:       s.boxShadow,
+            backgroundColor: s.backgroundColor,
+            borderWidth:     parseFloat(s.borderWidth) || 0,
+            borderColor:     s.borderColor,
+            display:         s.display,
+            visibility:      s.visibility,
+            opacity:         parseFloat(s.opacity) || 0,
+            width:           rect.width,
+            height:          rect.height,
+            adjBg:           effectiveBg(el.parentElement || el)
+          };
+        }
         const el = document.activeElement;
         if (!el || el === document.body || el === document.documentElement) return null;
         const s   = window.getComputedStyle(el);
@@ -2527,7 +2617,11 @@ async function check_2_4_7_focus_visible(page) {
           backgroundColor: s.backgroundColor,
           borderWidth:     parseFloat(s.borderWidth) || 0,
           borderColor:     s.borderColor,
-          adjBg:           effectiveBg(el.parentElement || el)
+          opacity:         parseFloat(s.opacity) || 0,
+          width:           el.getBoundingClientRect().width,
+          height:          el.getBoundingClientRect().height,
+          adjBg:           effectiveBg(el.parentElement || el),
+          candidates:      visualCandidates(el).map(styleSnap)
         };
       });
 
@@ -2567,6 +2661,68 @@ async function check_2_4_7_focus_visible(page) {
       const spread = nums.length >= 4 ? nums[3] : (nums.length === 3 ? 0 : null);
       return spread !== null ? { spread, color } : null;
     }
+    function isVisibleSnapshot(st) {
+      return st
+        && st.display !== 'none'
+        && st.visibility !== 'hidden'
+        && st.visibility !== 'collapse'
+        && st.opacity >= 0.1
+        && st.width >= 2
+        && st.height >= 2;
+    }
+    function evaluateIndicator(before, after) {
+      if (!isVisibleSnapshot(after)) return null;
+
+      const outlineVisible = after.outlineStyle !== 'none' && after.outlineWidth > 0 && !isTransparentColor(after.outlineColor);
+      const outlineChanged = outlineVisible && (
+        before.outlineStyle !== after.outlineStyle
+        || before.outlineWidth !== after.outlineWidth
+        || before.outlineColor !== after.outlineColor
+      );
+      if (outlineChanged) {
+        const ratio = contrastRatio(parseRgb(after.outlineColor), parseRgb(after.adjBg));
+        return {
+          found: true,
+          strong: after.outlineWidth >= 2 && ratio >= 3,
+          note: `outline ${after.outlineWidth}px / ${ratio.toFixed(1)}:1`
+        };
+      }
+
+      const shadowChanged = after.boxShadow && after.boxShadow !== 'none' && after.boxShadow !== before.boxShadow;
+      if (shadowChanged) {
+        const sh = parseShadow(after.boxShadow);
+        const ratio = sh ? contrastRatio(parseRgb(sh.color || after.adjBg), parseRgb(after.adjBg)) : 0;
+        return {
+          found: true,
+          strong: !!sh && sh.spread >= 2 && ratio >= 3,
+          note: sh ? `box-shadow spread ${sh.spread}px / ${ratio.toFixed(1)}:1` : 'box-shadow 解析不能'
+        };
+      }
+
+      const borderChanged = after.borderWidth !== before.borderWidth || after.borderColor !== before.borderColor;
+      if (borderChanged) {
+        const widthDelta = Math.max(0, after.borderWidth - before.borderWidth);
+        const effectiveWidth = widthDelta > 0 ? widthDelta : after.borderWidth;
+        const ratio = contrastRatio(parseRgb(after.borderColor), parseRgb(after.adjBg));
+        return {
+          found: true,
+          strong: effectiveWidth >= 2 && ratio >= 3,
+          note: `border ${effectiveWidth.toFixed(1)}px / ${ratio.toFixed(1)}:1`
+        };
+      }
+
+      const bgChanged = after.backgroundColor !== before.backgroundColor && !isTransparentColor(after.backgroundColor);
+      if (bgChanged) {
+        const ratio = contrastRatio(parseRgb(after.backgroundColor), parseRgb(before.backgroundColor || after.adjBg));
+        return {
+          found: true,
+          strong: ratio >= 3,
+          note: `background ${ratio.toFixed(1)}:1`
+        };
+      }
+
+      return null;
+    }
 
     const violations27  = [];
     const violations213 = [];
@@ -2575,54 +2731,27 @@ async function check_2_4_7_focus_visible(page) {
       const b = byKey.get(key);
       if (!b) continue;
 
-      const hasOutline    = a.outlineStyle !== 'none' && a.outlineWidth > 0 && !isTransparentColor(a.outlineColor);
-      const hasBoxShadow  = a.boxShadow && a.boxShadow !== 'none' && a.boxShadow !== b.boxShadow;
-      const bgChanged     = a.backgroundColor !== b.backgroundColor && !isTransparentColor(a.backgroundColor);
-      const borderChanged = a.borderWidth !== b.borderWidth || a.borderColor !== b.borderColor;
-      const hasFocusIndicator = hasOutline || hasBoxShadow || bgChanged || borderChanged;
+      const candidateCount = Math.max(b.candidates?.length || 0, a.candidates?.length || 0);
+      const indicators = [];
+      for (let i = 0; i < candidateCount; i++) {
+        const before = b.candidates?.[i];
+        const after = a.candidates?.[i];
+        if (!before || !after) continue;
+        const indicator = evaluateIndicator(before, after);
+        if (indicator) indicators.push(indicator);
+      }
+      const strongIndicator = indicators.find(item => item.strong);
+      if (strongIndicator) continue;
 
-      if (!hasFocusIndicator) {
-        violations27.push(`${b.label} (outline:${a.outlineWidth}px, bg変化:${bgChanged}, shadow:${hasBoxShadow})`);
+      if (indicators.length === 0) {
+        violations27.push(`${b.label} (outline:${a.outlineWidth}px, opacity:${a.opacity}, size:${Math.round(a.width)}x${Math.round(a.height)})`);
         violations213.push(`${b.label} ／ インジケーター未検出`);
         continue;
       }
 
-      // SC 2.4.13: 面積 ≥2px + コントラスト比 ≥3:1
-      let areaOk = false, crOk = false, areaNote = '', crNote = '';
-      if (hasOutline) {
-        areaOk   = a.outlineWidth >= 2;
-        areaNote = `outline-width:${a.outlineWidth}px`;
-        const cr = contrastRatio(parseRgb(a.outlineColor), parseRgb(a.adjBg));
-        crOk   = cr >= 3;
-        crNote = `コントラスト:${cr.toFixed(1)}:1`;
-      } else if (hasBoxShadow) {
-        const sh = parseShadow(a.boxShadow);
-        if (sh) {
-          areaOk   = sh.spread >= 2;
-          areaNote = `box-shadow spread:${sh.spread}px`;
-          const cr = contrastRatio(parseRgb(sh.color || a.adjBg), parseRgb(a.adjBg));
-          crOk   = cr >= 3;
-          crNote = `コントラスト:${cr.toFixed(1)}:1`;
-        } else { areaOk = true; crOk = true; }
-      } else if (bgChanged) {
-        areaOk = true;
-        const cr = contrastRatio(parseRgb(a.backgroundColor), parseRgb(a.adjBg));
-        crOk   = cr >= 3;
-        crNote = `背景コントラスト:${cr.toFixed(1)}:1`;
-      } else if (borderChanged) {
-        const bwDiff = a.borderWidth - b.borderWidth;
-        areaOk   = bwDiff >= 2;
-        areaNote = `border増分:${bwDiff.toFixed(1)}px`;
-        const cr = contrastRatio(parseRgb(a.borderColor), parseRgb(a.adjBg));
-        crOk   = cr >= 3;
-        crNote = `コントラスト:${cr.toFixed(1)}:1`;
-      }
-      if (!areaOk || !crOk) {
-        const reasons = [];
-        if (!areaOk) reasons.push(`面積不足(${areaNote}、≥2px必要)`);
-        if (!crOk)   reasons.push(`${crNote}（≥3:1必要）`);
-        violations213.push(`${b.label} ／ ${reasons.join('、')}`);
-      }
+      const notes = indicators.map(item => item.note).join(' / ');
+      violations27.push(`${b.label} ／ フォーカス表示が弱い: ${notes}`);
+      violations213.push(`${b.label} ／ ${notes}（2px以上・3:1以上の表示が必要）`);
     }
 
     // Tab で到達しなかった要素（preData にあるが checked にない）は手動確認扱いにしてfailにしない
@@ -2633,8 +2762,8 @@ async function check_2_4_7_focus_visible(page) {
         sc: '2.4.7', name: 'フォーカス可視（AA）',
         status: has247Fail ? 'fail' : 'pass',
         message: has247Fail
-          ? `${violations27.length}個の要素でフォーカス時にスタイル変化なし`
-          : 'フォーカス時にスタイル変化あり（outline/shadow/background/border）',
+          ? `${violations27.length}個の要素でフォーカス表示が未検出または弱い`
+          : 'フォーカス時に視認可能なスタイル変化あり（outline/shadow/background/border）',
         violations: violations27
       },
       {
@@ -4276,10 +4405,46 @@ async function check_3_3_7_redundant_entry(page) {
       const stepIndicators = document.querySelectorAll('[class*="step" i], [class*="wizard" i], [class*="progress" i], [aria-current="step"]');
       const forms = Array.from(document.querySelectorAll('form'));
       const checkItems = [];
+      const cssEscape = window.CSS && typeof window.CSS.escape === 'function'
+        ? window.CSS.escape.bind(window.CSS)
+        : value => String(value).replace(/["\\]/g, '\\$&');
+      function cssPath(el) {
+        if (!el || el.nodeType !== Node.ELEMENT_NODE) return '';
+        const parts = [];
+        let current = el;
+        while (current && current !== document.body && parts.length < 4) {
+          const tag = current.tagName.toLowerCase();
+          if (current.id) {
+            parts.unshift(`${tag}#${cssEscape(current.id)}`);
+            break;
+          }
+          const cls = typeof current.className === 'string' && current.className.trim()
+            ? '.' + current.className.trim().split(/\s+/).slice(0, 2).map(cssEscape).join('.')
+            : '';
+          const parent = current.parentElement;
+          const sameTag = parent ? Array.from(parent.children).filter(child => child.tagName === current.tagName) : [];
+          const nth = sameTag.length > 1 ? `:nth-of-type(${sameTag.indexOf(current) + 1})` : '';
+          parts.unshift(`${tag}${cls}${nth}`);
+          current = parent;
+        }
+        return parts.join(' > ');
+      }
+      function textOf(el) {
+        return String(el?.innerText || el?.textContent || el?.getAttribute?.('aria-label') || '')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 40);
+      }
+      function describe(el) {
+        const path = cssPath(el);
+        const text = textOf(el);
+        return `${path}${text ? ` "${text}"` : ''}`.trim();
+      }
 
       if (stepIndicators.length > 0) {
         // マルチステップ確認
-        checkItems.push(`マルチステップUIを検出(${stepIndicators.length}個の要素): 前ステップの入力値が再要求されていないか手動確認が必要`);
+        const examples = Array.from(stepIndicators).slice(0, 3).map(describe).filter(Boolean).join(' / ');
+        checkItems.push(`マルチステップUIを検出(${stepIndicators.length}個の要素): 前ステップの入力値が再要求されていないか手動確認が必要 | 検出箇所: ${examples || '特定不能'}`);
       }
       if (forms.length > 1) {
         // 同一ページに複数フォームがある場合のみ、自由入力系の同名フィールドを確認候補にする。
@@ -4302,13 +4467,14 @@ async function check_3_3_7_redundant_entry(page) {
             if (!name) continue;
             const type = field.tagName.toLowerCase() === 'select' ? 'select' : (field.type || field.tagName).toLowerCase();
             const key = `${name}::${type}`;
-            if (!fieldMap.has(key)) fieldMap.set(key, { name, type, formIndexes: new Set() });
+            if (!fieldMap.has(key)) fieldMap.set(key, { name, type, formIndexes: new Set(), examples: [] });
             fieldMap.get(key).formIndexes.add(formIndex);
+            fieldMap.get(key).examples.push(describe(field));
           }
         });
         const duplicates = Array.from(fieldMap.values())
           .filter(item => item.formIndexes.size > 1)
-          .map(item => item.name);
+          .map(item => `${item.name} (${item.examples.slice(0, 3).join(' / ')})`);
         if (duplicates.length > 0) {
           checkItems.push(`複数フォームで自由入力系の同名フィールドを検出: ${duplicates.slice(0, 5).join(', ')} — 同一プロセス内の再入力か手動確認が必要`);
         }
@@ -4317,12 +4483,16 @@ async function check_3_3_7_redundant_entry(page) {
       // autocomplete で前入力値を再利用しているか
       const requiredInputs = document.querySelectorAll('input[required]:not([type="hidden"]):not([type="submit"]):not([type="checkbox"]):not([type="radio"])');
       let noAutocomplete = 0;
+      const noAutocompleteExamples = [];
       for (const inp of requiredInputs) {
         const ac = inp.getAttribute('autocomplete');
-        if (!ac || ac === 'off') noAutocomplete++;
+        if (!ac || ac === 'off') {
+          noAutocomplete++;
+          if (noAutocompleteExamples.length < 3) noAutocompleteExamples.push(describe(inp));
+        }
       }
       if (noAutocomplete > 2 && stepIndicators.length > 0) {
-        checkItems.push(`必須フィールド${noAutocomplete}個でautocompleteなし: マルチステップで再入力を強いていないか手動確認が必要`);
+        checkItems.push(`必須フィールド${noAutocomplete}個でautocompleteなし: マルチステップで再入力を強いていないか手動確認が必要 | 検出箇所: ${noAutocompleteExamples.join(' / ') || '特定不能'}`);
       }
 
       return { checkItems, hasMultiStep: stepIndicators.length > 0, formCount: forms.length };
@@ -6278,46 +6448,186 @@ async function pw_check_2_4_7_focus_visible_all(page) {
     function isTransparentColor(c) {
       return !c || c === 'transparent' || /rgba?\(\s*\d+,\s*\d+,\s*\d+,\s*0\s*\)/.test(c);
     }
+    function parseRgb(c) {
+      if (!c) return null;
+      const m = c.match(/rgba?\(\s*(\d+\.?\d*),\s*(\d+\.?\d*),\s*(\d+\.?\d*)/);
+      return m ? [parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3])] : null;
+    }
+    function luminance(rgb) {
+      if (!rgb) return 0;
+      return rgb.map((v, i) => {
+        v /= 255;
+        v = v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+        return v * [0.2126, 0.7152, 0.0722][i];
+      }).reduce((a, b) => a + b, 0);
+    }
+    function contrastRatio(c1, c2) {
+      if (!c1 || !c2) return 0;
+      const l1 = luminance(c1), l2 = luminance(c2);
+      return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+    }
+    function effectiveBg(el) {
+      let node = el;
+      while (node && node !== document.documentElement) {
+        const bg = getComputedStyle(node).backgroundColor;
+        if (!isTransparentColor(bg)) return bg;
+        node = node.parentElement;
+      }
+      return 'rgb(255,255,255)';
+    }
+    function parseShadow(s) {
+      if (!s || s === 'none') return null;
+      const colorMatch = s.match(/rgba?\([^)]+\)/);
+      const color = colorMatch ? colorMatch[0] : null;
+      const noColor = s.replace(/rgba?\([^)]+\)/, '').trim();
+      const nums = (noColor.match(/(-?\d+\.?\d*)px/g) || []).map(parseFloat);
+      const spread = nums.length >= 4 ? nums[3] : (nums.length === 3 ? 0 : null);
+      return spread !== null ? { spread, color } : null;
+    }
+    function uniqueElements(items) {
+      const seen = new Set();
+      return items.filter(el => {
+        if (!el || seen.has(el) || el.nodeType !== Node.ELEMENT_NODE) return false;
+        seen.add(el);
+        return true;
+      });
+    }
+    function visualCandidates(el) {
+      return uniqueElements([
+        el,
+        el.closest('label'),
+        el.closest('[class*="control" i], [class*="field" i], [class*="input" i], [class*="checkbox" i], [class*="radio" i]'),
+        el.parentElement,
+        el.nextElementSibling,
+        el.previousElementSibling
+      ]);
+    }
+    function snapshot(el) {
+      const s = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return {
+        el,
+        display: s.display,
+        visibility: s.visibility,
+        opacity: parseFloat(s.opacity) || 0,
+        width: rect.width,
+        height: rect.height,
+        outlineWidth: parseFloat(s.outlineWidth) || 0,
+        outlineStyle: s.outlineStyle,
+        outlineColor: s.outlineColor,
+        boxShadow: s.boxShadow,
+        backgroundColor: s.backgroundColor,
+        borderWidth: parseFloat(s.borderWidth) || 0,
+        borderColor: s.borderColor,
+        adjBg: effectiveBg(el.parentElement || el)
+      };
+    }
+    function isVisibleSnapshot(st) {
+      return st.display !== 'none'
+        && st.visibility !== 'hidden'
+        && st.visibility !== 'collapse'
+        && st.opacity >= 0.1
+        && st.width >= 2
+        && st.height >= 2;
+    }
+    function labelFor(el) {
+      const tag = el.tagName.toLowerCase();
+      const id = el.id ? '#'+el.id : '';
+      const cls = typeof el.className === 'string' && el.className ? '.'+el.className.split(/\s+/).slice(0,2).join('.') : '';
+      const text = (el.getAttribute('aria-label') || el.textContent || el.value || '').trim().replace(/\s+/g, ' ').slice(0, 25);
+      const parentEl = el.parentElement;
+      const ctx = !el.id && parentEl && parentEl !== document.body ? ` in ${parentEl.tagName.toLowerCase()}${parentEl.id ? '#'+parentEl.id : ''}` : '';
+      return `${tag}${id}${cls}${text ? ' "'+text+'"' : ''}${ctx}`.slice(0, 90);
+    }
+    function snippet(el) {
+      const h = el.outerHTML.replace(/\s+/g, ' ').trim();
+      return h.length > 120 ? h.slice(0, 117) + '...' : h;
+    }
+    function evaluateIndicator(before, after) {
+      if (!isVisibleSnapshot(after)) return null;
+
+      const outlineVisible = after.outlineStyle !== 'none' && after.outlineWidth > 0 && !isTransparentColor(after.outlineColor);
+      const outlineChanged = outlineVisible && (
+        before.outlineStyle !== after.outlineStyle
+        || before.outlineWidth !== after.outlineWidth
+        || before.outlineColor !== after.outlineColor
+      );
+      if (outlineChanged) {
+        const ratio = contrastRatio(parseRgb(after.outlineColor), parseRgb(after.adjBg));
+        return {
+          found: true,
+          strong: after.outlineWidth >= 2 && ratio >= 3,
+          note: `outline ${after.outlineWidth}px / ${ratio.toFixed(1)}:1`
+        };
+      }
+
+      const shadowChanged = after.boxShadow && after.boxShadow !== 'none' && after.boxShadow !== before.boxShadow;
+      if (shadowChanged) {
+        const sh = parseShadow(after.boxShadow);
+        const ratio = sh ? contrastRatio(parseRgb(sh.color || after.adjBg), parseRgb(after.adjBg)) : 0;
+        return {
+          found: true,
+          strong: !!sh && sh.spread >= 2 && ratio >= 3,
+          note: sh ? `box-shadow spread ${sh.spread}px / ${ratio.toFixed(1)}:1` : 'box-shadow 解析不能'
+        };
+      }
+
+      const borderChanged = after.borderWidth !== before.borderWidth || after.borderColor !== before.borderColor;
+      if (borderChanged) {
+        const widthDelta = Math.max(0, after.borderWidth - before.borderWidth);
+        const effectiveWidth = widthDelta > 0 ? widthDelta : after.borderWidth;
+        const ratio = contrastRatio(parseRgb(after.borderColor), parseRgb(after.adjBg));
+        return {
+          found: true,
+          strong: effectiveWidth >= 2 && ratio >= 3,
+          note: `border ${effectiveWidth.toFixed(1)}px / ${ratio.toFixed(1)}:1`
+        };
+      }
+
+      const bgChanged = after.backgroundColor !== before.backgroundColor && !isTransparentColor(after.backgroundColor);
+      if (bgChanged) {
+        const ratio = contrastRatio(parseRgb(after.backgroundColor), parseRgb(before.backgroundColor || after.adjBg));
+        return {
+          found: true,
+          strong: ratio >= 3,
+          note: `background ${ratio.toFixed(1)}:1`
+        };
+      }
+
+      return null;
+    }
 
     const focusable = Array.from(document.querySelectorAll(
       'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
     )).filter(el => {
       const s = getComputedStyle(el);
-      return s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0';
+      return s.display !== 'none' && s.visibility !== 'hidden';
     }).slice(0, 40);
     const noFocus = [];
     focusable.forEach(el => {
       // 非フォーカス時のスタイルを先に取得
       if (document.activeElement === el) el.blur();
-      const before = getComputedStyle(el);
-      const bOutlineW = parseFloat(before.outlineWidth) || 0;
-      const bBoxShadow = before.boxShadow;
-      const bBg = before.backgroundColor;
-      const bBorderColor = before.borderColor;
+      const candidates = visualCandidates(el);
+      const beforeStates = candidates.map(snapshot);
 
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
       el.focus({ preventScroll: true });
       const doc = el.ownerDocument;
       if (doc.activeElement !== el) return;
-      const s = getComputedStyle(el);
-      const aOutlineW = parseFloat(s.outlineWidth) || 0;
-      const aOutlineC = s.outlineColor;
-      const outlineOk = aOutlineW > 0 && s.outlineStyle !== 'none' && !isTransparentColor(aOutlineC);
-      const shadowOk = s.boxShadow && s.boxShadow !== 'none' && s.boxShadow !== bBoxShadow;
-      const bgChanged = s.backgroundColor !== bBg;
-      const borderChanged = s.borderColor !== bBorderColor;
+      const afterStates = candidates.map(snapshot);
       el.blur();
 
-      if (!outlineOk && !shadowOk && !bgChanged && !borderChanged) {
-        const tag2 = el.tagName.toLowerCase();
-        const id2 = el.id ? '#'+el.id : '';
-        const cls2 = el.className ? '.'+String(el.className).split(' ').slice(0,2).join('.') : '';
-        const text2 = (el.getAttribute('aria-label') || el.textContent || el.value || '').trim().slice(0, 25);
-        const parentEl2 = el.parentElement;
-        const ctx2 = !el.id && parentEl2 && parentEl2 !== document.body ? ` in ${parentEl2.tagName.toLowerCase()}${parentEl2.id ? '#'+parentEl2.id : ''}` : '';
-        const h = el.outerHTML.replace(/\s+/g, ' ').trim();
-        const snippetFv = h.length > 120 ? h.slice(0, 117) + '...' : h;
-        noFocus.push(`${tag2}${id2}${cls2}${text2 ? ' "'+text2+'"' : ''}${ctx2} (outline:${s.outline}, shadow:${s.boxShadow !== 'none' ? 'あり' : 'なし'}) | ${snippetFv}`);
+      const indicators = afterStates
+        .map((after, idx) => evaluateIndicator(beforeStates[idx], after))
+        .filter(Boolean);
+      const strong = indicators.find(item => item.strong);
+      if (strong) return;
+
+      const label = labelFor(el);
+      if (indicators.length > 0) {
+        noFocus.push(`フォーカス表示が弱い: ${label} (${indicators.map(item => item.note).join(' / ')}) | ${snippet(el)}`);
+      } else {
+        noFocus.push(`フォーカスインジケーターなし: ${label} | ${snippet(el)}`);
       }
     });
     return noFocus;
@@ -6325,8 +6635,8 @@ async function pw_check_2_4_7_focus_visible_all(page) {
   return {
     sc: '2.4.7',
     status: issues.length > 0 ? 'fail' : 'pass',
-    violations: issues.slice(0, 10).map(s => `フォーカスインジケーターなし: ${s}`),
-    message: issues.length > 0 ? `${issues.length}個の要素でフォーカス表示が検出されない` : `フォーカス可能要素のインジケーターを確認（問題なし）`
+    violations: issues.slice(0, 10),
+    message: issues.length > 0 ? `${issues.length}個の要素でフォーカス表示が未検出または弱い` : `フォーカス可能要素の視認性を確認（問題なし）`
   };
 }
 

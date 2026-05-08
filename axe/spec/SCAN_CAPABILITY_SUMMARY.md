@@ -147,9 +147,9 @@ MULTI は以下の18項目のみを直接評価します（自然言語・視覚
 | 2.4.4 | リンクの目的 | `BASIC` / `EXT` は link text 欠落や冗長な画像リンクテキストをルールベースで検出。`DEEP` の `check_2_4_4_link_purpose()` は「こちら」「read more」等の汎用リンク語と無テキストリンクを fail。`MULTI` はリンク文字列に加えて近接する見出し、段落、`aria-label`、`title` を見て目的が文脈から分かるかを評価する。 |
 | 2.4.5 | 複数の手段 | `MULTI` 専用。検索、サイトマップ、グローバルナビ、パンくず、関連リンクなど、ページ到達手段の証拠を画面とHTMLから探す。単一ページだけではサイト全体判断が難しいため、証拠不足時は `manual_required`。 |
 | 2.4.6 | 見出しとラベル | `BASIC` は `axe-core`。`EXT` は IBM ACE の `WCAG20_Input_VisibleLabel` とネイティブ `ext_check_2_4_6_heading_order()` により見出しスキップ、`h1` 欠落・複数を検出。`PLAY` は空の見出しタグと unlabeled form control を fail にする。 |
-| 2.4.7 | フォーカスの可視性 | `PLAY` が権威。`pw_check_2_4_7_focus_visible_all()` が focus 後の outline、box-shadow、border の存在を確認。`DEEP` の `check_2_4_7_focus_visible()` も focus 前後の style 差分から indicator を確認し、AA と AAA の結果を分けて返す。 |
+| 2.4.7 | フォーカスの可視性 | `PLAY` が権威。`pw_check_2_4_7_focus_visible_all()` が focus 後の outline、box-shadow、border、background の変化を確認し、透明・極小の input 自体の outline は合格根拠にしない。label / 親 / 隣接する見た目要素に十分な太さとコントラストの変化があるかも確認する。`DEEP` の `check_2_4_7_focus_visible()` も focus 前後の style 差分から indicator を確認し、弱い表示は 2.4.7 / 2.4.13 の fail として返す。 |
 | 2.4.11 | フォーカスの非隠蔽（最低限） | `PLAY` が権威。`pw_check_2_4_11_focus_obscured()` と `DEEP` の `check_2_4_11_12_focus_obscured()` が、focus 時にも非表示の要素と、fixed/sticky 要素に90%以上覆われる要素を fail とする。 |
-| 2.4.13 | フォーカスの外観 | WCAG 2.2 新規 AA 基準。フォーカスインジケータの面積・コントラスト要件。`PLAY` の `pw_check_2_4_7_focus_visible_all()` が focus indicator の存在を確認（2.4.7 と共通実装）。`DEEP` の `check_2_4_7_focus_visible()` が focus 前後の style 差分から確認する。専用の面積・コントラスト判定ロジックは未実装のため、現状は `unverified` に残る。 |
+| 2.4.13 | フォーカスの外観 | WCAG 2.2 新規 AA 基準。`DEEP` の `check_2_4_7_focus_visible()` が focus indicator の面積（2px以上相当）とコントラスト（3:1以上）を確認する。PLAY は 2.4.7 の中で同等の弱いフォーカス表示を fail として扱う。 |
 | 2.5.1 | ポインタジェスチャ | `AUTO_PASS(noGesture)` 対応。`DEEP` の `check_2_5_1_7_gestures()` が `draggable="true"` 要素に代替ボタンがあるか、`swiper` 等のスワイプ UI に next/prev 相当ボタンがあるかを見て fail。`2.5.7` と共通実装。 |
 | 2.5.2 | ポインタのキャンセル | `AUTO_PASS(noGesture)` 対応。`DEEP` の `check_2_5_2_pointer_cancellation()` が `onmousedown` で `location` / `submit` / `href` / `window.open` を直接呼ぶ要素を fail にする。 |
 | 2.5.3 | 名前に含まれるラベル | `EXT` は IBM ACE の `Rpt_Aria_OrphanedContent_Native_Host_Sematics` 等（◯）。`DEEP` は Section A の `check_2_5_3_label_in_name()` で visible text と `aria-label` の不一致を検出（△）。`PLAY` は `pw_check_2_5_3_label_in_name()` で同様の確認を Playwright ベースで行う（◎）。 |
@@ -233,7 +233,7 @@ MULTI は以下の18項目のみを直接評価します（自然言語・視覚
 
 | SC | リスク | 説明 |
 |:---|:---|:---|
-| 2.4.7 | 中 | focus indicator の検出は outline / box-shadow / border の CSS 差分に依存するため、JS による class 切り替えや SVG focus 表示を見落とす |
+| 2.4.7 | 中 | focus indicator の検出は outline / box-shadow / border / background の CSS 差分に依存するため、JS による class 切り替えや SVG focus 表示を見落とす可能性がある。一方で透明 input + label 装飾型のフォームは label / 親 / 隣接要素まで確認する |
 | 2.1.1 | 低〜中 | 最大 60 回の Tab のみで判定するため、Tab 到達可能でも実際には機能しないカスタムコンポーネントの問題を見落とす |
 | 3.3.2 | 中 | `placeholder` を label 代替として検出しているが、WCAG 上 placeholder 単独はラベルの代替として不十分であるため、ここを合格と判定しているのは緩すぎる可能性がある。必須表示は DOM と CSS 疑似要素から確認するため、画像だけで示した必須マークは手動確認が必要 |
 | 4.1.3 | 中 | `aria-live` リージョン外の動的更新クラスを find するが、実際にアナウンスが行われるかブラウザの AT 実装まで追うことができない |
@@ -259,7 +259,7 @@ MULTI は以下の18項目のみを直接評価します（自然言語・視覚
 | 2.4.5 | 高 | MULTI 単独依存。単一ページ文脈では証拠が薄く `manual_required` になりやすい |
 | 2.5.1 / 2.5.2 | 中〜高 | `AUTO_PASS(noGesture)` が通れば合格。ジェスチャ依存 UI でも宣言がなければ見落とす |
 | 1.4.11 | 中〜高 | axe-core の `non-text-contrast` のみ。フォームのボーダー、アイコンボタンの境界色のコントラスト不足を見落としやすい |
-| 2.4.13 | 高 | focus indicator の面積・コントラスト比の専用計算ロジック未実装。存在確認のみで基準値チェックがない |
+| 2.4.13 | 中 | DEEP は面積・コントラスト比を計算するが、複雑な box-shadow、多重アウトライン、SVG / canvas ベースの独自 focus 表示は正確に評価できない場合がある |
 | 3.2.6 | 中 | `header/footer` 内のヘルプリンク文言マッチ依存。独自のカスタム問い合わせ UI や電話番号アイコンボタンは見落とす |
 | 3.3.4 | 中 | MULTI 依存かつフォーム送信フローが見えない状態では `manual_required` 止まり |
 
@@ -308,5 +308,5 @@ MULTI は以下の18項目のみを直接評価します（自然言語・視覚
 1. `aria-pressed` トグルの誤検出除外（DEEP・BASIC）— 影響範囲大、修正容易
 2. 2.5.8 のインライン/装飾要素除外強化（DEEP）— 高頻度誤検出
 3. `aria-current` ナビ検出の HOME ページ除外（PLAY）— 繰り返し発生
-4. 2.4.13 focus indicator の面積・コントラスト計算ロジック追加（PLAY/DEEP）— 見落としリスク高
+4. SVG / canvas / JS class 切り替えによる独自 focus indicator の検出精度向上
 5. 1.4.2 音声制御の専用ロジック追加（DEEP）— 現状実質未検証

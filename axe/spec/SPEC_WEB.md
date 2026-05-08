@@ -1,6 +1,6 @@
 # SPEC_WEB
 
-最終更新: 2026-05-08（PLAY 3.3.2 必須表示チェック追加 / DEEP 1.4.3 SR専用テキスト除外）
+最終更新: 2026-05-08（PLAY 3.3.2 必須表示チェック追加 / DEEP 1.4.3 SR専用テキスト除外 / フォーカス表示検査強化）
 
 ## 対象
 
@@ -27,6 +27,7 @@
 - SC 1.4.12 テキスト間隔検査では、class/id/data属性に `screen-reader-text` / `sr-only` / `visually-hidden` 等のスクリーンリーダー専用マーカーを持つ要素とその配下をクリップ判定から除外する
 - SC 1.4.3 コントラスト検査では、`aria-hidden="true"`、`hidden`、`inert`、および class/id/data属性に `screen-reader-text` / `sr-only` / `visually-hidden` 等のスクリーンリーダー専用マーカーを持つ要素とその配下を除外する。親要素の検出文にも除外対象テキストを混ぜない
 - SC 2.5.8 ターゲットサイズ検査では、class/id/data属性に `sr-only` / `screen-reader` / `screen-reader-text` / `visually-hidden` / `assistive-text` 等のスクリーンリーダー専用マーカーを持つ要素とその配下を24×24px判定から除外する
+- SC 2.4.7 フォーカス表示検査では、outline / box-shadow / border / background の変化があっても、面積が薄い、コントラストが低い、または focus 対象自体が透明・極小で見えない場合は合格扱いしない。PLAY は focus 対象の label / 親 / 隣接する見た目要素の変化も確認する
 - SC 2.3.1 点滅検査では、現在ページ上の要素に実際に適用され、`animation-duration > 0` の `animation-name` に対応する keyframes のみを点滅候補にする。WordPress標準 lightbox 由来の `turn-on-visibility` / `turn-off-visibility` / `lightbox-zoom-in` / `lightbox-zoom-out` keyframes は除外する
 - SC 2.4.11 / 2.4.12 フォーカス隠れ検査では、通常時の表示状態ではなく、Tabで実際にfocusした後の表示状態を判定する。通常時は隠れていてもfocus時に表示される要素は違反にしない
 - SC 1.4.1 色だけの情報伝達では、**本文中リンク**と**ナビゲーションの current/selected 状態**を通常表示時の視覚差分で判定する。header/footer のナビゲーションリンク全体を一律違反にせず、色だけで識別されている状態差のみを対象にする
@@ -107,7 +108,7 @@
 | 情報と関係性 | 1.3.1 | テーブルヘッダー欠落・fieldset未使用ラジオグループを検出 |
 | 意味のある順序 | 1.3.2 | 主要な本文・フォーム・表で CSS `order` と視覚的な上戻りを順序ずれシグナルとして検出 |
 | 感覚的特徴 | 1.3.3 | 感覚依存らしい操作指示文を抽出し、候補があれば `manual_required`（スコア上は未検証扱い） |
-| フォーカス表示（全要素） | 2.4.7 | フォーカス可能要素に outline/box-shadow を確認（最大40要素） |
+| フォーカス表示（全要素） | 2.4.7 | フォーカス可能要素と、その label / 親 / 隣接する見た目要素に、十分な太さ・コントラストを持つ outline / box-shadow / border / background 変化があるか確認（最大40要素） |
 | キーボード完全到達性 | 2.1.1 | Tab キーシーケンスで到達可能要素を列挙（最大60要素） |
 | キーボードトラップ | 2.1.2 | Tab 連続押下で同一要素3回連続を候補とし、さらに `Shift+Tab → Tab → Tab` でも同一要素から移動できない場合のみトラップとして検出（aria-modal 除外） |
 | フォーカス順序 | 2.4.3 | tabindex > 0 の有無・視覚的読み順からの逸脱を検出 |

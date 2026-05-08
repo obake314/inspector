@@ -184,6 +184,8 @@ function checkRedundantEntryPolicy() {
   const server = readFileSync(join(root, 'server.js'), 'utf8');
   const snippets = [
     'checkbox/radio の同一 name や name[] は通常の選択肢グループ',
+    'function cssPath(el)',
+    '検出箇所:',
     "if (isChoiceType(type)) return true;",
     "if (/\\[\\]$/.test(el.name || '')) return true;",
     "status: 'manual_required',",
@@ -197,6 +199,24 @@ function checkRedundantEntryPolicy() {
   console.log('ok - redundant entry policy');
 }
 
+function checkFocusIndicatorPolicy() {
+  const server = readFileSync(join(root, 'server.js'), 'utf8');
+  const snippets = [
+    'function visualCandidates(el)',
+    'function evaluateIndicator(before, after)',
+    'フォーカス表示が弱い',
+    'function isVisibleSnapshot(st)',
+    'opacity:${a.opacity}',
+    "el.closest('label')"
+  ];
+  snippets.forEach(snippet => {
+    if (!server.includes(snippet)) {
+      throw new Error(`Focus indicator policy check failed: missing ${snippet}`);
+    }
+  });
+  console.log('ok - focus indicator policy');
+}
+
 function main() {
   runNodeCheck('server.js', join(root, 'server.js'));
   checkInlineScripts();
@@ -206,6 +226,7 @@ function main() {
   checkScreenReaderContrastPolicy();
   checkRequiredIndicatorPolicy();
   checkRedundantEntryPolicy();
+  checkFocusIndicatorPolicy();
   runNodeCheck('gas/ReportGenerator.gs', join(root, 'gas', 'ReportGenerator.gs'), readFileSync(join(root, 'gas', 'ReportGenerator.gs'), 'utf8'));
 }
 

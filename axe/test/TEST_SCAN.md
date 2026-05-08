@@ -870,8 +870,22 @@
 - 手順
   1. `name="contact_purpose[]"` や `name="axe_web-info[]"` など、同一 `name[]` を持つ複数 checkbox を同一フォーム内に配置する
   2. 同一 `name` の radio グループも配置して DEEP SCAN を実行する
-  3. MULTI SCAN に DEEP 結果を渡して実行する
+  3. 進捗UIや複数フォームを含むページで DEEP SCAN を実行し、SC 3.3.7 の詳細表示を確認する
+  4. MULTI SCAN に DEEP 結果を渡して実行する
 - 期待結果
   - checkbox/radio の同一 `name` や `name[]` は SC 3.3.7 の「複数フォームで同名フィールドが重複」違反に含まれない
   - DEEP は選択肢グループだけを根拠に `fail` を返さない
+  - DEEP の 3.3.7 詳細には、進捗UIや自由入力系同名フィールドのセレクタ・周辺テキストが含まれる
   - MULTI は DEEP の確認候補だけを根拠に、選択肢グループを冗長入力として `fail` にしない
+
+## T-SCAN-78: PLAY/DEEP フォームフォーカス表示の弱さ検出
+
+- 手順
+  1. opacity 0 の checkbox/input と、見た目を担う label / span を持つカスタムフォーム部品を配置する
+  2. focus 時に input 自体だけ outline が出るが、input が透明または極小で目視できないページを PLAY / DEEP SCAN する
+  3. focus 時の outline / border / box-shadow が 1px または低コントラストのみのフォーム部品を PLAY / DEEP SCAN する
+  4. label / 親 / 隣接 span に 2px 以上かつ 3:1 以上の focus 表示を付けたページも PLAY / DEEP SCAN する
+- 期待結果
+  - 透明・極小の input 自体の outline は、可視フォーカスインジケーターとして合格扱いされない
+  - 1px または低コントラストのみの focus 表示は `2.4.7` / `2.4.13` の問題として検出される
+  - label / 親 / 隣接する見た目要素に十分な focus 表示がある場合は合格になる
