@@ -2614,6 +2614,12 @@ async function check_2_4_7_focus_visible(page) {
       );
       if (outlineChanged) {
         const ratio = contrastRatio(parseRgb(after.outlineColor), parseRgb(after.adjBg));
+        // 要素自身が背景色を持つ場合（ボタン風リンク等）も比較対象に加える
+        // 例: 白outline×暗ボタン背景×白ページ → 親比較=1.0:1 だが要素比較=高コントラスト
+        const selfBgRatio = !isTransparentColor(after.backgroundColor)
+          ? contrastRatio(parseRgb(after.outlineColor), parseRgb(after.backgroundColor))
+          : 0;
+        const effectiveRatio = Math.max(ratio, selfBgRatio);
         const offset = after.outlineOffset || 0;
         // 負のoffset（インセットリング）はoutline幅を視覚的に減らさない
         // 正のoffsetはリングが要素の外側に広がるため有効サイズに加算
@@ -2621,8 +2627,8 @@ async function check_2_4_7_focus_visible(page) {
         const offsetNote = offset !== 0 ? ` (offset: ${offset}px)` : '';
         return {
           found: true,
-          strong: effectiveSize >= 2 && ratio >= 3,
-          note: `outline ${after.outlineWidth}px${offsetNote} / ${ratio.toFixed(1)}:1`
+          strong: effectiveSize >= 2 && effectiveRatio >= 3,
+          note: `outline ${after.outlineWidth}px${offsetNote} / ${effectiveRatio.toFixed(1)}:1`
         };
       }
 
@@ -6658,6 +6664,12 @@ async function pw_check_2_4_7_focus_visible_all(page) {
       );
       if (outlineChanged) {
         const ratio = contrastRatio(parseRgb(after.outlineColor), parseRgb(after.adjBg));
+        // 要素自身が背景色を持つ場合（ボタン風リンク等）も比較対象に加える
+        // 例: 白outline×暗ボタン背景×白ページ → 親比較=1.0:1 だが要素比較=高コントラスト
+        const selfBgRatio = !isTransparentColor(after.backgroundColor)
+          ? contrastRatio(parseRgb(after.outlineColor), parseRgb(after.backgroundColor))
+          : 0;
+        const effectiveRatio = Math.max(ratio, selfBgRatio);
         const offset = after.outlineOffset || 0;
         // 負のoffset（インセットリング）はoutline幅を視覚的に減らさない
         // 正のoffsetはリングが要素の外側に広がるため有効サイズに加算
@@ -6665,8 +6677,8 @@ async function pw_check_2_4_7_focus_visible_all(page) {
         const offsetNote = offset !== 0 ? ` (offset: ${offset}px)` : '';
         return {
           found: true,
-          strong: effectiveSize >= 2 && ratio >= 3,
-          note: `outline ${after.outlineWidth}px${offsetNote} / ${ratio.toFixed(1)}:1`
+          strong: effectiveSize >= 2 && effectiveRatio >= 3,
+          note: `outline ${after.outlineWidth}px${offsetNote} / ${effectiveRatio.toFixed(1)}:1`
         };
       }
 
