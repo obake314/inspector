@@ -867,28 +867,59 @@ async function detectPageSignals(page) {
   }
 }
 
+async function injectPageUtils(page) {
+  await page.evaluate(() => {
+    if (window.__pu) return;
+    const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+    const escapeCss = (value) => {
+      if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(String(value));
+      return String(value).replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+    };
+    const isHiddenByStyle = (el) => {
+      if (!el || el.nodeType !== 1) return true;
+      const style = getComputedStyle(el);
+      return style.display === 'none' ||
+        style.visibility === 'hidden' ||
+        Number(style.opacity) === 0 ||
+        el.hidden ||
+        el.getAttribute('aria-hidden') === 'true';
+    };
+    const isVisibleElement = (el, minWidth = 2, minHeight = 2) => {
+      if (isHiddenByStyle(el)) return false;
+      const rect = el.getBoundingClientRect();
+      return rect.width >= minWidth && rect.height >= minHeight;
+    };
+    const cssPath = (el) => {
+      const parts = [];
+      let current = el;
+      while (current && current.nodeType === 1 && current !== document.body && parts.length < 5) {
+        let part = current.tagName.toLowerCase();
+        if (current.id) {
+          part += `#${escapeCss(current.id)}`;
+          parts.unshift(part);
+          break;
+        }
+        const className = normalizeText(current.className).split(' ').filter(Boolean)[0];
+        if (className) part += `.${escapeCss(className)}`;
+        const parent = current.parentElement;
+        if (parent) {
+          const siblings = Array.from(parent.children).filter(child => child.tagName === current.tagName);
+          if (siblings.length > 1) part += `:nth-of-type(${siblings.indexOf(current) + 1})`;
+        }
+        parts.unshift(part);
+        current = parent;
+      }
+      return parts.join(' > ');
+    };
+    window.__pu = { normalizeText, escapeCss, isHiddenByStyle, isVisibleElement, cssPath };
+  });
+}
+
 async function getImageLinkAffordanceCandidates(page, limit = 20) {
   try {
+    await injectPageUtils(page);
     return await page.evaluate((maxItems) => {
-      const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
-      const escapeCss = (value) => {
-        if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(String(value));
-        return String(value).replace(/[^a-zA-Z0-9_-]/g, '\\$&');
-      };
-      const isHiddenByStyle = (el) => {
-        if (!el || el.nodeType !== 1) return true;
-        const style = getComputedStyle(el);
-        return style.display === 'none' ||
-          style.visibility === 'hidden' ||
-          Number(style.opacity) === 0 ||
-          el.hidden ||
-          el.getAttribute('aria-hidden') === 'true';
-      };
-      const isVisibleElement = (el, minWidth = 2, minHeight = 2) => {
-        if (isHiddenByStyle(el)) return false;
-        const rect = el.getBoundingClientRect();
-        return rect.width >= minWidth && rect.height >= minHeight;
-      };
+      const { normalizeText, escapeCss, isHiddenByStyle, isVisibleElement, cssPath } = window.__pu;
       const isVisibleTextNode = (node) => {
         const text = normalizeText(node.textContent);
         if (!text) return false;
@@ -931,28 +962,6 @@ async function getImageLinkAffordanceCandidates(page, limit = 20) {
           !!(style.filter && /drop-shadow/i.test(style.filter));
         const hasBackground = colorHasVisibleAlpha(style.backgroundColor);
         return hasBorder || hasOutline || hasShadow || hasBackground;
-      };
-      const cssPath = (el) => {
-        const parts = [];
-        let current = el;
-        while (current && current.nodeType === 1 && current !== document.body && parts.length < 5) {
-          let part = current.tagName.toLowerCase();
-          if (current.id) {
-            part += `#${escapeCss(current.id)}`;
-            parts.unshift(part);
-            break;
-          }
-          const className = normalizeText(current.className).split(' ').filter(Boolean)[0];
-          if (className) part += `.${escapeCss(className)}`;
-          const parent = current.parentElement;
-          if (parent) {
-            const siblings = Array.from(parent.children).filter(child => child.tagName === current.tagName);
-            if (siblings.length > 1) part += `:nth-of-type(${siblings.indexOf(current) + 1})`;
-          }
-          parts.unshift(part);
-          current = parent;
-        }
-        return parts.join(' > ');
       };
       const getImageAlt = (link) => {
         const img = link.querySelector('img');
@@ -1062,53 +1071,14 @@ async function getImageLinkAffordanceCandidates(page, limit = 20) {
 
 async function getJapaneseAltQualityCandidates(page, limit = 20) {
   try {
+    await injectPageUtils(page);
     return await page.evaluate((maxItems) => {
-      const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
-      const escapeCss = (value) => {
-        if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(String(value));
-        return String(value).replace(/[^a-zA-Z0-9_-]/g, '\\$&');
-      };
+      const { normalizeText, isHiddenByStyle, isVisibleElement, cssPath } = window.__pu;
       const hasJapanese = (value) => /[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff]/.test(String(value || ''));
       const normalizeDigits = (value) => String(value || '').replace(/[０-９]/g, ch =>
         String.fromCharCode(ch.charCodeAt(0) - 0xfee0)
       );
       const isNumericOnly = (value) => /^[0-9]+$/.test(normalizeDigits(value).replace(/\s+/g, ''));
-      const isHiddenByStyle = (el) => {
-        if (!el || el.nodeType !== 1) return true;
-        const style = getComputedStyle(el);
-        return style.display === 'none' ||
-          style.visibility === 'hidden' ||
-          Number(style.opacity) === 0 ||
-          el.hidden ||
-          el.getAttribute('aria-hidden') === 'true';
-      };
-      const isVisibleElement = (el, minWidth = 8, minHeight = 8) => {
-        if (isHiddenByStyle(el)) return false;
-        const rect = el.getBoundingClientRect();
-        return rect.width >= minWidth && rect.height >= minHeight;
-      };
-      const cssPath = (el) => {
-        const parts = [];
-        let current = el;
-        while (current && current.nodeType === 1 && current !== document.body && parts.length < 5) {
-          let part = current.tagName.toLowerCase();
-          if (current.id) {
-            part += `#${escapeCss(current.id)}`;
-            parts.unshift(part);
-            break;
-          }
-          const className = normalizeText(current.className).split(' ').filter(Boolean)[0];
-          if (className) part += `.${escapeCss(className)}`;
-          const parent = current.parentElement;
-          if (parent) {
-            const siblings = Array.from(parent.children).filter(child => child.tagName === current.tagName);
-            if (siblings.length > 1) part += `:nth-of-type(${siblings.indexOf(current) + 1})`;
-          }
-          parts.unshift(part);
-          current = parent;
-        }
-        return parts.join(' > ');
-      };
 
       const lang = normalizeText(document.documentElement.getAttribute('lang')).toLowerCase();
       const ogLocale = normalizeText(document.querySelector('meta[property="og:locale"], meta[name="og:locale"]')?.getAttribute('content')).toLowerCase();
@@ -1122,7 +1092,7 @@ async function getJapaneseAltQualityCandidates(page, limit = 20) {
       const images = Array.from(document.querySelectorAll('img'));
       for (const img of images) {
         if (candidates.length >= maxItems) break;
-        if (!isVisibleElement(img)) continue;
+        if (!isVisibleElement(img, 8, 8)) continue;
         const role = normalizeText(img.getAttribute('role')).toLowerCase();
         if (role === 'presentation' || role === 'none') continue;
         if (img.getAttribute('aria-hidden') === 'true') continue;
@@ -2441,8 +2411,8 @@ async function check_2_1_1_keyboard_operable(page) {
  */
 async function check_2_4_7_focus_visible(page) {
   try {
-    // --- step1: 未フォーカス時のスタイルを収集 ---
-    const preData = await page.evaluate(() => {
+    // step1/step2 の両 evaluate で共用するヘルパーをページコンテキストへ一度だけ注入
+    await page.evaluate(() => {
       function isTransparent(c) {
         return !c || c === 'transparent' || /rgba?\(\s*\d+,\s*\d+,\s*\d+,\s*0\s*\)/.test(c);
       }
@@ -2477,21 +2447,27 @@ async function check_2_4_7_focus_visible(page) {
         const s = window.getComputedStyle(el);
         const rect = el.getBoundingClientRect();
         return {
-          outlineWidth:  parseFloat(s.outlineWidth) || 0,
-          outlineStyle:  s.outlineStyle,
-          outlineColor:  s.outlineColor,
-          boxShadow:     s.boxShadow,
+          outlineWidth:    parseFloat(s.outlineWidth) || 0,
+          outlineStyle:    s.outlineStyle,
+          outlineColor:    s.outlineColor,
+          boxShadow:       s.boxShadow,
           backgroundColor: s.backgroundColor,
-          borderWidth:   parseFloat(s.borderWidth) || 0,
-          borderColor:   s.borderColor,
-          display:       s.display,
-          visibility:    s.visibility,
-          opacity:       parseFloat(s.opacity) || 0,
-          width:         rect.width,
-          height:        rect.height,
-          adjBg:         effectiveBg(el.parentElement || el)
+          borderWidth:     parseFloat(s.borderWidth) || 0,
+          borderColor:     s.borderColor,
+          display:         s.display,
+          visibility:      s.visibility,
+          opacity:         parseFloat(s.opacity) || 0,
+          width:           rect.width,
+          height:          rect.height,
+          adjBg:           effectiveBg(el.parentElement || el)
         };
       }
+      window.__fv = { isTransparent, effectiveBg, uniqueElements, visualCandidates, styleSnap };
+    });
+
+    // --- step1: 未フォーカス時のスタイルを収集 ---
+    const preData = await page.evaluate(() => {
+      const { effectiveBg, visualCandidates, styleSnap } = window.__fv;
       function snap(el) {
         const s = window.getComputedStyle(el);
         const tag = el.tagName.toLowerCase();
@@ -2552,55 +2528,7 @@ async function check_2_4_7_focus_visible(page) {
       await new Promise(r => setTimeout(r, 120));
 
       const after = await page.evaluate(() => {
-        function isTransparent(c) {
-          return !c || c === 'transparent' || /rgba?\(\s*\d+,\s*\d+,\s*\d+,\s*0\s*\)/.test(c);
-        }
-        function effectiveBg(el) {
-          let node = el;
-          while (node && node !== document.documentElement) {
-            const bg = window.getComputedStyle(node).backgroundColor;
-            if (!isTransparent(bg)) return bg;
-            node = node.parentElement;
-          }
-          return 'rgb(255,255,255)';
-        }
-        function uniqueElements(items) {
-          const seen = new Set();
-          return items.filter(el => {
-            if (!el || seen.has(el) || el.nodeType !== Node.ELEMENT_NODE) return false;
-            seen.add(el);
-            return true;
-          });
-        }
-        function visualCandidates(el) {
-          return uniqueElements([
-            el,
-            el.closest('label'),
-            el.closest('[class*="control" i], [class*="field" i], [class*="input" i], [class*="checkbox" i], [class*="radio" i]'),
-            el.parentElement,
-            el.nextElementSibling,
-            el.previousElementSibling
-          ]);
-        }
-        function styleSnap(el) {
-          const s = window.getComputedStyle(el);
-          const rect = el.getBoundingClientRect();
-          return {
-            outlineWidth:    parseFloat(s.outlineWidth) || 0,
-            outlineStyle:    s.outlineStyle,
-            outlineColor:    s.outlineColor,
-            boxShadow:       s.boxShadow,
-            backgroundColor: s.backgroundColor,
-            borderWidth:     parseFloat(s.borderWidth) || 0,
-            borderColor:     s.borderColor,
-            display:         s.display,
-            visibility:      s.visibility,
-            opacity:         parseFloat(s.opacity) || 0,
-            width:           rect.width,
-            height:          rect.height,
-            adjBg:           effectiveBg(el.parentElement || el)
-          };
-        }
+        const { effectiveBg, visualCandidates, styleSnap } = window.__fv;
         const el = document.activeElement;
         if (!el || el === document.body || el === document.documentElement) return null;
         const s   = window.getComputedStyle(el);
@@ -5345,26 +5273,10 @@ ${JSON.stringify(evaluationItems)}
     "selector": "該当するCSSセレクタ。属性値にダブルクォートを使わないこと（例: img[alt] は OK、img[alt=\"\"] は NG）。特定不能なら空文字",
     "suggestion": "修正アクション。fail/manual_requiredなら1〜2文で具体的に書く。pass/not_applicableなら空文字"
   }
-  ],
-  "improvementPlan": {
-    "summary": "全スキャン結果を踏まえた改善方針を2〜3文で要約",
-    "priorityActions": [
-      {
-        "priority": "high" | "medium" | "low",
-        "title": "改善タスク名",
-        "reason": "どの検出結果に基づくか。違反内容と影響",
-        "steps": ["具体的な修正手順1", "具体的な修正手順2"],
-        "relatedSc": ["2.4.4"],
-        "sources": ["BASIC", "MULTI"]
-      }
-    ],
-    "manualChecks": ["自動検査だけでは確定できず、手動確認が必要な確認事項"],
-    "quickWins": ["短時間で改善できる項目"]
-  }
+  ]
 }
 
-全${itemsForAI.length}項目を評価してください。
-improvementPlan はBASIC/EXT/DEEP/PLAY/MULTIの全結果を統合して作成し、最大6件の priorityActions に絞ってください。`;
+全${itemsForAI.length}項目を評価してください。`;
 
     console.log(`[${provider}] AI API 呼び出し中...`);
     let aiResponse = '';
@@ -5546,7 +5458,6 @@ improvementPlan はBASIC/EXT/DEEP/PLAY/MULTIの全結果を統合して作成し
     let results = [];
     const sanitizedResponse = sanitizeAiJson(aiResponse);
     const extractedObject = extractJsonObject(sanitizedResponse);
-    const improvementPlan = normalizeImprovementPlan(extractedObject?.improvementPlan);
     const extracted = Array.isArray(extractedObject?.results) ? extractedObject.results : extractJsonArray(sanitizedResponse);
     if (extracted) {
       results = extracted;
@@ -5614,7 +5525,6 @@ improvementPlan はBASIC/EXT/DEEP/PLAY/MULTIの全結果を統合して作成し
       partialResults,
       missingCount: missingIndexes.length,
       warning,
-      improvementPlan,
       results: normalizedResults
     });
 
@@ -5629,6 +5539,145 @@ improvementPlan はBASIC/EXT/DEEP/PLAY/MULTIの全結果を統合して作成し
   }
 });
 
+
+/**
+ * 改善提案生成 API
+ * スキャン結果（BASIC/DEEP/EXT/PLAY）とMULTI結果・ヒューマンチェック情報を元に改善計画を生成する
+ */
+app.post('/api/generate-improvement-plan', async (req, res) => {
+  const { url, basicResults, extResults, deepResults, playResults, multiSummary, humanDecisions } = req.body;
+  if (!url) return res.status(400).json({ error: 'URLを指定してください' });
+
+  const provider = AI_PROVIDER || 'gemini';
+  const activeApiKey =
+    (provider === 'claude-sonnet' || provider === 'claude-opus')          ? ANTHROPIC_API_KEY
+    : (provider === 'gpt-4o' || provider === 'o3' || provider === 'gpt-5') ? OPENAI_API_KEY
+    : GEMINI_API_KEY;
+  if (!activeApiKey) {
+    return res.status(400).json({ error: 'AIのAPIキーが未設定です。設定画面でAPIキーを登録してください。' });
+  }
+
+  try {
+    const activeModel = AI_MODEL_MAP[provider] || provider;
+    console.log(`[改善提案] 生成開始: ${url} / ${activeModel}`);
+
+    const targetScSet = new Set();
+    if (Array.isArray(basicResults?.violations)) basicResults.violations.forEach(v => { (v.tags || []).forEach(t => { const m = t.match(/wcag(\d)(\d+)(\d+)/); if (m) targetScSet.add(`${m[1]}.${m[2]}.${m[3]}`); }); });
+    const toolResults = buildToolResultsForAI({ basicResults, extResults, deepResults, playResults, targetScSet });
+
+    const humanSummary = humanDecisions && typeof humanDecisions === 'object'
+      ? Object.entries(humanDecisions).map(([k, v]) => `${k}: ${v}`).join('\n')
+      : '（なし）';
+    const multiText = Array.isArray(multiSummary) && multiSummary.length > 0
+      ? JSON.stringify(multiSummary.slice(0, 30))
+      : '（MULTI未実行）';
+
+    const prompt = `あなたはプロのアクセシビリティ監査員です。
+すべての出力（summary, title, reason, steps, manualChecks, quickWins 等すべてのテキストフィールド）は必ず日本語で記述してください。英語は使用しないでください。
+
+以下のWCAGアクセシビリティ検査結果を統合し、改善計画のみを生成してください。
+
+## 対象URL
+${url}
+
+## 自動ツール検査結果（BASIC/DEEP/EXT/PLAY）
+${JSON.stringify(toolResults)}
+
+## MULTI AI評価結果（ある場合）
+${multiText}
+
+## ヒューマンチェックによる上書き決定（ある場合）
+${humanSummary}
+
+## 出力形式（JSONオブジェクトのみ、説明不要）
+{
+  "improvementPlan": {
+    "summary": "全スキャン結果を踏まえた改善方針を2〜3文で要約",
+    "priorityActions": [
+      {
+        "priority": "high" | "medium" | "low",
+        "title": "改善タスク名",
+        "reason": "どの検出結果に基づくか。違反内容と影響を具体的に",
+        "steps": ["具体的な修正手順1", "具体的な修正手順2"],
+        "relatedSc": ["2.4.4"],
+        "sources": ["BASIC", "DEEP", "EXT", "PLAY", "MULTI", "ヒューマンチェック"]
+      }
+    ],
+    "manualChecks": ["自動検査だけでは確定できず、手動確認が必要な確認事項"],
+    "quickWins": ["短時間で改善できる項目"]
+  }
+}
+
+ヒューマンチェックで上書きされた結果を最優先し、failおよびmanual_requiredの項目を中心に最大6件の priorityActions に絞ってください。`;
+
+    const aiResult = await callAI(prompt, null);
+
+    function sanitizeLocal(text) {
+      return text.replace(/\[([a-zA-Z_][\w:-]*[*^$~|!]?)=(?:"[^"\\]*(?:\\.[^"\\]*)*"|'[^'\\]*(?:\\.[^'\\]*)*')\]/g, '[$1]');
+    }
+    function extractObjLocal(text) {
+      const cleaned = text.replace(/```(?:json)?\s*/gi, '').replace(/```\s*/g, '').trim();
+      for (const src of [cleaned, text.trim()]) {
+        try { const p = JSON.parse(src); if (p && typeof p === 'object' && !Array.isArray(p)) return p; } catch (e) {}
+        const start = src.indexOf('{');
+        if (start === -1) continue;
+        let depth = 0, inStr = false, esc = false;
+        for (let i = start; i < src.length; i++) {
+          const c = src[i];
+          if (esc) { esc = false; continue; }
+          if (c === '\\' && inStr) { esc = true; continue; }
+          if (c === '"') { inStr = !inStr; continue; }
+          if (!inStr) {
+            if (c === '{') depth++;
+            else if (c === '}') {
+              depth--;
+              if (depth === 0) {
+                try {
+                  const raw = src.slice(start, i + 1).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ').replace(/,(\s*[}\]])/g, '$1');
+                  const p = JSON.parse(raw);
+                  if (p && typeof p === 'object' && !Array.isArray(p)) return p;
+                } catch (e) {}
+                break;
+              }
+            }
+          }
+        }
+      }
+      return null;
+    }
+    function normalizePlanLocal(plan) {
+      if (!plan || typeof plan !== 'object') return null;
+      const toText = (value, max = 600) => compactForAI(value, max);
+      const toList = (value, maxItems = 6, maxText = 220) => (Array.isArray(value) ? value : []).map(item => toText(item, maxText)).filter(Boolean).slice(0, maxItems);
+      const priorityActions = (Array.isArray(plan.priorityActions) ? plan.priorityActions : [])
+        .filter(a => a && typeof a === 'object').slice(0, 6)
+        .map(a => ({
+          priority: ['high', 'medium', 'low'].includes(a.priority) ? a.priority : 'medium',
+          title: toText(a.title, 160),
+          reason: toText(a.reason, 360),
+          steps: toList(a.steps, 5, 220),
+          relatedSc: Array.isArray(a.relatedSc) ? a.relatedSc.map(sc => compactForAI(sc, 40)).filter(Boolean).slice(0, 6) : [],
+          sources: Array.isArray(a.sources) ? a.sources.map(s => compactForAI(s, 40)).filter(Boolean).slice(0, 6) : []
+        })).filter(a => a.title || a.reason || a.steps.length);
+      const n = { summary: toText(plan.summary, 700), priorityActions, manualChecks: toList(plan.manualChecks), quickWins: toList(plan.quickWins) };
+      return n.summary || n.priorityActions.length || n.manualChecks.length || n.quickWins.length ? n : null;
+    }
+
+    const extracted = extractObjLocal(sanitizeLocal(aiResult.text));
+    const improvementPlan = normalizePlanLocal(extracted?.improvementPlan);
+
+    if (!improvementPlan) {
+      console.warn('[改善提案] AI応答から改善計画を解析できませんでした');
+      return res.status(502).json({ error: 'AI応答から改善計画を生成できませんでした。再度お試しください。' });
+    }
+
+    console.log(`[改善提案] 生成完了: ${improvementPlan.priorityActions.length}件のアクション`);
+    res.json({ success: true, improvementPlan, model: aiResult.modelName });
+  } catch (error) {
+    console.error('[改善提案] エラー:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 /**
  * Google Sheetsエクスポート API

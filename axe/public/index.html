@@ -906,6 +906,8 @@
         }
 
         let lastResults = null;
+        let improvementPlanGenerating = false;
+        let lastImprovementPlanError = null;
         const manualDecisions   = new Map(); // key → 'ok'|'ng'|'hold'
         const manualImpacts     = new Map(); // key → 'critical'|'serious'|'moderate'|'minor'（NG時の重要度）
         const locationDecisions = new Map(); // key → 'ok'|'ng'|'hold'（検出箇所単位）
@@ -2425,20 +2427,21 @@
         function renderImprovementPlanPanel(options = {}) {
             const panel = $('improvementPlanPanel');
             if (!panel) return;
+
+            // スキャンが一度も実行されていなければ非表示
+            const hasScan = !!(lastResults?.url || lastMobileScanSnapshot?.basic?.url);
+            if (!hasScan) {
+                panel.style.display = 'none';
+                panel.innerHTML = '';
+                return;
+            }
+
             const pcPlan = filterPlanByResolved(normalizeImprovementPlanClient(
                 Object.prototype.hasOwnProperty.call(options, 'pcPlan') ? options.pcPlan : lastImprovementPlan
             ));
             const spPlan = filterPlanByResolved(normalizeImprovementPlanClient(
                 Object.prototype.hasOwnProperty.call(options, 'spPlan') ? options.spPlan : lastMobileScanSnapshot?.improvementPlan
             ));
-            const pcIssue = Object.prototype.hasOwnProperty.call(options, 'pcIssue') ? options.pcIssue : lastMultiIssue;
-            const spIssue = Object.prototype.hasOwnProperty.call(options, 'spIssue') ? options.spIssue : lastMobileScanSnapshot?.multiIssue;
-            const pcAttempted = Object.prototype.hasOwnProperty.call(options, 'pcAttempted')
-                ? options.pcAttempted
-                : !!(pcPlan || pcIssue || Object.keys(aiResults || {}).length > 0);
-            const spAttempted = Object.prototype.hasOwnProperty.call(options, 'spAttempted')
-                ? options.spAttempted
-                : !!(spPlan || spIssue || (lastMobileScanSnapshot?.multi && Object.keys(lastMobileScanSnapshot.multi || {}).length > 0));
 
             function renderList(title, items, className) {
                 if (!items || items.length === 0) return '';
@@ -2448,19 +2451,8 @@
                 </div>`;
             }
 
-            function renderView(plan, label, issue, attempted) {
-                if (!plan && !attempted && !issue) return '';
-                if (!plan) {
-                    const message = issue?.message || 'MULTI SCANは完了しましたが、改善計画がAI応答に含まれていませんでした。';
-                    const issueLabel = issue?.label || '改善計画未生成';
-                    return `<section class="improvement-plan-view is-issue">
-                        <div class="improvement-plan-view-head">
-                            <h3>${escapeHtml(label)} 改善計画</h3>
-                            <span class="improvement-plan-status">未生成</span>
-                        </div>
-                        <div class="improvement-plan-issue">${escapeHtml(issueLabel)}: ${escapeHtml(message)}</div>
-                    </section>`;
-                }
+            function renderPlanSection(plan, label) {
+                if (!plan) return '';
                 const actions = plan.priorityActions.map(action => {
                     const meta = [
                         action.relatedSc.length ? `SC ${action.relatedSc.map(escapeHtml).join(', ')}` : '',
@@ -2492,23 +2484,73 @@
                 </section>`;
             }
 
-            const sections = [
-                renderView(pcPlan, 'PC VIEW', pcIssue, pcAttempted),
-                renderView(spPlan, 'SP VIEW', spIssue, spAttempted)
-            ].filter(Boolean);
-            if (sections.length === 0) {
-                panel.style.display = 'none';
-                panel.innerHTML = '';
-                return;
-            }
+            const hasPlan = !!(pcPlan || spPlan);
+            const btnLabel = improvementPlanGenerating ? '生成中...' : hasPlan ? '改善提案を再生成' : '改善提案を生成';
+            const errorHtml = lastImprovementPlanError
+                ? `<p class="improvement-plan-error">${escapeHtml(lastImprovementPlanError)}</p>`
+                : '';
+            const planSections = [
+                renderPlanSection(pcPlan, 'PC VIEW'),
+                renderPlanSection(spPlan, 'SP VIEW')
+            ].filter(Boolean).join('');
+
             panel.style.display = 'block';
             panel.innerHTML = `<div class="improvement-plan-head">
                 <div>
-                    <div class="improvement-plan-kicker">MULTI SCAN</div>
+                    <div class="improvement-plan-kicker">AI 改善提案</div>
                     <h2>改善計画</h2>
                 </div>
-            </div>${sections.join('')}`;
+                <button class="generate-improvement-btn" ${improvementPlanGenerating ? 'disabled' : ''} onclick="generateImprovementPlan()">${escapeHtml(btnLabel)}</button>
+            </div>
+            ${errorHtml}
+            ${planSections}`;
         }
+
+        window.generateImprovementPlan = async function() {
+            const url = lastResults?.url;
+            if (!url) { alert('先にスキャンを実行してください'); return; }
+            improvementPlanGenerating = true;
+            lastImprovementPlanError = null;
+            renderImprovementPlanPanel();
+
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 5 * 60 * 1000);
+            try {
+                // MULTI AI結果サマリー（あれば）
+                const multiSummary = Object.entries(aiResults || {}).map(([idx, r]) => ({
+                    idx: Number(idx), status: r.status, reason: r.reason
+                }));
+                // ヒューマンチェックによる上書き
+                const humanDecisions = {};
+                for (const [k, v] of manualDecisions) {
+                    const rawKey = k.includes('::') ? k.split('::').slice(1).join('::') : k;
+                    humanDecisions[rawKey] = v;
+                }
+                const r = await fetchApiJson(apiUrl('/api/generate-improvement-plan'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        url,
+                        basicResults: lastResults,
+                        extResults: lastExtResults,
+                        deepResults: lastEnhancedResults,
+                        playResults: lastPlayResults,
+                        multiSummary,
+                        humanDecisions
+                    }),
+                    signal: controller.signal
+                }, '/api/generate-improvement-plan');
+                if (!r.response.ok) throw new Error(r.data?.error || '改善提案の生成に失敗しました');
+                lastImprovementPlan = normalizeImprovementPlanClient(r.data.improvementPlan);
+                lastImprovementPlanError = null;
+            } catch (err) {
+                lastImprovementPlanError = err.name === 'AbortError' ? 'タイムアウトしました（5分超過）' : err.message;
+            } finally {
+                clearTimeout(timer);
+                improvementPlanGenerating = false;
+                renderImprovementPlanPanel();
+            }
+        };
 
         function makeClientFallbackAiResults(filteredItems, reason) {
             return filteredItems.map((_, index) => ({
@@ -2616,7 +2658,6 @@
                 // 結果を適用
                 const rawMultiResults = Array.isArray(data.results) ? data.results : [];
                 aiResults = mapAiResultsByOriginalIndex(rawMultiResults, filteredItems);
-                lastImprovementPlan = normalizeImprovementPlanClient(data.improvementPlan);
                 const multiIssue = buildMultiIssue(data);
                 lastMultiIssue = Object.keys(aiResults).length === 0
                     ? buildMultiScoreReflectionIssue(rawMultiResults.length)
@@ -2760,6 +2801,8 @@
             lastMultiTokenLimited = false;
             lastMultiIssue = null;
             lastImprovementPlan = null;
+            improvementPlanGenerating = false;
+            lastImprovementPlanError = null;
             manualDecisions.clear();
             manualImpacts.clear();
             locationDecisions.clear();

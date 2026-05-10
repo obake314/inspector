@@ -1036,6 +1036,31 @@ h1 {
   color: var(--navy-700);
 }
 
+.generate-improvement-btn {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  font-size: var(--font-size-s);
+  font-weight: 600;
+  background: var(--color-multi);
+  color: var(--color-white);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.generate-improvement-btn:hover:not(:disabled) {
+  opacity: 0.85;
+}
+.generate-improvement-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.improvement-plan-error {
+  color: var(--color-critical);
+  font-size: var(--font-size-s);
+  margin: 0 0 var(--space-m);
+}
+
 .score-total{
   font-family: var(--font-latin);
   font-size: var(--font-size-s);
