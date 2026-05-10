@@ -1418,6 +1418,7 @@ app.post('/api/batch-check', async (req, res) => {
       let page;
       const runAxe = async () => {
         page = await browser.newPage();
+        await page.setCacheEnabled(false);
         await applyViewportPreset(page, preset);
         if (basicAuth && basicAuth.user && basicAuth.pass) {
           await page.authenticate({ username: basicAuth.user, password: basicAuth.pass });
@@ -7709,6 +7710,8 @@ app.post('/api/ext-check', async (req, res) => {
     const context = await browser.newContext(contextOptions);
     const page = await context.newPage();
     await page.setExtraHTTPHeaders({ 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' });
+    const cdpExt = await context.newCDPSession(page);
+    await cdpExt.send('Network.setCacheDisabled', { cacheDisabled: true });
 
     await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
     await page.waitForTimeout(1000);
@@ -7907,6 +7910,8 @@ app.post('/api/playwright-check', async (req, res) => {
     const context = await browser.newContext(contextOptions);
     const page = await context.newPage();
     await page.setExtraHTTPHeaders({ 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' });
+    const cdpPlay = await context.newCDPSession(page);
+    await cdpPlay.send('Network.setCacheDisabled', { cacheDisabled: true });
 
     await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
     await page.waitForTimeout(1000);
