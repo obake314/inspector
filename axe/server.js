@@ -442,6 +442,7 @@ async function getBrowser() {
       '--disable-dev-shm-usage',
       '--disable-gpu',
       '--disable-software-rasterizer',
+      '--disk-cache-size=0',
     ],
   };
 
@@ -2451,6 +2452,7 @@ async function check_2_4_7_focus_visible(page) {
           outlineWidth:    parseFloat(s.outlineWidth) || 0,
           outlineStyle:    s.outlineStyle,
           outlineColor:    s.outlineColor,
+          outlineOffset:   parseFloat(s.outlineOffset) || 0,
           boxShadow:       s.boxShadow,
           backgroundColor: s.backgroundColor,
           borderWidth:     parseFloat(s.borderWidth) || 0,
@@ -2485,6 +2487,7 @@ async function check_2_4_7_focus_visible(page) {
           outlineWidth:  parseFloat(s.outlineWidth) || 0,
           outlineStyle:  s.outlineStyle,
           outlineColor:  s.outlineColor,
+          outlineOffset: parseFloat(s.outlineOffset) || 0,
           boxShadow:     s.boxShadow,
           backgroundColor: s.backgroundColor,
           borderWidth:   parseFloat(s.borderWidth) || 0,
@@ -2542,6 +2545,7 @@ async function check_2_4_7_focus_visible(page) {
           outlineWidth:    parseFloat(s.outlineWidth) || 0,
           outlineStyle:    s.outlineStyle,
           outlineColor:    s.outlineColor,
+          outlineOffset:   parseFloat(s.outlineOffset) || 0,
           boxShadow:       s.boxShadow,
           backgroundColor: s.backgroundColor,
           borderWidth:     parseFloat(s.borderWidth) || 0,
@@ -2610,10 +2614,13 @@ async function check_2_4_7_focus_visible(page) {
       );
       if (outlineChanged) {
         const ratio = contrastRatio(parseRgb(after.outlineColor), parseRgb(after.adjBg));
+        const offset = after.outlineOffset || 0;
+        const effectiveSize = after.outlineWidth + offset;
+        const offsetNote = offset > 0 ? ` +${offset}px offset` : '';
         return {
           found: true,
-          strong: after.outlineWidth >= 2 && ratio >= 3,
-          note: `outline ${after.outlineWidth}px / ${ratio.toFixed(1)}:1`
+          strong: effectiveSize >= 2 && ratio >= 3,
+          note: `outline ${after.outlineWidth}px${offsetNote} / ${ratio.toFixed(1)}:1`
         };
       }
 
@@ -2737,19 +2744,21 @@ async function check_2_4_3_focus_order(page) {
       positions.push({ x: info.x, y: info.y, label: info.label });
     }
 
-    // 視覚的な順序（上→下, 左→右）からの大きな逸脱を検出
-    let orderViolations = 0;
+    // 視覚的な順序（上→下, 左→右）からの逸脱を検出
+    // 同一カラム内（水平距離 < 300px）で上方向に 100px 以上戻る場合のみ逸脱とみなす
+    // （複数カラムレイアウトで右カラム先頭に戻る動きは誤検出になるため除外）
+    const orderViolationPairs = [];
     for (let i = 1; i < positions.length; i++) {
       const prev = positions[i - 1];
       const curr = positions[i];
-      // 前の要素より大幅に上かつ右にない場合に逸脱と判断（ざっくり）
-      if (curr.y < prev.y - 100 && curr.x > prev.x + 100) {
-        orderViolations++;
+      const xDist = Math.abs(curr.x - prev.x);
+      const yJump = prev.y - curr.y; // 正値 = フォーカスが上に戻る
+      if (yJump > 100 && xDist < 300) {
+        orderViolationPairs.push(`順序の逸脱: ${prev.label} → ${curr.label}`);
       }
     }
 
-    const violations = [...tabindexIssues];
-    if (orderViolations > 2) violations.push(`フォーカス順序が視覚的読み順と大きく異なる箇所が${orderViolations}件`);
+    const violations = [...tabindexIssues, ...orderViolationPairs];
 
     return {
       sc: '2.4.3', name: 'フォーカス順序',
@@ -6601,6 +6610,7 @@ async function pw_check_2_4_7_focus_visible_all(page) {
         outlineWidth: parseFloat(s.outlineWidth) || 0,
         outlineStyle: s.outlineStyle,
         outlineColor: s.outlineColor,
+        outlineOffset: parseFloat(s.outlineOffset) || 0,
         boxShadow: s.boxShadow,
         backgroundColor: s.backgroundColor,
         borderWidth: parseFloat(s.borderWidth) || 0,
@@ -6640,10 +6650,13 @@ async function pw_check_2_4_7_focus_visible_all(page) {
       );
       if (outlineChanged) {
         const ratio = contrastRatio(parseRgb(after.outlineColor), parseRgb(after.adjBg));
+        const offset = after.outlineOffset || 0;
+        const effectiveSize = after.outlineWidth + offset;
+        const offsetNote = offset > 0 ? ` +${offset}px offset` : '';
         return {
           found: true,
-          strong: after.outlineWidth >= 2 && ratio >= 3,
-          note: `outline ${after.outlineWidth}px / ${ratio.toFixed(1)}:1`
+          strong: effectiveSize >= 2 && ratio >= 3,
+          note: `outline ${after.outlineWidth}px${offsetNote} / ${ratio.toFixed(1)}:1`
         };
       }
 
@@ -7179,13 +7192,16 @@ async function pw_check_2_4_3_focus_order(page) {
       if (info.tabindex > 0) tabindexIssues.push(`${info.label} (tabindex=${info.tabindex}) | ${info.snippet}`);
       positions.push({ x: info.x, y: info.y, label: info.label });
     }
-    let orderViolations = 0;
+    const orderViolationPairs = [];
     for (let i = 1; i < positions.length; i++) {
       const prev = positions[i-1], curr = positions[i];
-      if (curr.y < prev.y - 100 && curr.x > prev.x + 100) orderViolations++;
+      const xDist = Math.abs(curr.x - prev.x);
+      const yJump = prev.y - curr.y;
+      if (yJump > 100 && xDist < 300) {
+        orderViolationPairs.push(`順序の逸脱: ${prev.label} → ${curr.label}`);
+      }
     }
-    const violations = [...tabindexIssues];
-    if (orderViolations > 2) violations.push(`フォーカス順序が視覚的読み順と大きく異なる箇所が${orderViolations}件`);
+    const violations = [...tabindexIssues, ...orderViolationPairs];
     return {
       sc: '2.4.3',
       status: violations.length === 0 ? 'pass' : 'fail',
@@ -7696,7 +7712,7 @@ app.post('/api/ext-check', async (req, res) => {
   try {
     browser = await chromium.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disk-cache-size=0']
     });
     const preset = (viewportPreset || 'desktop').toLowerCase();
     const viewport = (preset.includes('mobile') || preset.includes('iphone') || preset.includes('sp'))
@@ -7895,7 +7911,7 @@ app.post('/api/playwright-check', async (req, res) => {
   try {
     browser = await chromium.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disk-cache-size=0']
     });
     // ビューポート設定
     const preset = (viewportPreset || 'desktop').toLowerCase();
