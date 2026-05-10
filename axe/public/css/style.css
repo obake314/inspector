@@ -1474,6 +1474,26 @@ margin-bottom: 6px;
 .item-card.expanded .item-source-section {
   display: block;
 }
+.item-authority-bar {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 5px var(--space-m);
+  border-top: 1px solid var(--navy-200);
+  background: #f8fafc;
+  font-size: var(--font-size-xs);
+}
+.item-card.expanded .item-authority-bar {
+  display: flex;
+}
+.item-authority-label {
+  font-weight: 600;
+  color: #4a5568;
+  white-space: nowrap;
+}
+.item-authority-desc {
+  color: var(--navy-400);
+}
 .item-source-header {
   display: flex;
   align-items: center;
