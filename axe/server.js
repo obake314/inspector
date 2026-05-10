@@ -2615,8 +2615,10 @@ async function check_2_4_7_focus_visible(page) {
       if (outlineChanged) {
         const ratio = contrastRatio(parseRgb(after.outlineColor), parseRgb(after.adjBg));
         const offset = after.outlineOffset || 0;
-        const effectiveSize = after.outlineWidth + offset;
-        const offsetNote = offset > 0 ? ` +${offset}px offset` : '';
+        // 負のoffset（インセットリング）はoutline幅を視覚的に減らさない
+        // 正のoffsetはリングが要素の外側に広がるため有効サイズに加算
+        const effectiveSize = after.outlineWidth + Math.max(0, offset);
+        const offsetNote = offset !== 0 ? ` (offset: ${offset}px)` : '';
         return {
           found: true,
           strong: effectiveSize >= 2 && ratio >= 3,
@@ -6657,8 +6659,10 @@ async function pw_check_2_4_7_focus_visible_all(page) {
       if (outlineChanged) {
         const ratio = contrastRatio(parseRgb(after.outlineColor), parseRgb(after.adjBg));
         const offset = after.outlineOffset || 0;
-        const effectiveSize = after.outlineWidth + offset;
-        const offsetNote = offset > 0 ? ` +${offset}px offset` : '';
+        // 負のoffset（インセットリング）はoutline幅を視覚的に減らさない
+        // 正のoffsetはリングが要素の外側に広がるため有効サイズに加算
+        const effectiveSize = after.outlineWidth + Math.max(0, offset);
+        const offsetNote = offset !== 0 ? ` (offset: ${offset}px)` : '';
         return {
           found: true,
           strong: effectiveSize >= 2 && ratio >= 3,
