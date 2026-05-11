@@ -1665,11 +1665,16 @@ async function check_2_5_8_target_size(page) {
             const cls = el.getAttribute('class')
               ? '.' + el.getAttribute('class').trim().split(/\s+/).slice(0, 2).join('.')
               : '';
+            const parentEl = el.parentElement;
+            const ctx = !el.id && parentEl && parentEl !== document.body
+              ? ` in ${parentEl.tagName.toLowerCase()}${parentEl.id ? '#' + parentEl.id : ''}` : '';
+            const rawHtml = el.outerHTML.replace(/\s+/g, ' ').trim();
             violations.push({
-              selector: `${tag}${id}${cls}`.slice(0, 80),
+              selector: `${tag}${id}${cls}${ctx}`.slice(0, 100),
               text,
               width: Math.round(rect.width),
-              height: Math.round(rect.height)
+              height: Math.round(rect.height),
+              html: rawHtml.length > 120 ? rawHtml.slice(0, 117) + '...' : rawHtml
             });
             if (violations.length >= 20) break;
           }
@@ -1684,7 +1689,7 @@ async function check_2_5_8_target_size(page) {
       message: result.length === 0
         ? '全インタラクティブ要素が24×24px以上（スクリーンリーダー専用要素を除く）'
         : `${result.length}個の要素がサイズ不足`,
-      violations: result.map(v => `${v.selector} [${v.width}×${v.height}px] "${v.text}"`)
+      violations: result.map(v => `${v.selector} [${v.width}×${v.height}px] "${v.text}" | ${v.html}`)
     };
   } catch (e) {
     return { sc: '2.5.8', name: 'ターゲットサイズ（24×24px）', status: 'error', message: e.message, violations: [] };
@@ -2495,7 +2500,8 @@ async function check_2_4_7_focus_visible(page) {
           opacity:       parseFloat(s.opacity) || 0,
           width:         el.getBoundingClientRect().width,
           height:        el.getBoundingClientRect().height,
-          candidates:    visualCandidates(el).map(styleSnap)
+          candidates:    visualCandidates(el).map(styleSnap),
+          html:          (() => { const h = el.outerHTML.replace(/\s+/g, ' ').trim(); return h.length > 120 ? h.slice(0, 117) + '...' : h; })()
         };
       }
       return Array.from(document.querySelectorAll(
@@ -2687,15 +2693,16 @@ async function check_2_4_7_focus_visible(page) {
       const strongIndicator = indicators.find(item => item.strong);
       if (strongIndicator) continue;
 
+      const htmlSnippet = b.html ? ` | ${b.html}` : '';
       if (indicators.length === 0) {
-        violations27.push(`${b.label} (outline:${a.outlineWidth}px, opacity:${a.opacity}, size:${Math.round(a.width)}x${Math.round(a.height)})`);
-        violations213.push(`${b.label} ／ インジケーター未検出`);
+        violations27.push(`${b.label} (outline:${a.outlineWidth}px, opacity:${a.opacity}, size:${Math.round(a.width)}x${Math.round(a.height)})${htmlSnippet}`);
+        violations213.push(`${b.label} ／ インジケーター未検出${htmlSnippet}`);
         continue;
       }
 
       const notes = indicators.map(item => item.note).join(' / ');
-      violations27.push(`${b.label} ／ フォーカス表示が弱い: ${notes}`);
-      violations213.push(`${b.label} ／ ${notes}（2px以上・3:1以上の表示が必要）`);
+      violations27.push(`${b.label} ／ フォーカス表示が弱い: ${notes}${htmlSnippet}`);
+      violations213.push(`${b.label} ／ ${notes}（2px以上・3:1以上の表示が必要）${htmlSnippet}`);
     }
 
     // Tab で到達しなかった要素（preData にあるが checked にない）は手動確認扱いにしてfailにしない
@@ -2746,7 +2753,8 @@ async function check_2_4_3_focus_order(page) {
         const cls = el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
         const text = (el.getAttribute('aria-label') || el.textContent || el.value || '').trim().slice(0, 25);
         // サブメニュー内にいるか（ドロップダウン・サブメニューから親navへ戻る動きは正常なため除外対象）
-        const inSubMenu = !!el.closest('[class*="sub-menu"], [class*="submenu"], [class*="dropdown"], [role="menu"]');
+        // sub-menu/submenu/role=menu に限定。[class*="dropdown"] は nav全体に付くケースがあるため除外
+        const inSubMenu = !!el.closest('[class*="sub-menu"], [class*="submenu"], [role="menu"], [role="menuitem"]');
         // 要素が実際に画面内に描画されているか（hover-onlyメニューは非表示時 width/height=0 になる）
         const isRendered = rect.width > 0 && rect.height > 0;
         return { x: rect.left, y: rect.top, tabindex, inSubMenu, isRendered, label: `${tag}${id}${cls}${text ? ' "'+text+'"' : ''}`.slice(0, 80) };
@@ -2758,13 +2766,17 @@ async function check_2_4_3_focus_order(page) {
 
     // 視覚的な順序（上→下, 左→右）からの逸脱を検出
     // 同一カラム内（水平距離 < 300px）で上方向に 100px 以上戻る場合のみ逸脱とみなす
-    // ただしサブメニュー末尾→親navへの遷移（inSubMenu=true）は正常動作のため除外
+    // サブメニュー末尾→親navへの遷移（サブメニューを抜ける1ステップ）は正常動作のため除外
+    // prev.inSubMenu だけで除外すると nav全体が dropdown クラスを持つ場合に広く免除されてしまうため
+    // 「サブメニューを抜ける遷移」（prev:サブ内 → curr:サブ外）のみをスキップする
     const orderViolationPairs = [];
     for (let i = 1; i < positions.length; i++) {
       const prev = positions[i - 1];
       const curr = positions[i];
-      // サブメニューから親navへ戻る動き、または非表示要素（hover-only等）の座標は除外
-      if (prev.inSubMenu || !prev.isRendered || !curr.isRendered) continue;
+      // 非表示要素（hover-only等）の座標は信頼できないため除外
+      if (!prev.isRendered || !curr.isRendered) continue;
+      // サブメニューを抜ける遷移のみ除外（サブ内→サブ内 や 通常→通常 は検査対象）
+      if (prev.inSubMenu && !curr.inSubMenu) continue;
       const xDist = Math.abs(curr.x - prev.x);
       const yJump = prev.y - curr.y; // 正値 = フォーカスが上に戻る
       if (yJump > 100 && xDist < 300) {
@@ -7219,7 +7231,9 @@ async function pw_check_2_4_3_focus_order(page) {
     const orderViolationPairs = [];
     for (let i = 1; i < positions.length; i++) {
       const prev = positions[i-1], curr = positions[i];
-      if (prev.inSubMenu || !prev.isRendered || !curr.isRendered) continue;
+      if (!prev.isRendered || !curr.isRendered) continue;
+      // サブメニューを抜ける遷移（prev:サブ内→curr:サブ外）のみ免除。それ以外は検査対象
+      if (prev.inSubMenu && !curr.inSubMenu) continue;
       const xDist = Math.abs(curr.x - prev.x);
       const yJump = prev.y - curr.y;
       if (yJump > 100 && xDist < 300) {
