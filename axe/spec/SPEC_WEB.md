@@ -213,7 +213,8 @@
   - `batchAITokenLimitedMap`: `url → bool`（MULTI トークン上限/部分応答/API制限フラグ）
   - `batchAIIssueMap`: `url → { label, message }`（MULTI 警告/エラー表示メタ）
   - `batchImprovementPlans`: `url → MULTI improvementPlan`
-  - `batchNavConsistency`: SC 3.2.3/3.2.4
+  - `batchNavConsistency`: PC用ナビゲーション一貫性データ。SC 3.2.3/3.2.4 の詳細カードに BATCH ソースとして統合表示される
+  - `batchMobileNavConsistency`: SP用ナビゲーション一貫性データ（`PC+SP` 実行時のみ使用）。`batchNavConsistency` とは独立して保持し、SP側の詳細タブ・Excelレポート出力（`buildReportRows` 第5引数）に反映する。JSON保存・復元時は `mobileNavConsistency` キーとしてシリアライズされる
   - `batchMobileResultsData`: SPデータ（`PC+SP` 時のみ使用）
   - `batchMobileEnhancedResults`: `url → SP DEEP results`
   - `batchMobileAIResults`: `url → SP MULTI results`
@@ -255,12 +256,12 @@
 ### 列
 
 - 列ヘッダー: `合格数/分母`（`<th class="label-all">`） / `緊急` / `重大` / `中程度` / `軽微` / `合格` / `該当なし` / `未検証`
-- **`合格数/分母` セルの表示形式**: 個別スキャン行は `判定済み項目数 / 対象全項目数`（例: `38 / 56`）で表示。TOTAL行は `合格数 / 対象SC総数`（例: `42 / 56`）で表示。`totalText(data, isTotal)` 関数が分母を切り替える: `isTotal=false` → `data.total`（判定済み数）、`isTotal=true` → `data.targetTotal`（対象SC総数）
+- **`合格数/分母` セルの表示形式**: 個別スキャン行は `判定済み項目数 / 対象全項目数`（例: `38 / 55`）で表示。TOTAL行は `合格数 / 対象SC総数`（例: `42 / 55`）で表示。`totalText(data, isTotal)` 関数が分母を切り替える: `isTotal=false` → `data.total`（判定済み数）、`isTotal=true` → `data.targetTotal`（対象SC総数）
 
 ### 全項目数（固定）
 
 - A: `31`
-- AA: `56`（A+AA）
+- AA: `55`（A+AA）
 - 参考 AAA: `86`（A+AA+AAA、AAA β停止中のため通常UIでは選択不可）
 - 通常運用は A/AA の2パターン
 
@@ -274,7 +275,7 @@
 
 `達成率 = ROUND(合格 / (全項目数 - 未検証) * 100)`
 
-例: 全56項目、合格25項目、未検証5項目の場合は `25 / (56 - 5) ≈ 49%`。
+例: 全55項目、合格25項目、未検証5項目の場合は `25 / (55 - 5) = 50%`。
 
 TOTAL:
 

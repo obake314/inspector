@@ -2618,7 +2618,7 @@ async function check_2_4_7_focus_visible(page) {
     if (preData.length === 0) {
       return [
         { sc: '2.4.7',  name: 'フォーカス可視（AA）',   status: 'pass', message: 'フォーカス可能要素なし', violations: [] },
-        { sc: '2.4.13', name: 'フォーカスの外観（AA）', status: 'pass', message: 'フォーカス可能要素なし', violations: [] }
+        { sc: '2.4.13', name: 'フォーカスの外観（AAA）', status: 'pass', message: 'フォーカス可能要素なし', violations: [] }
       ];
     }
 
@@ -2821,7 +2821,7 @@ async function check_2_4_7_focus_visible(page) {
         violations: violations27
       },
       {
-        sc: '2.4.13', name: 'フォーカスの外観（AA）',
+        sc: '2.4.13', name: 'フォーカスの外観（AAA）',
         status: has213Fail ? 'fail' : 'pass',
         message: has213Fail
           ? `${violations213.length}個の要素が面積またはコントラスト比の要件を未達`
@@ -2832,7 +2832,7 @@ async function check_2_4_7_focus_visible(page) {
   } catch (e) {
     return [
       { sc: '2.4.7',  name: 'フォーカス可視（AA）',   status: 'error', message: e.message, violations: [] },
-      { sc: '2.4.13', name: 'フォーカスの外観（AA）', status: 'error', message: e.message, violations: [] }
+      { sc: '2.4.13', name: 'フォーカスの外観（AAA）', status: 'error', message: e.message, violations: [] }
     ];
   }
 }
