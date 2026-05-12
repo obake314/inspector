@@ -1103,18 +1103,52 @@ async function getJapaneseAltQualityCandidates(page, limit = 20) {
         const trimmedAlt = normalizeText(alt);
         if (!trimmedAlt) continue;
 
+        const rect = img.getBoundingClientRect();
+        const src = normalizeText(img.getAttribute('src') || '');
+        const srcFile = src.split('/').pop().replace(/[?#].*$/, '').slice(0, 80);
+        const isSvg = /\.svg(\?|#|$)/i.test(src);
         const numericOnly = isNumericOnly(trimmedAlt);
         const missingJapanese = !hasJapanese(trimmedAlt);
+
+        // 複雑な図表検出: SVGまたは大きな画像で、短いaltのみ（タイトル止まり）かつ長い説明なし
+        const isLarge = rect.width >= 200 && rect.height >= 150;
+        const hasShortAlt = trimmedAlt.length < 40;
+        const hasLongDesc = !!img.getAttribute('longdesc') || !!img.getAttribute('aria-describedby');
+        if (isSvg && !hasLongDesc) {
+          // SVGはテキスト量比較のため絶対URLも記録して後処理フェーズへ
+          candidates.push({
+            selector: cssPath(img),
+            src: srcFile,
+            svgAbsUrl: img.src || src, // 後段でfetch解析に使用
+            alt: trimmedAlt.slice(0, 160),
+            issue: 'svg_pending_analysis',
+            size: `${Math.round(rect.width)}x${Math.round(rect.height)}`,
+            inLink: !!img.closest('a[href]'),
+            reason: ''
+          });
+          continue;
+        }
+        if (isLarge && hasShortAlt && !hasLongDesc) {
+          candidates.push({
+            selector: cssPath(img),
+            src: srcFile,
+            alt: trimmedAlt.slice(0, 160),
+            issue: 'complex_image_no_long_desc',
+            size: `${Math.round(rect.width)}x${Math.round(rect.height)}`,
+            inLink: !!img.closest('a[href]'),
+            reason: '大きな画像（図表・チャート等の可能性）にaltのみで詳細説明がありません。複雑な画像にはaria-describedbyまたはlongdescによる詳細説明が必要です。'
+          });
+          continue;
+        }
+
         if (!numericOnly && !missingJapanese) continue;
 
-        const rect = img.getBoundingClientRect();
-        const src = normalizeText(img.getAttribute('src') || '').split('/').pop().replace(/[?#].*$/, '').slice(0, 80);
         const reason = numericOnly
           ? '日本語ページ内の画像altが数字のみです。代替テキストとして意味を説明できていない可能性があります。'
           : '日本語ページ内の画像altに日本語が含まれていません。固有名詞等で妥当な場合を除き、利用者に伝わる日本語説明か確認してください。';
         candidates.push({
           selector: cssPath(img),
-          src,
+          src: srcFile,
           alt: trimmedAlt.slice(0, 160),
           issue: numericOnly ? 'numeric_only' : 'no_japanese',
           size: `${Math.round(rect.width)}x${Math.round(rect.height)}`,
@@ -1127,6 +1161,75 @@ async function getJapaneseAltQualityCandidates(page, limit = 20) {
   } catch (error) {
     return { isJapanesePage: false, lang: '', ogLocale: '', candidates: [], error: error.message };
   }
+}
+
+/**
+ * SVG as img の内部テキストをフェッチして alt との乖離を分析する。
+ * 2つの指標を使用:
+ *  1. テキスト量比較: SVG内総文字数 vs alt文字数 (3倍超で乖離大)
+ *  2. 単語カバレッジ: SVG内テキストセグメントのうちaltに含まれるものの割合 (50%未満で乖離大)
+ */
+async function analyzeSvgTextCoverage(page, svgCandidates) {
+  if (!svgCandidates.length) return [];
+  const results = await page.evaluate(async (items) => {
+    const analyzed = [];
+    for (const item of items) {
+      try {
+        const resp = await fetch(item.svgAbsUrl, { cache: 'no-store' });
+        if (!resp.ok) { analyzed.push({ ...item, fetchFailed: true }); continue; }
+        const svgText = await resp.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(svgText, 'image/svg+xml');
+        // SVG内の全テキストノードを抽出（<text>, <tspan>, <title> など）
+        const textEls = [...doc.querySelectorAll('text, tspan, title, desc, flowPara')];
+        const segments = textEls
+          .map(el => el.textContent.trim())
+          .filter(t => t.length >= 2); // 1文字の記号等は除外
+        const svgCharCount = segments.join('').length;
+        const altCharCount = item.alt.replace(/\s/g, '').length;
+        // alt に含まれるセグメント数（部分一致）
+        const coveredCount = segments.filter(seg => item.alt.includes(seg)).length;
+        const coverageRatio = segments.length > 0 ? coveredCount / segments.length : 1;
+        analyzed.push({
+          ...item,
+          svgSegments: segments.slice(0, 30), // デバッグ用に最大30
+          svgCharCount,
+          altCharCount,
+          coverageRatio: Math.round(coverageRatio * 100) / 100
+        });
+      } catch (e) {
+        analyzed.push({ ...item, fetchFailed: true });
+      }
+    }
+    return analyzed;
+  }, svgCandidates);
+
+  return results.map(item => {
+    if (item.fetchFailed) {
+      // フェッチ失敗（CORS等）→ 短alt+SVGという既知情報で手動確認
+      return {
+        ...item,
+        issue: 'complex_image_no_long_desc',
+        reason: 'SVGをimgとして読み込んでいます（内部テキスト未取得）。図表が情報を含む場合はaria-describedbyまたはlongdescによる詳細説明が必要です。'
+      };
+    }
+    const charRatio = item.altCharCount > 0 ? item.svgCharCount / item.altCharCount : 0;
+    const hasTextDispariry = charRatio >= 3 && item.svgSegments.length > 2;
+    const hasLowCoverage = item.coverageRatio < 0.5 && item.svgSegments.length > 2;
+
+    if (!hasTextDispariry && !hasLowCoverage) {
+      // SVGにテキストがほとんどない（アイコン等）→ スキップ
+      return null;
+    }
+    const reasons = [];
+    if (hasTextDispariry) reasons.push(`SVG内テキスト量(${item.svgCharCount}文字) がalt(${item.altCharCount}文字)の${Math.round(charRatio)}倍`);
+    if (hasLowCoverage) reasons.push(`SVG内テキスト(${item.svgSegments.length}項目)のうちaltに含まれるのは${Math.round(item.coverageRatio * 100)}%のみ`);
+    return {
+      ...item,
+      issue: 'complex_image_no_long_desc',
+      reason: `SVGimg: ${reasons.join('、')}。スクリーンリーダーはSVG内テキストを読めません。aria-describedbyまたはlongdescによる詳細説明が必要です。`
+    };
+  }).filter(Boolean);
 }
 
 function getWcagTagsForLevel(level) {
@@ -7589,7 +7692,16 @@ async function ext_check_2_1_1_scrollable(page) {
 async function ext_check_1_1_1_japanese_alt_quality(page) {
   try {
     const result = await getJapaneseAltQualityCandidates(page, 20);
-    const candidates = Array.isArray(result.candidates) ? result.candidates : [];
+    let candidates = Array.isArray(result.candidates) ? result.candidates : [];
+
+    // SVG pending analysis を解決: 内部テキストを取得してalt乖離を判定
+    const svgPending = candidates.filter(c => c.issue === 'svg_pending_analysis');
+    const nonSvg = candidates.filter(c => c.issue !== 'svg_pending_analysis');
+    const svgAnalyzed = svgPending.length > 0
+      ? await analyzeSvgTextCoverage(page, svgPending)
+      : [];
+    candidates = [...nonSvg, ...svgAnalyzed];
+
     const violations = candidates.map(item =>
       `${item.selector} (${item.size}, alt="${item.alt}", src="${item.src || ''}") - ${item.reason}`
     );
@@ -7601,8 +7713,8 @@ async function ext_check_1_1_1_japanese_alt_quality(page) {
       message: !result.isJapanesePage
         ? '日本語ページとして判定されなかったため、altの日本語有無チェックは対象外です'
         : violations.length === 0
-          ? '日本語ページ内で、数字のみまたは日本語を含まないalt候補は検出されませんでした'
-          : `${violations.length}件の画像altで日本語ページ向けの手動確認が必要です`,
+          ? '日本語ページ内で問題のある画像alt候補は検出されませんでした'
+          : `${violations.length}件の画像altで手動確認が必要です`,
       name: 'SC 1.1.1: 日本語ページのalt品質'
     };
   } catch (e) {
