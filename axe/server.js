@@ -1128,18 +1128,7 @@ async function getJapaneseAltQualityCandidates(page, limit = 20) {
           });
           continue;
         }
-        if (isLarge && hasShortAlt && !hasLongDesc) {
-          candidates.push({
-            selector: cssPath(img),
-            src: srcFile,
-            alt: trimmedAlt.slice(0, 160),
-            issue: 'complex_image_no_long_desc',
-            size: `${Math.round(rect.width)}x${Math.round(rect.height)}`,
-            inLink: !!img.closest('a[href]'),
-            reason: '大きな画像（図表・チャート等の可能性）にaltのみで詳細説明がありません。複雑な画像にはaria-describedbyまたはlongdescによる詳細説明が必要です。'
-          });
-          continue;
-        }
+        // サイズのみによる判定は誤検出が多いため削除。SVG はテキスト解析で判定済み。
 
         if (!numericOnly && !missingJapanese) continue;
 
@@ -3050,7 +3039,8 @@ async function check_1_3_3_sensory_characteristics(page) {
       const selector = 'p, li, label, legend, td, th, span, div, small, strong, em';
       const excludedSelector = 'script, style, noscript, header, nav, footer';
       const instructionPattern = /(クリック|押して|押下|選択|タップ|入力|進んで|移動して|確認して|参照して|open|click|tap|press|select|choose|enter|go to|move to)/i;
-      const sensoryOnlyPattern = /(右|左|上|下|横|隣|手前|奥|上記|下記|赤|青|緑|黄|白|黒|丸|四角|三角|大きい|小さい|音が鳴|点滅|right|left|upper|lower|top|bottom|red|blue|green|yellow|round|square|triangle|large|small|sound|beep)/i;
+      // 方向・色・形の語は単独では地名等に誤マッチするため「助詞/形容詞形」を必須にする
+      const sensoryOnlyPattern = /(右[のにを方側端]|左[のにを方側端]|上[のにを方側端]|下[のにを方側端]|横[のにを]|隣[のにを]|手前[のにを]|奥[のにを]|上記[のをは]|下記[のをは]|赤[いのを色]|青[いのを色]|緑[のを色]|黄[いのを色]|白[いのを色]|黒[いのを色]|丸[いのを]|四角[いのを]|三角[いのを]|大き[いめな]|小さ[いめな]|音が鳴|点滅|right side|left side|upper |lower |top |bottom |red |blue |green |yellow |round |square |triangle |large |small |sound |beep )/i;
       const textualIdentifierPattern = /(「[^」]{1,30}」|"[^"]{1,30}"|'[^']{1,30}'|ラベル|見出し|heading|label(ed)?|named|name|id=|タイトル|title|「次へ」|「送信」|「検索」|Next|Submit|Search|Login)/i;
       const candidates = [];
 
@@ -4033,12 +4023,20 @@ async function check_1_4_5_images_of_text(page) {
       if (canvases.length > 0) {
         issues.push(`canvas要素 ${canvases.length}個: テキスト含有の手動確認が必要`);
       }
-      // img の alt に長いテキストが含まれるか
+      // img の alt に長いテキストが含まれるか（文字画像の疑いは alt が長いことで推定）
       const imgs = document.querySelectorAll('img[alt]');
       for (const img of imgs) {
         const alt = img.getAttribute('alt') || '';
         if (alt.length > 20 && !img.closest('a')) {
-          issues.push(`img[alt="${alt.slice(0, 40)}..."]: 文字画像の可能性`);
+          const srcRaw = img.getAttribute('src') || '';
+          const srcFile = srcRaw.split('/').pop().replace(/[?#].*$/, '').slice(0, 50);
+          const rect = img.getBoundingClientRect();
+          const size = `${Math.round(rect.width)}x${Math.round(rect.height)}`;
+          const tag = img.tagName.toLowerCase();
+          const id = img.id ? `#${img.id}` : '';
+          const cls = img.className && typeof img.className === 'string'
+            ? '.' + img.className.trim().split(/\s+/)[0] : '';
+          issues.push(`${tag}${id}${cls} [src="${srcFile}", ${size}] alt="${alt.slice(0, 40)}${alt.length > 40 ? '…' : ''}": 文字画像の可能性`);
           if (issues.length >= 5) break;
         }
       }
