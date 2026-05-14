@@ -3696,61 +3696,173 @@ async function check_2_3_1_three_flashes(page) {
 // Phase 3: ハイブリッド（Puppeteer + AI補助）
 // ============================================================
 
-/** SC 1.4.13 ホバーコンテンツ */
+/** SC 1.4.13 ホバーコンテンツ
+ * 3要件: (1)閉鎖可能(Escape) (2)ホバー可能 (3)永続的
+ * + キーボードフォーカスでも表示されるか
+ */
 async function check_1_4_13_hover_content(page) {
   try {
-    const hoverTargets = await page.evaluate(() => {
-      const els = document.querySelectorAll('[title], [data-tooltip], [aria-describedby], .tooltip, [class*="tooltip" i], [class*="popover" i]');
-      return Array.from(els).slice(0, 10).map(el => {
-        const rect = el.getBoundingClientRect();
+    // ── Phase 1: 候補収集 ──────────────────────────────────────────
+    // ① 明示的ツールチップ属性・クラス
+    // ② CSS hover-show パターン（親をホバーすると子が表示される構造）
+    const candidates = await page.evaluate(() => {
+      function isRendered(el) {
+        const r = el.getBoundingClientRect();
+        return r.width > 10 && r.height > 6;
+      }
+      function isHiddenNow(el) {
+        const s = getComputedStyle(el);
+        return s.display === 'none' || s.visibility === 'hidden' || parseFloat(s.opacity) < 0.05;
+      }
+      function getSel(el) {
         const tag = el.tagName.toLowerCase();
         const id = el.id ? `#${el.id}` : '';
-        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, label: `${tag}${id}`.slice(0, 40) };
-      }).filter(e => e.x > 0 && e.y > 0);
+        const cls = el.className && typeof el.className === 'string'
+          ? '.' + el.className.trim().split(/\s+/)[0] : '';
+        return `${tag}${id}${cls}`.slice(0, 60);
+      }
+
+      const results = [];
+      const seen = new Set();
+      function add(el, type, hiddenText) {
+        if (!isRendered(el)) return;
+        const r = el.getBoundingClientRect();
+        const key = `${Math.round(r.left / 5) * 5},${Math.round(r.top / 5) * 5}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        results.push({ x: r.left + r.width / 2, y: r.top + r.height / 2, label: getSel(el), type, hiddenText: hiddenText || '' });
+      }
+
+      // ① ツールチップ属性・クラス
+      for (const el of document.querySelectorAll('[title]:not(abbr):not(html), [data-tooltip], [class*="tooltip" i], [class*="popover" i]')) {
+        add(el, 'tooltip', '');
+        if (results.length >= 5) break;
+      }
+
+      // ② CSS hover-show: 表示中の親に非表示の子孫（テキスト10字以上）がある構造
+      // 候補を絞るため section/article/figure/div/li/a 配下を中心に探索
+      for (const el of document.querySelectorAll('figure, li, .card, [class*="item" i], [class*="block" i], a[href], div')) {
+        if (!isRendered(el)) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < 40 || r.height < 20) continue;
+        // 非表示の子孫でテキストを持つものを探す
+        const hiddenKids = Array.from(el.querySelectorAll('*')).filter(child =>
+          child !== el && isHiddenNow(child) && (child.textContent || '').trim().length > 10
+        );
+        if (hiddenKids.length > 0) {
+          add(el, 'css-hover', (hiddenKids[0].textContent || '').trim().slice(0, 60));
+        }
+        if (results.length >= 12) break;
+      }
+
+      return results;
     });
 
-    if (hoverTargets.length === 0) {
+    if (candidates.length === 0) {
       return {
         sc: '1.4.13', name: 'ホバーコンテンツ',
-        status: 'not_applicable', message: 'ホバーコンテンツの疑いのある要素が見当たりません', violations: []
+        status: 'not_applicable', message: 'ホバーで出現するコンテンツが検出されませんでした', violations: []
       };
     }
 
+    // ── Phase 2: 各候補を実際にホバーして3要件を検証 ────────────────
     const issues = [];
-    for (const target of hoverTargets.slice(0, 5)) {
+    const manualNeeded = [];
+
+    for (const target of candidates.slice(0, 8)) {
+      // マウスをいったん退避
+      await page.mouse.move(0, 0);
+      await new Promise(r => setTimeout(r, 150));
+
+      // ホバー前の非表示要素スナップショット
+      const hiddenBefore = await page.evaluate(() =>
+        Array.from(document.querySelectorAll('*')).filter(el => {
+          const s = getComputedStyle(el);
+          return s.display === 'none' || s.visibility === 'hidden' || parseFloat(s.opacity) < 0.05;
+        }).map(el => el.outerHTML.slice(0, 80))
+      );
+
       await page.mouse.move(target.x, target.y);
-      await new Promise(r => setTimeout(r, 500));
-      const appeared = await page.evaluate(() => {
-        // 新しく表示された要素を探す
-        const visible = Array.from(document.querySelectorAll('[role="tooltip"], .tooltip, [class*="tooltip" i]'))
-          .filter(el => el.offsetParent !== null && getComputedStyle(el).visibility !== 'hidden');
-        if (visible.length === 0) return null;
-        const el = visible[0];
-        // Escape で消えるか
-        return { text: (el.textContent || '').trim().slice(0, 50) };
-      });
-      if (appeared) {
-        // Escape でコンテンツが消えるか確認
-        await page.keyboard.press('Escape');
-        await new Promise(r => setTimeout(r, 200));
-        const dismissed = await page.evaluate(() => {
-          const visible = Array.from(document.querySelectorAll('[role="tooltip"], .tooltip, [class*="tooltip" i]'))
-            .filter(el => el.offsetParent !== null);
-          return visible.length === 0;
+      await new Promise(r => setTimeout(r, 600));
+
+      // ホバー後に新たに表示された要素を検出
+      const appeared = await page.evaluate((hiddenBefore) => {
+        const nowVisible = Array.from(document.querySelectorAll('*')).filter(el => {
+          const s = getComputedStyle(el);
+          const r = el.getBoundingClientRect();
+          if (r.width < 5 || r.height < 5) return false;
+          if (s.display === 'none' || s.visibility === 'hidden' || parseFloat(s.opacity) < 0.05) return false;
+          const snap = el.outerHTML.slice(0, 80);
+          return hiddenBefore.includes(snap);
         });
-        if (!dismissed) {
-          issues.push(`${target.label}: ホバーコンテンツがEscapeで閉じない — "${appeared.text}"`);
-        }
+        if (nowVisible.length === 0) return null;
+        const el = nowVisible[0];
+        const tag = el.tagName.toLowerCase();
+        const id = el.id ? `#${el.id}` : '';
+        const cls = el.className && typeof el.className === 'string'
+          ? '.' + el.className.trim().split(/\s+/)[0] : '';
+        return {
+          text: (el.textContent || '').trim().slice(0, 60),
+          sel: `${tag}${id}${cls}`
+        };
+      }, hiddenBefore);
+
+      if (!appeared) continue; // このターゲットではホバーで何も出現しなかった
+
+      const problems = [];
+
+      // 要件(1): Escape で閉じるか
+      await page.keyboard.press('Escape');
+      await new Promise(r => setTimeout(r, 250));
+      const dismissedByEscape = await page.evaluate((text) => {
+        return !Array.from(document.querySelectorAll('*')).some(el => {
+          const s = getComputedStyle(el);
+          const r = el.getBoundingClientRect();
+          return r.width > 5 && r.height > 5
+            && s.display !== 'none' && s.visibility !== 'hidden'
+            && parseFloat(s.opacity) > 0.05
+            && (el.textContent || '').includes(text.slice(0, 20));
+        });
+      }, appeared.text);
+      if (!dismissedByEscape) problems.push('Escapeで閉じない');
+
+      // 要件(2)(3): CSS :hover のみの実装はマウスが親を外れると即消える
+      // → ホバー可能・永続的の両要件を満たせない
+      if (target.type === 'css-hover') {
+        problems.push('CSS :hover のみで実装（マウスを外すと消える: 永続性なし・ホバー不可）');
+      }
+
+      // キーボードフォーカスで表示されるか（focus-within CSS の有無を検索）
+      const hasFocusWithin = await page.evaluate((label) => {
+        // スタイルシートに :focus-within が含まれるか簡易確認
+        return Array.from(document.styleSheets).some(ss => {
+          try {
+            return Array.from(ss.cssRules).some(r => r.selectorText && r.selectorText.includes(':focus-within'));
+          } catch { return false; }
+        });
+      }, target.label);
+      if (!hasFocusWithin) problems.push('キーボードフォーカスで表示される仕組みがない');
+
+      if (problems.length > 0) {
+        issues.push(`${target.label}: ${problems.join(' / ')} — "${appeared.text}"`);
+      } else {
+        manualNeeded.push(`${target.label}: ホバー可能・永続性を手動確認 — "${appeared.text}"`);
       }
     }
 
+    if (issues.length > 0) {
+      return {
+        sc: '1.4.13', name: 'ホバーコンテンツ',
+        status: 'fail',
+        message: `${issues.length}件: ホバーコンテンツが1.4.13の要件（閉鎖可能・ホバー可能・永続的・キーボード到達性）を未達`,
+        violations: issues
+      };
+    }
     return {
       sc: '1.4.13', name: 'ホバーコンテンツ',
-      status: issues.length === 0 ? 'pass' : 'fail',
-      message: issues.length === 0
-        ? 'ホバーコンテンツはEscapeで閉じることを確認'
-        : `${issues.length}件: ホバーコンテンツがEscapeで閉じない可能性`,
-      violations: issues
+      status: 'manual_required',
+      message: `ホバーコンテンツを検出（Escape確認済み）— ホバー可能・永続性・キーボード到達性は手動確認が必要`,
+      violations: manualNeeded
     };
   } catch (e) {
     return { sc: '1.4.13', name: 'ホバーコンテンツ', status: 'error', message: e.message, violations: [] };
