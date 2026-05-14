@@ -4106,9 +4106,29 @@ async function check_1_4_3_text_contrast(page) {
         const [l1, l2] = [luminance(...c1), luminance(...c2)].sort((a, b) => b - a);
         return (l1 + 0.05) / (l2 + 0.05);
       }
+      function pseudoBg(el) {
+        // ::after / ::before が position:absolute で面積を持ち、opacity が十分あれば
+        // 背景レイヤーとして機能している可能性がある
+        for (const pseudo of ['::after', '::before']) {
+          const ps = getComputedStyle(el, pseudo);
+          const pos = ps.position;
+          if (pos !== 'absolute' && pos !== 'fixed') continue;
+          const opacity = parseFloat(ps.opacity);
+          if (isNaN(opacity) || opacity < 0.5) continue;
+          const w = parseFloat(ps.width);
+          const h = parseFloat(ps.height);
+          if (w < 10 || h < 10) continue; // 装飾的な小さい疑似要素は除外
+          const bg = parseCssColor(ps.backgroundColor);
+          if (bg) return bg;
+        }
+        return null;
+      }
       function resolveBg(el) {
         let e = el;
         while (e && e !== document.documentElement) {
+          // 疑似要素が背景として機能していればそちらを優先
+          const pBg = pseudoBg(e);
+          if (pBg) return pBg;
           const bg = parseCssColor(getComputedStyle(e).backgroundColor);
           if (bg) return bg;
           e = e.parentElement;
