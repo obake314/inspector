@@ -3009,6 +3009,7 @@
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>`;
+            renderNavBar();
         }
 
         function renderBatchNav(activeIdx) {
@@ -3069,7 +3070,7 @@
                     </div>`
                 ).join('');
             }
-            if (isSingleManual && effectivePass !== true) {
+            if ((isSingleManual || nc.message) && effectivePass !== true) {
                 issueHtml += `<div class="nav-bar-issue">${escapeHtml(nc.message || 'ヒューマンチェックで判定してください')}</div>`;
             }
 
@@ -3099,8 +3100,16 @@
                 ${holdText ? `<span class="nav-bar-ok" style="color:var(--color-moderate)">${holdText}</span>` : ''}
                 ${issueHtml}
                 ${navDecBtns}`;
-            const resultsEl = $('results');
-            if (resultsEl) resultsEl.prepend(bar);
+            if (currentMode === 'batch') {
+                // バッチモード: batchSummaryArea の直前に挿入（batchResults 内に表示）
+                const summaryEl = $('batchSummaryArea');
+                if (summaryEl && summaryEl.parentNode) {
+                    summaryEl.parentNode.insertBefore(bar, summaryEl);
+                }
+            } else {
+                const resultsEl = $('results');
+                if (resultsEl) resultsEl.prepend(bar);
+            }
         }
 
         function renderBatchPreCheckPanel(url) {

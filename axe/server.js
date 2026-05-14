@@ -1564,15 +1564,27 @@ app.post('/api/batch-check', async (req, res) => {
 
     // SC 3.2.3/3.2.4 一貫したナビゲーション・識別の横断比較
     let navConsistency = null;
-    const successResults = results.filter(r => r.success && r.navStructure && r.navStructure.length > 0);
-    if (successResults.length >= 2) {
-      const issues = [];
-      const baseUrl = successResults[0].url;
-      const baseNavs = successResults[0].navStructure;
+    const allSuccessResults = results.filter(r => r.success);
+    const navSuccessResults = allSuccessResults.filter(r => r.navStructure && r.navStructure.length > 0);
 
-      for (let i = 1; i < successResults.length; i++) {
-        const targetUrl = successResults[i].url;
-        const targetNavs = successResults[i].navStructure;
+    if (allSuccessResults.length >= 2 && navSuccessResults.length < 2) {
+      // ページ取得は成功したが <nav>/[role="navigation"] が検出できなかった場合
+      navConsistency = {
+        sc: '3.2.3 / 3.2.4',
+        title: '一貫したナビゲーション・識別',
+        result: 'manual_required',
+        comparedUrls: allSuccessResults.map(r => r.url),
+        issues: [],
+        message: `<nav>要素・role="navigation"が${navSuccessResults.length}件しか検出できませんでした。div等でナビゲーションが実装されている場合はヒューマンチェックで判定してください。`
+      };
+    } else if (navSuccessResults.length >= 2) {
+      const issues = [];
+      const baseUrl = navSuccessResults[0].url;
+      const baseNavs = navSuccessResults[0].navStructure;
+
+      for (let i = 1; i < navSuccessResults.length; i++) {
+        const targetUrl = navSuccessResults[i].url;
+        const targetNavs = navSuccessResults[i].navStructure;
 
         // nav要素の数が異なる
         if (baseNavs.length !== targetNavs.length) {
@@ -1593,7 +1605,6 @@ app.post('/api/batch-check', async (req, res) => {
           const targetLinks = targetNav.links.map(l => l.text).join('|');
 
           if (baseLinks !== targetLinks) {
-            // 順序の違いを検出
             const baseSet = new Set(baseNav.links.map(l => l.text));
             const targetSet = new Set(targetNav.links.map(l => l.text));
             const missing = [...baseSet].filter(t => !targetSet.has(t));
@@ -1608,7 +1619,6 @@ app.post('/api/batch-check', async (req, res) => {
                 added: added.slice(0, 5)
               });
             } else {
-              // リンクは同じだが順序が違う
               issues.push({
                 type: 'nav_order_differ',
                 message: `ナビゲーション${idx + 1}のリンク順序が異なります`,
@@ -1623,7 +1633,7 @@ app.post('/api/batch-check', async (req, res) => {
         sc: '3.2.3 / 3.2.4',
         title: '一貫したナビゲーション・識別',
         result: issues.length === 0 ? 'pass' : 'fail',
-        comparedUrls: successResults.map(r => r.url),
+        comparedUrls: navSuccessResults.map(r => r.url),
         issues
       };
     }
