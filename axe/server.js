@@ -4141,13 +4141,27 @@ async function check_1_4_3_text_contrast(page) {
         walk(el);
         return parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, maxLength);
       }
-      function desc(el) {
+      function toHex(rgb) {
+        return '#' + rgb.map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
+      }
+      function parentCtx(el) {
+        const p = el.parentElement;
+        if (!p || p === document.body) return '';
+        const tag = p.tagName.toLowerCase();
+        const id  = p.id ? `#${p.id}` : '';
+        const cls = typeof p.className === 'string' && p.className
+          ? '.' + p.className.trim().split(/\s+/)[0] : '';
+        return `${tag}${id || cls} > `;
+      }
+      function desc(el, fg, bg, rect) {
         const tag = el.tagName.toLowerCase();
         const id  = el.id ? `#${el.id}` : '';
         const cls = typeof el.className === 'string' && el.className
           ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
         const txt = visibleTextForDesc(el);
-        return `${tag}${id || cls}${txt ? ` "${txt}"` : ''}`.slice(0, 100);
+        const pos = rect ? ` [y:${Math.round(rect.top + window.scrollY)}px]` : '';
+        const colors = ` | 文字色:${toHex(fg)} 背景:${toHex(bg)}`;
+        return `${parentCtx(el)}${tag}${id || cls}${txt ? ` "${txt}"` : ''}${pos}${colors}`.slice(0, 160);
       }
 
       const MAX = 150;
@@ -4175,7 +4189,7 @@ async function check_1_4_3_text_contrast(page) {
         const required = large ? 3.0 : 4.5;
         checked++;
         if (ratio < required) {
-          violations.push(`${desc(el)}: ${ratio.toFixed(1)}:1（必要: ${required}:1${large ? '、大きいテキスト' : ''}）`);
+          violations.push(`${desc(el, fg, bg, rect)}: ${ratio.toFixed(1)}:1（必要: ${required}:1${large ? '、大きいテキスト' : ''}）`);
         }
       }
       return { violations, checked };
