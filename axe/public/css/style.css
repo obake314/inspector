@@ -10,10 +10,13 @@
   --color-play:#7B4DC8;
   --color-ext:#D97706;
   --color-white:#fff;
-  --color-crilical: #7f1d1d;
+  --color-critical: #991b1b;
   --color-serious: #dc2626;
-  --color-moderate: #d97706;
-  --color-minor: #6b7280;
+  --color-moderate: #b45309;
+  --color-minor: #374151;
+  --color-pass: #15803d;
+  --color-na: #0f766e;
+  --color-unverified: #1d4ed8;
   --font-basic:"Noto Sans JP", sans-serif;
   --font-latin:"Roboto Condensed", sans-serif;
   
@@ -1118,6 +1121,42 @@ margin-bottom: 6px;
   background: var(--navy-700);
   color: var(--color-white);
 }
+/* タブ色分け: 違反・合格・未検証 */
+.tab[data-tab="critical"]                  { color: var(--color-critical); }
+.tab[data-tab="critical"] .tab-num         { background: #fee2e2; color: var(--color-critical); }
+.tab[data-tab="critical"].active           { color: var(--color-critical); border-bottom-color: var(--color-critical); }
+.tab[data-tab="critical"].active .tab-num  { background: var(--color-critical); color: #fff; }
+
+.tab[data-tab="serious"]                   { color: var(--color-serious); }
+.tab[data-tab="serious"] .tab-num          { background: #fee2e2; color: var(--color-serious); }
+.tab[data-tab="serious"].active            { color: var(--color-serious); border-bottom-color: var(--color-serious); }
+.tab[data-tab="serious"].active .tab-num   { background: var(--color-serious); color: #fff; }
+
+.tab[data-tab="moderate"]                  { color: var(--color-moderate); }
+.tab[data-tab="moderate"] .tab-num         { background: #fef3c7; color: var(--color-moderate); }
+.tab[data-tab="moderate"].active           { color: var(--color-moderate); border-bottom-color: var(--color-moderate); }
+.tab[data-tab="moderate"].active .tab-num  { background: var(--color-moderate); color: #fff; }
+
+.tab[data-tab="minor"]                     { color: var(--color-minor); }
+.tab[data-tab="minor"] .tab-num            { background: #f3f4f6; color: var(--color-minor); }
+.tab[data-tab="minor"].active              { color: var(--color-minor); border-bottom-color: var(--color-minor); }
+.tab[data-tab="minor"].active .tab-num     { background: var(--color-minor); color: #fff; }
+
+.tab[data-tab="pass"]                      { color: var(--color-pass); }
+.tab[data-tab="pass"] .tab-num             { background: #dcfce7; color: var(--color-pass); }
+.tab[data-tab="pass"].active               { color: var(--color-pass); border-bottom-color: var(--color-pass); }
+.tab[data-tab="pass"].active .tab-num      { background: var(--color-pass); color: #fff; }
+
+.tab[data-tab="na"]                        { color: var(--color-na); }
+.tab[data-tab="na"] .tab-num               { background: #ccfbf1; color: var(--color-na); }
+.tab[data-tab="na"].active                 { color: var(--color-na); border-bottom-color: var(--color-na); }
+.tab[data-tab="na"].active .tab-num        { background: var(--color-na); color: #fff; }
+
+.tab[data-tab="unverified"]                { color: var(--color-unverified); }
+.tab[data-tab="unverified"] .tab-num       { background: #dbeafe; color: var(--color-unverified); }
+.tab[data-tab="unverified"].active         { color: var(--color-unverified); border-bottom-color: var(--color-unverified); }
+.tab[data-tab="unverified"].active .tab-num { background: var(--color-unverified); color: #fff; }
+
 .tab-content {
   display: none;
 }
@@ -1778,8 +1817,8 @@ margin-bottom: 6px;
   font-family: var(--font-basic);
 }
 .export-btn.clear-btn:hover {
-  color: var(--color-crilical);
-  border-color: var(--color-crilical);
+  color: var(--color-critical);
+  border-color: var(--color-critical);
 }
 .wcag-list-item {
   padding: var(--space-s) var(--space-m);
@@ -2038,7 +2077,7 @@ margin-bottom: 6px;
 
 /* ヘッダー列のトーン色 */
 /*
-.batchsum-th.tone-critical { color: var(--color-crilical); }
+.batchsum-th.tone-critical { color: var(--color-critical); }
 .batchsum-th.tone-serious  { color: var(--color-serious);  }
 .batchsum-th.tone-moderate { color: var(--color-moderate); }
 .batchsum-th.tone-minor    { color: var(--color-minor);    }
@@ -2106,7 +2145,7 @@ margin-bottom: 6px;
   font-weight: 400;
   font-size: var(--font-size-s);
 }
-.batchsum-num.tone-critical { color: var(--color-crilical); }
+.batchsum-num.tone-critical { color: var(--color-critical); }
 .batchsum-num.tone-serious  { color: var(--color-serious);  }
 .batchsum-num.tone-moderate { color: var(--color-moderate); }
 .batchsum-num.tone-minor    { color: var(--color-minor);    }
