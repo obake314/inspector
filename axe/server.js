@@ -4109,15 +4109,25 @@ async function check_1_4_3_text_contrast(page) {
       function pseudoBg(el) {
         // ::after / ::before が position:absolute で面積を持ち、opacity が十分あれば
         // 背景レイヤーとして機能している可能性がある
+        const elRect = el.getBoundingClientRect();
         for (const pseudo of ['::after', '::before']) {
           const ps = getComputedStyle(el, pseudo);
           const pos = ps.position;
           if (pos !== 'absolute' && pos !== 'fixed') continue;
           const opacity = parseFloat(ps.opacity);
           if (isNaN(opacity) || opacity < 0.5) continue;
+          // mask-image があれば SVG/画像マスクによるアイコン描画なので背景ではない
+          const mask = ps.maskImage || ps.webkitMaskImage || '';
+          if (mask && mask !== 'none') continue;
+          // clip-path があっても装飾目的が多いのでスキップ
+          const clip = ps.clipPath || '';
+          if (clip && clip !== 'none') continue;
           const w = parseFloat(ps.width);
           const h = parseFloat(ps.height);
-          if (w < 10 || h < 10) continue; // 装飾的な小さい疑似要素は除外
+          // 親要素の面積の 30% 以上をカバーしていなければ背景とみなさない
+          const coverW = elRect.width  > 0 ? w / elRect.width  : 0;
+          const coverH = elRect.height > 0 ? h / elRect.height : 0;
+          if (coverW < 0.3 || coverH < 0.3) continue;
           const bg = parseCssColor(ps.backgroundColor);
           if (bg) return bg;
         }
