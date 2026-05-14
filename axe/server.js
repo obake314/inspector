@@ -1722,10 +1722,13 @@ async function check_2_5_8_target_size(page) {
             const hasBefore = idx > 0 && siblings[idx - 1].nodeType === 3 && siblings[idx - 1].textContent.trim();
             const hasAfter = idx < siblings.length - 1 && siblings[idx + 1].nodeType === 3 && siblings[idx + 1].textContent.trim();
             if (hasBefore || hasAfter) continue;
-            // 高さがline-heightと同程度（20px以下）かつブロック要素でない場合もインライン扱い
+            // テキストコンテナ内（p,li,td等）でline-heightに拘束されている高さのリンクはinline例外
+            // WCAG 2.5.8: "size is otherwise constrained to the line-height of non-target text"
+            const TEXT_CONTAINERS = ['P', 'LI', 'TD', 'TH', 'DD', 'DT', 'FIGCAPTION', 'CAPTION', 'BLOCKQUOTE'];
             const rect0 = el.getBoundingClientRect();
             const lineH = parseFloat(cs.lineHeight) || 0;
-            if (rect0.height > 0 && rect0.height <= 20 && (lineH === 0 || rect0.height <= lineH * 1.2)) continue;
+            const inTextContainer = parent && TEXT_CONTAINERS.includes(parent.tagName);
+            if (rect0.height > 0 && lineH > 0 && rect0.height <= lineH * 1.2 && inTextContainer) continue;
           }
           if (isScreenReaderOnlyElement(el)) continue;
           const rect = el.getBoundingClientRect();
@@ -1830,9 +1833,16 @@ async function getActiveElementSnapshot(page) {
       }
       // contenteditable は Tab でインデントするため除外
       if (a.isContentEditable) isWidget = true;
+      // 地図系サードパーティ iframe: 内部で Tab が巡回するため widget 扱いにしてトラップ誤検出を防ぐ
+      const KNOWN_MAP_HOSTS = ['maps.google', 'google.com/maps', 'maps.googleapis', 'bing.com/maps', 'map.yahoo', 'openstreetmap.org'];
+      let isMapEmbed = false;
+      if (tag === 'iframe') {
+        const src = a.getAttribute('src') || a.src || '';
+        if (KNOWN_MAP_HOSTS.some(h => src.includes(h))) { isWidget = true; isMapEmbed = true; }
+      }
       const key = `${tag}${id}${cls}${href}${text ? '_' + text.slice(0, 15) : ''}`.slice(0, 100);
       const display = `${tag}${id}${cls}${text ? ' "' + text + '"' : ''}`.slice(0, 80);
-      return { key, display, inModal, isWidget };
+      return { key, display, inModal, isWidget, isMapEmbed };
     }, [...WIDGET_ROLES_THAT_CAPTURE_TAB]);
   } catch (e) {
     // ナビゲーションによる実行コンテキスト破棄はnullを返して上位に委ねる
@@ -1946,13 +1956,37 @@ async function check_2_1_2_keyboard_trap(page) {
   try {
     const { traps } = await detectKeyboardTrapsByTabbing(page);
 
+    // 地図系 iframe の存在を別途チェック（trap 誤検出は除外済みだが要手動確認として通知）
+    const mapEmbeds = await page.evaluate(() => {
+      const KNOWN_MAP_HOSTS = ['maps.google', 'google.com/maps', 'maps.googleapis', 'bing.com/maps', 'map.yahoo', 'openstreetmap.org'];
+      return Array.from(document.querySelectorAll('iframe')).filter(f => {
+        const src = f.getAttribute('src') || f.src || '';
+        return KNOWN_MAP_HOSTS.some(h => src.includes(h));
+      }).map(f => {
+        const src = (f.getAttribute('src') || f.src || '').slice(0, 80);
+        const id = f.id ? `#${f.id}` : '';
+        return `iframe${id} [${src}]`;
+      });
+    });
+
+    const mapNotices = mapEmbeds.map(src =>
+      `地図iframe検出: ${src} — iframeにTab到達後のEsc/Tabで脱出できることを手動確認してください。` +
+      `脱出できない場合は iframe の前に「地図をスキップ」リンクを設置するか、tabindex="-1"でフォーカスを受け取らない設定にして住所テキストとGoogleマップリンクで代替してください。`
+    );
+
+    const allViolations = [...traps, ...mapNotices];
+    const hasTrap = traps.length > 0;
+    const hasMap = mapNotices.length > 0;
+
     return {
       sc: '2.1.2', name: 'キーボードトラップなし',
-      status: traps.length === 0 ? 'pass' : 'fail',
-      message: traps.length === 0
-        ? 'キーボードトラップは検出されませんでした'
-        : `${traps.length}箇所でキーボードトラップを確認`,
-      violations: traps
+      status: hasTrap ? 'fail' : hasMap ? 'manual_required' : 'pass',
+      message: hasTrap
+        ? `${traps.length}箇所でキーボードトラップを確認`
+        : hasMap
+          ? `地図iframeが${mapEmbeds.length}件検出されました（キーボードトラップではありませんが要手動確認）`
+          : 'キーボードトラップは検出されませんでした',
+      violations: allViolations
     };
   } catch (e) {
     return { sc: '2.1.2', name: 'キーボードトラップなし', status: 'error', message: e.message, violations: [] };
@@ -2365,15 +2399,42 @@ async function check_3_3_1_error_identification(page) {
     });
 
     if (targetForms === 0) {
-      // 必須フィールドを持つフォームがない場合は検査不要
-      const totalForms = await page.evaluate(() => document.querySelectorAll('form').length);
+      // 必須フィールドを持つフォームがない → 検索フォームのみなら not_applicable
+      const formInfo = await page.evaluate(() => {
+        const forms = Array.from(document.querySelectorAll('form'));
+        const nonSearch = forms.filter(f => {
+          // role="search" / class に search を含む / type="search" 入力のみのフォームは対象外
+          if (f.getAttribute('role') === 'search') return false;
+          if (/search/i.test(f.className)) return false;
+          const inputs = f.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"])');
+          if (inputs.length > 0 && Array.from(inputs).every(i => i.type === 'search')) return false;
+          return true;
+        });
+        return {
+          total: forms.length,
+          nonSearchCount: nonSearch.length,
+          nonSearchSelectors: nonSearch.map(f => {
+            const id = f.id ? `#${f.id}` : '';
+            const cls = f.className ? `.${f.className.trim().split(/\s+/)[0]}` : '';
+            return `form${id}${cls}`.slice(0, 80);
+          })
+        };
+      });
+      if (formInfo.nonSearchCount === 0) {
+        return {
+          sc: '3.3.1', name: 'エラー特定',
+          status: formInfo.total > 0 ? 'not_applicable' : 'not_applicable',
+          message: formInfo.total > 0
+            ? `検索フォームのみ（${formInfo.total}件）。必須フィールドなし・エラー検証不要`
+            : 'フォームが見つかりません',
+          violations: []
+        };
+      }
       return {
         sc: '3.3.1', name: 'エラー特定',
-        status: totalForms > 0 ? 'manual_required' : 'not_applicable',
-        message: totalForms > 0
-          ? `${totalForms}件のフォームは必須フィールドなし。エラー通知は手動確認が必要です`
-          : 'フォームが見つかりません',
-        violations: []
+        status: 'manual_required',
+        message: `${formInfo.nonSearchCount}件のフォームに必須フィールドなし。サーバー側バリデーションの有無を手動確認してください`,
+        violations: formInfo.nonSearchSelectors.map(sel => `${sel}: 必須フィールドなし・エラー通知の実装要確認`)
       };
     }
 
@@ -2787,13 +2848,13 @@ async function check_2_4_7_focus_visible(page) {
 
       const htmlSnippet = b.html ? ` | ${b.html}` : '';
       if (indicators.length === 0) {
-        violations27.push(`${b.label} (outline:${a.outlineWidth}px, opacity:${a.opacity}, size:${Math.round(a.width)}x${Math.round(a.height)})${htmlSnippet}`);
-        violations213.push(`${b.label} ／ インジケーター未検出${htmlSnippet}`);
+        violations27.push(`${b.label} ／ フォーカスインジケーター未検出（outline・border・shadow・background の変化なし）${htmlSnippet}`);
+        violations213.push(`${b.label} ／ インジケーター未検出（判定基準: 幅≥2px かつ コントラスト比≥3:1）${htmlSnippet}`);
         continue;
       }
 
       const notes = indicators.map(item => item.note).join(' / ');
-      violations27.push(`${b.label} ／ フォーカス表示が弱い: ${notes}${htmlSnippet}`);
+      violations27.push(`${b.label} ／ フォーカス表示が弱い: ${notes}（判定基準: 幅≥2px かつ コントラスト比≥3:1）${htmlSnippet}`);
       violations213.push(`${b.label} ／ ${notes}（2px以上・3:1以上の表示が必要）${htmlSnippet}`);
     }
 
@@ -4018,32 +4079,94 @@ async function check_1_4_5_images_of_text(page) {
   try {
     const result = await page.evaluate(() => {
       const issues = [];
-      // canvas/svg に text が含まれるか
+
+      // 遅延読み込み対応: data-src 系属性を優先して実際のURLを取得
+      function getActualSrc(img) {
+        return img.getAttribute('data-src')
+          || img.getAttribute('data-original')
+          || img.getAttribute('data-lazy-src')
+          || img.getAttribute('data-lazy')
+          || img.getAttribute('src') || '';
+      }
+      function getFilename(src) {
+        if (!src || src.startsWith('data:')) return '';
+        return src.split('/').pop().replace(/[?#].*$/, '').slice(0, 60);
+      }
+      function getSel(el) {
+        const tag = el.tagName.toLowerCase();
+        const id = el.id ? `#${el.id}` : '';
+        const cls = el.className && typeof el.className === 'string'
+          ? '.' + el.className.trim().split(/\s+/)[0] : '';
+        return `${tag}${id}${cls}`;
+      }
+
+      // ファイル名パターン: ナビ・見出し・ボタン等の文字画像に典型的な名前
+      const TEXT_IMG_PAT = /nav\d*|navi|btn|button|head|midashi|title|ttl|label|menu|banner|h\d+[_-]|link[_-]|text[_-]|caption|copy[_-]/i;
+      // 除外パターン: ロゴ・アイコン・写真等
+      const EXCLUDE_PAT = /logo|icon|photo|pic|img\d+$|bg[_-]|sprite|thumb|arrow|deco|spacer/i;
+
+      const imgs = Array.from(document.querySelectorAll('img'));
+      let count = 0;
+
+      for (const img of imgs) {
+        if (count >= 8) break;
+        const rect = img.getBoundingClientRect();
+        if (rect.width < 10 || rect.height < 4) continue;
+
+        const src = getActualSrc(img);
+        const filename = getFilename(src);
+        const alt = img.getAttribute('alt') || '';
+        const size = `${Math.round(rect.width)}×${Math.round(rect.height)}`;
+        const sel = getSel(img);
+        const parentA = img.closest('a');
+
+        if (filename && EXCLUDE_PAT.test(filename)) continue;
+
+        // パターン1: ファイル名が文字画像典型パターンに一致
+        if (filename && TEXT_IMG_PAT.test(filename)) {
+          const isLazy = !img.getAttribute('src') || (img.getAttribute('src') || '').startsWith('data:');
+          const lazyNote = isLazy ? '（遅延読み込み）' : '';
+          const altNote = alt ? `alt="${alt.slice(0, 30)}"` : 'alt=""';
+          if (parentA) {
+            const href = (parentA.getAttribute('href') || '').slice(0, 50);
+            issues.push(`${sel} in a[href="${href}"] [${size}] src="${filename}" ${altNote}${lazyNote} — ナビゲーション文字画像の可能性`);
+          } else {
+            issues.push(`${sel} [${size}] src="${filename}" ${altNote}${lazyNote} — 文字画像の可能性（見出し・ラベル等）`);
+          }
+          count++;
+          continue;
+        }
+
+        // パターン2: alt が長い（文字説明が画像内容を表す）
+        if (alt.length > 20) {
+          const dispAlt = alt.length > 40 ? alt.slice(0, 40) + '…' : alt;
+          const context = parentA ? ` in a[href="${(parentA.getAttribute('href') || '').slice(0, 40)}"]` : '';
+          issues.push(`${sel}${context} [${size}] src="${filename || '(base64)'}" alt="${dispAlt}" — alt文字が長い: 文字画像の可能性`);
+          count++;
+          continue;
+        }
+
+        // パターン3: リンク内唯一の画像で alt="" かつ親リンクにテキストなし
+        if (parentA && alt === '' && rect.width > 30) {
+          const linkText = (parentA.textContent || '').trim();
+          if (!linkText && filename) {
+            const href = (parentA.getAttribute('href') || '').slice(0, 50);
+            issues.push(`${sel} in a[href="${href}"] [${size}] src="${filename}" alt="" — リンク内唯一の画像（代替テキストなし）: 文字画像なら説明が必要`);
+            count++;
+          }
+        }
+      }
+
+      // canvas
       const canvases = document.querySelectorAll('canvas');
       if (canvases.length > 0) {
         issues.push(`canvas要素 ${canvases.length}個: テキスト含有の手動確認が必要`);
       }
-      // img の alt に長いテキストが含まれるか（文字画像の疑いは alt が長いことで推定）
-      const imgs = document.querySelectorAll('img[alt]');
-      for (const img of imgs) {
-        const alt = img.getAttribute('alt') || '';
-        if (alt.length > 20 && !img.closest('a')) {
-          const srcRaw = img.getAttribute('src') || '';
-          const srcFile = srcRaw.split('/').pop().replace(/[?#].*$/, '').slice(0, 50);
-          const rect = img.getBoundingClientRect();
-          const size = `${Math.round(rect.width)}x${Math.round(rect.height)}`;
-          const tag = img.tagName.toLowerCase();
-          const id = img.id ? `#${img.id}` : '';
-          const cls = img.className && typeof img.className === 'string'
-            ? '.' + img.className.trim().split(/\s+/)[0] : '';
-          issues.push(`${tag}${id}${cls} [src="${srcFile}", ${size}] alt="${alt.slice(0, 40)}${alt.length > 40 ? '…' : ''}": 文字画像の可能性`);
-          if (issues.length >= 5) break;
-        }
-      }
-      // background-image に文字含有（CSS的には検出困難なのでフラグのみ）
+      // background-image（CSS的に内容検出不可）
       const elementsWithBg = Array.from(document.querySelectorAll('*')).filter(el => {
         const style = getComputedStyle(el);
-        return style.backgroundImage && style.backgroundImage !== 'none' && !['IMG', 'VIDEO'].includes(el.tagName);
+        return style.backgroundImage && style.backgroundImage !== 'none'
+          && !['IMG', 'VIDEO', 'BODY', 'HTML'].includes(el.tagName);
       });
       if (elementsWithBg.length > 0) {
         issues.push(`background-imageを持つ要素 ${elementsWithBg.length}個: 文字画像の可能性 — 手動確認を推奨`);
@@ -6859,9 +6982,9 @@ async function pw_check_2_4_7_focus_visible_all(page) {
 
       const label = labelFor(el);
       if (indicators.length > 0) {
-        noFocus.push(`フォーカス表示が弱い: ${label} (${indicators.map(item => item.note).join(' / ')}) | ${snippet(el)}`);
+        noFocus.push(`フォーカス表示が弱い: ${label} (${indicators.map(item => item.note).join(' / ')})（判定基準: 幅≥2px かつ コントラスト比≥3:1） | ${snippet(el)}`);
       } else {
-        noFocus.push(`フォーカスインジケーターなし: ${label} | ${snippet(el)}`);
+        noFocus.push(`フォーカスインジケーターなし: ${label}（outline・border・shadow・background の変化なし） | ${snippet(el)}`);
       }
     });
     return noFocus;
@@ -7263,13 +7386,7 @@ async function pw_check_1_3_3_sensory_characteristics(page) {
 /** SC 2.1.2 - キーボードトラップなし（Playwright版） */
 async function pw_check_2_1_2_keyboard_trap(page) {
   try {
-    const { traps } = await detectKeyboardTrapsByTabbing(page);
-    return {
-      sc: '2.1.2',
-      status: traps.length === 0 ? 'pass' : 'fail',
-      violations: traps,
-      message: traps.length === 0 ? 'キーボードトラップは検出されませんでした' : `${traps.length}箇所でキーボードトラップを確認`
-    };
+    return await check_2_1_2_keyboard_trap(page);
   } catch (e) {
     return { sc: '2.1.2', status: 'error', violations: [], message: e.message };
   }
