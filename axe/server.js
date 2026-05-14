@@ -3697,23 +3697,13 @@ async function check_2_3_1_three_flashes(page) {
 // ============================================================
 
 /** SC 1.4.13 ホバーコンテンツ
- * 3要件: (1)閉鎖可能(Escape) (2)ホバー可能 (3)永続的
- * + キーボードフォーカスでも表示されるか
+ * CSSシートから :hover で display/visibility/opacity を変えるルールを直接読み取り、
+ * 実際に存在する要素のみを対象にする。
  */
 async function check_1_4_13_hover_content(page) {
   try {
-    // ── Phase 1: 候補収集 ──────────────────────────────────────────
-    // ① 明示的ツールチップ属性・クラス
-    // ② CSS hover-show パターン（親をホバーすると子が表示される構造）
+    // ── Phase 1: CSSルールから hover-show パターンを検出 ─────────────
     const candidates = await page.evaluate(() => {
-      function isRendered(el) {
-        const r = el.getBoundingClientRect();
-        return r.width > 10 && r.height > 6;
-      }
-      function isHiddenNow(el) {
-        const s = getComputedStyle(el);
-        return s.display === 'none' || s.visibility === 'hidden' || parseFloat(s.opacity) < 0.05;
-      }
       function getSel(el) {
         const tag = el.tagName.toLowerCase();
         const id = el.id ? `#${el.id}` : '';
@@ -3724,34 +3714,56 @@ async function check_1_4_13_hover_content(page) {
 
       const results = [];
       const seen = new Set();
-      function add(el, type, hiddenText) {
-        if (!isRendered(el)) return;
+
+      function addEl(el, type, ruleDesc) {
         const r = el.getBoundingClientRect();
-        const key = `${Math.round(r.left / 5) * 5},${Math.round(r.top / 5) * 5}`;
+        if (r.width < 10 || r.height < 6) return;
+        const key = `${Math.round(r.left / 4) * 4},${Math.round(r.top / 4) * 4}`;
         if (seen.has(key)) return;
         seen.add(key);
-        results.push({ x: r.left + r.width / 2, y: r.top + r.height / 2, label: getSel(el), type, hiddenText: hiddenText || '' });
+        results.push({ x: r.left + r.width / 2, y: r.top + r.height / 2, label: getSel(el), type, ruleDesc: ruleDesc || '' });
       }
 
-      // ① ツールチップ属性・クラス
+      // ① CSSルール解析: :hover で display/visibility/opacity を変えるセレクタを抽出
+      for (const sheet of document.styleSheets) {
+        try {
+          for (const rule of sheet.cssRules) {
+            if (!rule.selectorText || !rule.selectorText.includes(':hover')) continue;
+            const style = rule.style;
+            const display    = style.getPropertyValue('display');
+            const visibility = style.getPropertyValue('visibility');
+            const opacity    = style.getPropertyValue('opacity');
+            // 「表示にする」方向の変化のみ対象
+            const isShowRule = display === 'block' || display === 'flex' || display === 'inline' || display === 'inline-block' || display === 'grid'
+              || visibility === 'visible'
+              || (opacity && parseFloat(opacity) > 0.5);
+            if (!isShowRule) continue;
+
+            // ":hover" の前にある部分がホバーすべき親要素のセレクタ
+            // 例: ".card:hover .overlay" → ".card"
+            // 例: "li:hover > .submenu" → "li"
+            const hoverMatch = rule.selectorText.match(/^(.*?):hover/);
+            if (!hoverMatch) continue;
+            const parentSel = hoverMatch[1].trim();
+            if (!parentSel || parentSel === '*' || parentSel === '') continue;
+
+            try {
+              const parents = document.querySelectorAll(parentSel);
+              for (const parent of parents) {
+                if (parent === document.body || parent === document.documentElement) continue;
+                addEl(parent, 'css-hover', rule.selectorText.slice(0, 80));
+              }
+            } catch {}
+
+            if (results.length >= 10) break;
+          }
+        } catch {}
+        if (results.length >= 10) break;
+      }
+
+      // ② 明示的ツールチップ属性・クラス（CSS解析でカバーされない場合の補完）
       for (const el of document.querySelectorAll('[title]:not(abbr):not(html), [data-tooltip], [class*="tooltip" i], [class*="popover" i]')) {
-        add(el, 'tooltip', '');
-        if (results.length >= 5) break;
-      }
-
-      // ② CSS hover-show: 表示中の親に非表示の子孫（テキスト10字以上）がある構造
-      // 候補を絞るため section/article/figure/div/li/a 配下を中心に探索
-      for (const el of document.querySelectorAll('figure, li, .card, [class*="item" i], [class*="block" i], a[href], div')) {
-        if (!isRendered(el)) continue;
-        const r = el.getBoundingClientRect();
-        if (r.width < 40 || r.height < 20) continue;
-        // 非表示の子孫でテキストを持つものを探す
-        const hiddenKids = Array.from(el.querySelectorAll('*')).filter(child =>
-          child !== el && isHiddenNow(child) && (child.textContent || '').trim().length > 10
-        );
-        if (hiddenKids.length > 0) {
-          add(el, 'css-hover', (hiddenKids[0].textContent || '').trim().slice(0, 60));
-        }
+        addEl(el, 'tooltip', '');
         if (results.length >= 12) break;
       }
 
@@ -3770,44 +3782,58 @@ async function check_1_4_13_hover_content(page) {
     const manualNeeded = [];
 
     for (const target of candidates.slice(0, 8)) {
-      // マウスをいったん退避
       await page.mouse.move(0, 0);
       await new Promise(r => setTimeout(r, 150));
 
-      // ホバー前の非表示要素スナップショット
-      const hiddenBefore = await page.evaluate(() =>
-        Array.from(document.querySelectorAll('*')).filter(el => {
-          const s = getComputedStyle(el);
-          return s.display === 'none' || s.visibility === 'hidden' || parseFloat(s.opacity) < 0.05;
-        }).map(el => el.outerHTML.slice(0, 80))
-      );
+      // ホバー前: 候補要素の子孫の非表示スナップショット
+      const hiddenDescBefore = await page.evaluate((tx, ty) => {
+        const el = document.elementFromPoint(tx, ty);
+        if (!el) return [];
+        // 候補要素（elementFromPoint の祖先をたどり、クリック可能な最小コンテナを探す）
+        let container = el;
+        for (let i = 0; i < 5; i++) {
+          const p = container.parentElement;
+          if (!p || ['BODY', 'HTML', 'MAIN', 'HEADER', 'FOOTER', 'SECTION', 'ARTICLE'].includes(p.tagName)) break;
+          container = p;
+        }
+        return Array.from(container.querySelectorAll('*'))
+          .filter(c => {
+            const s = getComputedStyle(c);
+            return (s.display === 'none' || s.visibility === 'hidden' || parseFloat(s.opacity) < 0.05)
+              && (c.textContent || '').trim().length > 5;
+          })
+          .map(c => c.outerHTML.slice(0, 80));
+      }, target.x, target.y);
 
       await page.mouse.move(target.x, target.y);
       await new Promise(r => setTimeout(r, 600));
 
-      // ホバー後に新たに表示された要素を検出
-      const appeared = await page.evaluate((hiddenBefore) => {
-        const nowVisible = Array.from(document.querySelectorAll('*')).filter(el => {
-          const s = getComputedStyle(el);
-          const r = el.getBoundingClientRect();
+      // ホバー後: 候補要素の子孫で新たに表示されたものを確認
+      const appeared = await page.evaluate((tx, ty, hiddenDesc) => {
+        const el = document.elementFromPoint(tx, ty);
+        if (!el) return null;
+        let container = el;
+        for (let i = 0; i < 5; i++) {
+          const p = container.parentElement;
+          if (!p || ['BODY', 'HTML', 'MAIN', 'HEADER', 'FOOTER', 'SECTION', 'ARTICLE'].includes(p.tagName)) break;
+          container = p;
+        }
+        const nowVisible = Array.from(container.querySelectorAll('*')).filter(c => {
+          const s = getComputedStyle(c);
+          const r = c.getBoundingClientRect();
           if (r.width < 5 || r.height < 5) return false;
           if (s.display === 'none' || s.visibility === 'hidden' || parseFloat(s.opacity) < 0.05) return false;
-          const snap = el.outerHTML.slice(0, 80);
-          return hiddenBefore.includes(snap);
+          return hiddenDesc.includes(c.outerHTML.slice(0, 80));
         });
         if (nowVisible.length === 0) return null;
-        const el = nowVisible[0];
-        const tag = el.tagName.toLowerCase();
-        const id = el.id ? `#${el.id}` : '';
-        const cls = el.className && typeof el.className === 'string'
-          ? '.' + el.className.trim().split(/\s+/)[0] : '';
-        return {
-          text: (el.textContent || '').trim().slice(0, 60),
-          sel: `${tag}${id}${cls}`
-        };
-      }, hiddenBefore);
+        const first = nowVisible[0];
+        const tag = first.tagName.toLowerCase();
+        const cls = first.className && typeof first.className === 'string'
+          ? '.' + first.className.trim().split(/\s+/)[0] : '';
+        return { text: (first.textContent || '').trim().slice(0, 60), sel: `${tag}${cls}` };
+      }, target.x, target.y, hiddenDescBefore);
 
-      if (!appeared) continue; // このターゲットではホバーで何も出現しなかった
+      if (!appeared) continue; // このターゲットはホバーで何も出現しなかった → 誤検出候補 → スキップ
 
       const problems = [];
 
@@ -3819,32 +3845,29 @@ async function check_1_4_13_hover_content(page) {
           const s = getComputedStyle(el);
           const r = el.getBoundingClientRect();
           return r.width > 5 && r.height > 5
-            && s.display !== 'none' && s.visibility !== 'hidden'
-            && parseFloat(s.opacity) > 0.05
+            && s.display !== 'none' && s.visibility !== 'hidden' && parseFloat(s.opacity) > 0.05
             && (el.textContent || '').includes(text.slice(0, 20));
         });
       }, appeared.text);
       if (!dismissedByEscape) problems.push('Escapeで閉じない');
 
-      // 要件(2)(3): CSS :hover のみの実装はマウスが親を外れると即消える
-      // → ホバー可能・永続的の両要件を満たせない
+      // 要件(2)(3): CSS :hover のみ実装はポインタが外れると即消える
       if (target.type === 'css-hover') {
-        problems.push('CSS :hover のみで実装（マウスを外すと消える: 永続性なし・ホバー不可）');
+        problems.push('CSS :hover のみで実装（ポインタを外すと消える: 永続性なし・コンテンツへのホバー不可）');
       }
 
-      // キーボードフォーカスで表示されるか（focus-within CSS の有無を検索）
-      const hasFocusWithin = await page.evaluate((label) => {
-        // スタイルシートに :focus-within が含まれるか簡易確認
-        return Array.from(document.styleSheets).some(ss => {
-          try {
-            return Array.from(ss.cssRules).some(r => r.selectorText && r.selectorText.includes(':focus-within'));
-          } catch { return false; }
-        });
-      }, target.label);
-      if (!hasFocusWithin) problems.push('キーボードフォーカスで表示される仕組みがない');
+      // キーボード到達性: :focus-within ルールが存在するか確認
+      const hasFocusWithin = await page.evaluate(() =>
+        Array.from(document.styleSheets).some(ss => {
+          try { return Array.from(ss.cssRules).some(r => r.selectorText?.includes(':focus-within')); }
+          catch { return false; }
+        })
+      );
+      if (!hasFocusWithin) problems.push('キーボードフォーカスで表示される仕組みがない（:focus-within なし）');
 
+      const entry = `${target.label}: ${problems.join(' / ')} — "${appeared.text}"`;
       if (problems.length > 0) {
-        issues.push(`${target.label}: ${problems.join(' / ')} — "${appeared.text}"`);
+        issues.push(entry);
       } else {
         manualNeeded.push(`${target.label}: ホバー可能・永続性を手動確認 — "${appeared.text}"`);
       }
