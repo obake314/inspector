@@ -10,10 +10,10 @@
   --color-play:#7B4DC8;
   --color-ext:#D97706;
   --color-white:#fff;
-  --color-critical: #991b1b;
-  --color-serious: #dc2626;
-  --color-moderate: #b45309;
-  --color-minor: #374151;
+  --color-critical: #7f1d1d;
+  --color-serious: #991b1b;
+  --color-moderate: #b91c1c;
+  --color-minor: #dc2626;
   --color-pass: #15803d;
   --color-na: #0f766e;
   --color-unverified: #1d4ed8;
@@ -1123,22 +1123,22 @@ margin-bottom: 6px;
 }
 /* タブ色分け: 違反・合格・未検証 */
 .tab[data-tab="critical"]                  { color: var(--color-critical); }
-.tab[data-tab="critical"] .tab-num         { background: #fee2e2; color: var(--color-critical); }
+.tab[data-tab="critical"] .tab-num         { background: #fecaca; color: var(--color-critical); }
 .tab[data-tab="critical"].active           { color: var(--color-critical); border-bottom-color: var(--color-critical); }
 .tab[data-tab="critical"].active .tab-num  { background: var(--color-critical); color: #fff; }
 
 .tab[data-tab="serious"]                   { color: var(--color-serious); }
-.tab[data-tab="serious"] .tab-num          { background: #fee2e2; color: var(--color-serious); }
+.tab[data-tab="serious"] .tab-num          { background: #fecaca; color: var(--color-serious); }
 .tab[data-tab="serious"].active            { color: var(--color-serious); border-bottom-color: var(--color-serious); }
 .tab[data-tab="serious"].active .tab-num   { background: var(--color-serious); color: #fff; }
 
 .tab[data-tab="moderate"]                  { color: var(--color-moderate); }
-.tab[data-tab="moderate"] .tab-num         { background: #fef3c7; color: var(--color-moderate); }
+.tab[data-tab="moderate"] .tab-num         { background: #fee2e2; color: var(--color-moderate); }
 .tab[data-tab="moderate"].active           { color: var(--color-moderate); border-bottom-color: var(--color-moderate); }
 .tab[data-tab="moderate"].active .tab-num  { background: var(--color-moderate); color: #fff; }
 
 .tab[data-tab="minor"]                     { color: var(--color-minor); }
-.tab[data-tab="minor"] .tab-num            { background: #f3f4f6; color: var(--color-minor); }
+.tab[data-tab="minor"] .tab-num            { background: #fee2e2; color: var(--color-minor); }
 .tab[data-tab="minor"].active              { color: var(--color-minor); border-bottom-color: var(--color-minor); }
 .tab[data-tab="minor"].active .tab-num     { background: var(--color-minor); color: #fff; }
 
