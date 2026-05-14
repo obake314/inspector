@@ -3102,8 +3102,13 @@ async function check_2_4_3_focus_order(page) {
       if (!prev.isRendered || !curr.isRendered) continue;
       // サブメニューを抜ける遷移のみ除外（サブ内→サブ内 や 通常→通常 は検査対象）
       if (prev.inSubMenu && !curr.inSubMenu) continue;
-      const xDist = Math.abs(curr.x - prev.x);
+      const xMove = curr.x - prev.x; // 正値 = 右へ移動
+      const xDist = Math.abs(xMove);
       const yJump = prev.y - curr.y; // 正値 = フォーカスが上に戻る
+      // カラムレイアウトの折り返し除外:
+      // 右カラムへ折り返す（x が右へ増加）ときに y が上がるのは正常
+      // 左カラムへ折り返す（x が左へ大きく戻る = xMove < -150）ときも同様
+      if (yJump > 0 && (xMove > 50 || xMove < -150)) continue;
       if (yJump > 100 && xDist < 300) {
         orderViolationPairs.push(`順序の逸脱: ${prev.label} → ${curr.label}`);
       }
@@ -7803,8 +7808,11 @@ async function pw_check_2_4_3_focus_order(page) {
       if (!prev.isRendered || !curr.isRendered) continue;
       // サブメニューを抜ける遷移（prev:サブ内→curr:サブ外）のみ免除。それ以外は検査対象
       if (prev.inSubMenu && !curr.inSubMenu) continue;
-      const xDist = Math.abs(curr.x - prev.x);
+      const xMove = curr.x - prev.x;
+      const xDist = Math.abs(xMove);
       const yJump = prev.y - curr.y;
+      // カラムレイアウトの折り返し除外（右へ移動 or 大きく左へ戻る際に y が上がるのは正常）
+      if (yJump > 0 && (xMove > 50 || xMove < -150)) continue;
       if (yJump > 100 && xDist < 300) {
         orderViolationPairs.push(`順序の逸脱: ${prev.label} → ${curr.label}`);
       }
