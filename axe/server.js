@@ -2388,7 +2388,12 @@ async function check_3_3_1_error_identification(page) {
   try {
     // 必須フィールドを持つフォームのみ対象にする
     const targetForms = await page.evaluate(() => {
+      function isVisible(el) {
+        const s = getComputedStyle(el);
+        return s.display !== 'none' && s.visibility !== 'hidden' && s.visibility !== 'collapse';
+      }
       return Array.from(document.querySelectorAll('form')).filter(form =>
+        isVisible(form) &&
         form.querySelector(
           'input[required]:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]),' +
           'textarea[required], select[required],' +
@@ -2401,7 +2406,11 @@ async function check_3_3_1_error_identification(page) {
     if (targetForms === 0) {
       // 必須フィールドを持つフォームがない → 検索フォームのみなら not_applicable
       const formInfo = await page.evaluate(() => {
-        const forms = Array.from(document.querySelectorAll('form'));
+        function isVisible(el) {
+          const s = getComputedStyle(el);
+          return s.display !== 'none' && s.visibility !== 'hidden' && s.visibility !== 'collapse';
+        }
+        const forms = Array.from(document.querySelectorAll('form')).filter(isVisible);
         const nonSearch = forms.filter(f => {
           // role="search" / class に search を含む / type="search" 入力のみのフォームは対象外
           if (f.getAttribute('role') === 'search') return false;
