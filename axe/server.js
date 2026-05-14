@@ -4711,18 +4711,47 @@ async function check_2_5_1_7_gestures(page) {
 async function check_2_5_3_label_in_name(page) {
   try {
     const violations = await page.evaluate(() => {
+      // innerText はブロック要素で改行が入るため、最初の行を「主ラベル」とする
+      // textContent は全子孫テキストを結合してしまい説明文まで含まれる
+      function primaryLabel(el) {
+        const inner = (typeof el.innerText === 'string' ? el.innerText : '').trim();
+        if (inner) {
+          const firstLine = inner.split('\n').map(l => l.trim()).filter(Boolean)[0] || '';
+          if (firstLine) return firstLine.replace(/\s+/g, ' ');
+        }
+        // フォールバック: value / placeholder
+        return (el.value || el.placeholder || '').trim();
+      }
+      // sr-only 等の視覚的に非表示のクラスかを判定
+      const SR_RE = /sr-only|screen-reader|screenreader|visually-hidden|visuallyhidden|a11y-hidden|reader-only|offscreen/i;
+      function isSrOnly(el) {
+        const cls = el.getAttribute('class') || '';
+        if (SR_RE.test(cls)) return true;
+        const r = el.getBoundingClientRect();
+        return r.width <= 1 && r.height <= 1;
+      }
+
       const issues = [];
-      const interactives = document.querySelectorAll('button, a, [role="button"], [role="link"], input[type="submit"], input[type="button"], input[type="reset"]');
+      const interactives = document.querySelectorAll(
+        'button, a[href], [role="button"], [role="link"], input[type="submit"], input[type="button"], input[type="reset"]'
+      );
       for (const el of interactives) {
-        const ariaLabel = el.getAttribute('aria-label') || '';
+        const s = getComputedStyle(el);
+        if (s.display === 'none' || s.visibility === 'hidden') continue;
+        const ariaLabel = (el.getAttribute('aria-label') || '').trim();
         if (!ariaLabel) continue;
-        const visibleText = (el.textContent || el.value || '').trim().replace(/\s+/g, ' ');
-        if (!visibleText) continue;
-        // aria-label がvisible textを含まない場合は違反
-        if (!ariaLabel.toLowerCase().includes(visibleText.toLowerCase().slice(0, 15))) {
+
+        const visible = primaryLabel(el);
+        // 主ラベルが空 / 2文字未満 / 要素自体がsr-only → スキップ
+        if (!visible || visible.length < 2 || isSrOnly(el)) continue;
+
+        // aria-label が visible テキストを含まない → 違反
+        const ariaLower    = ariaLabel.toLowerCase().replace(/\s+/g, ' ');
+        const visibleLower = visible.toLowerCase().replace(/\s+/g, ' ');
+        if (!ariaLower.includes(visibleLower)) {
           const tag = el.tagName.toLowerCase();
           const id  = el.id ? `#${el.id}` : '';
-          issues.push(`${tag}${id}: aria-label="${ariaLabel}" ≠ visible="${visibleText.slice(0, 40)}"`);
+          issues.push(`${tag}${id}: aria-label="${ariaLabel}" ≠ visible="${visible.slice(0, 40)}"`);
           if (issues.length >= 10) break;
         }
       }
@@ -7714,6 +7743,21 @@ async function pw_check_3_3_2_labels(page) {
 async function pw_check_2_5_3_label_in_name(page) {
   try {
     const issues = await page.evaluate(() => {
+      function primaryLabel(el) {
+        const inner = (typeof el.innerText === 'string' ? el.innerText : '').trim();
+        if (inner) {
+          const firstLine = inner.split('\n').map(l => l.trim()).filter(Boolean)[0] || '';
+          if (firstLine) return firstLine.replace(/\s+/g, ' ');
+        }
+        return (el.value || el.placeholder || '').trim();
+      }
+      const SR_RE = /sr-only|screen-reader|screenreader|visually-hidden|visuallyhidden|a11y-hidden|reader-only|offscreen/i;
+      function isSrOnly(el) {
+        if (SR_RE.test(el.getAttribute('class') || '')) return true;
+        const r = el.getBoundingClientRect();
+        return r.width <= 1 && r.height <= 1;
+      }
+
       const interactives = Array.from(document.querySelectorAll(
         'button, a[href], input[type="button"], input[type="submit"], [role="button"], [role="link"]'
       )).filter(el => {
@@ -7721,19 +7765,22 @@ async function pw_check_2_5_3_label_in_name(page) {
         return s.display !== 'none' && s.visibility !== 'hidden';
       });
       const mismatches = [];
-      interactives.forEach(el => {
-        const visibleText = (el.textContent || el.value || el.placeholder || '').trim().toLowerCase();
-        if (!visibleText) return;
-        const ariaLabel = (el.getAttribute('aria-label') || '').trim().toLowerCase();
-        if (!ariaLabel) return;
-        if (!ariaLabel.includes(visibleText) && !visibleText.includes(ariaLabel)) {
+      for (const el of interactives) {
+        const ariaLabel = (el.getAttribute('aria-label') || '').trim();
+        if (!ariaLabel) continue;
+        const visible = primaryLabel(el);
+        if (!visible || visible.length < 2 || isSrOnly(el)) continue;
+        const ariaLower    = ariaLabel.toLowerCase().replace(/\s+/g, ' ');
+        const visibleLower = visible.toLowerCase().replace(/\s+/g, ' ');
+        if (!ariaLower.includes(visibleLower)) {
           const tag = el.tagName.toLowerCase();
           const id = el.id ? `#${el.id}` : '';
           const h = el.outerHTML.replace(/\s+/g, ' ').trim();
           const snippet = h.length > 120 ? h.slice(0, 117) + '...' : h;
-          mismatches.push(`${tag}${id} 表示:"${visibleText.substring(0,20)}" ≠ aria-label:"${ariaLabel.substring(0,20)}" | ${snippet}`);
+          mismatches.push(`${tag}${id} 表示:"${visible.slice(0, 30)}" ≠ aria-label:"${ariaLabel.slice(0, 30)}" | ${snippet}`);
         }
-      });
+        if (mismatches.length >= 10) break;
+      }
       return mismatches;
     });
     return {
