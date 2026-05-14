@@ -1880,6 +1880,164 @@ async function confirmKeyboardTrap(page, suspectKey) {
   }
 }
 
+/** モーダルのフォーカストラップ検証
+ * - モーダルトリガーをクリックして開く
+ * - Tab でモーダル内を移動し、フォーカスがモーダル外に脱出しないか確認
+ * - 最終要素から最初の要素への折り返し（wrap-around）を確認
+ * - Escape でモーダルが閉じるか確認
+ */
+async function checkModalFocusTrap(page) {
+  // モーダルを開くトリガー候補を収集
+  const triggers = await page.evaluate(() => {
+    function getSel(el) {
+      const tag = el.tagName.toLowerCase();
+      const id = el.id ? `#${el.id}` : '';
+      const cls = el.className && typeof el.className === 'string'
+        ? '.' + el.className.trim().split(/\s+/)[0] : '';
+      const text = (el.textContent || '').trim().slice(0, 30);
+      return `${tag}${id}${cls} "${text}"`;
+    }
+    const found = [];
+    const seen = new Set();
+    for (const el of document.querySelectorAll(
+      'button[aria-haspopup="dialog"], button[aria-haspopup="true"], ' +
+      '[data-toggle="modal"], [data-modal], [data-open], ' +
+      '[class*="modal-open" i], [class*="open-modal" i], [class*="modal-trigger" i]'
+    )) {
+      const s = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      if (s.display === 'none' || s.visibility === 'hidden' || r.width < 1) continue;
+      const key = `${Math.round(r.left)},${Math.round(r.top)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      found.push({ x: r.left + r.width / 2, y: r.top + r.height / 2, label: getSel(el) });
+      if (found.length >= 3) break;
+    }
+    return found;
+  });
+
+  if (triggers.length === 0) return [];
+
+  const issues = [];
+
+  for (const trigger of triggers.slice(0, 2)) {
+    // トリガーをクリックしてモーダルを開く
+    try { await page.mouse.click(trigger.x, trigger.y); } catch { continue; }
+    await new Promise(r => setTimeout(r, 900));
+
+    // 開いたモーダルを検出
+    const modal = await page.evaluate(() => {
+      function isVisible(el) {
+        const s = getComputedStyle(el);
+        const r = el.getBoundingClientRect();
+        return s.display !== 'none' && s.visibility !== 'hidden' && r.width > 50 && r.height > 50;
+      }
+      // 優先: セマンティクスあり
+      let el = Array.from(document.querySelectorAll(
+        '[role="dialog"], [role="alertdialog"], dialog, [aria-modal="true"]'
+      )).find(isVisible);
+      // フォールバック: class ベース + 高 z-index
+      if (!el) {
+        el = Array.from(document.querySelectorAll('[class*="modal" i], [class*="dialog" i]')).find(e => {
+          if (!isVisible(e)) return false;
+          return parseInt(getComputedStyle(e).zIndex, 10) > 10;
+        });
+      }
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      const tag = el.tagName.toLowerCase();
+      const id = el.id ? `#${el.id}` : '';
+      const cls = el.className && typeof el.className === 'string'
+        ? '.' + el.className.trim().split(/\s+/)[0] : '';
+      const focusable = el.querySelectorAll(
+        'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), ' +
+        'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      return {
+        sel: `${tag}${id}${cls}`,
+        rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom },
+        focusableCount: focusable.length
+      };
+    });
+
+    if (!modal) continue; // モーダルが開かなかった → スキップ
+
+    // Tab でモーダル内を移動し、フォーカス脱出を検出
+    const seenKeys = [];
+    let focusEscaped = false;
+    let escapedLabel = '';
+    let wrapped = false;
+    const maxTabs = Math.min(modal.focusableCount + 6, 30);
+
+    for (let i = 0; i < maxTabs; i++) {
+      await page.keyboard.press('Tab');
+      await new Promise(r => setTimeout(r, 100));
+
+      const info = await page.evaluate((rect) => {
+        const a = document.activeElement;
+        if (!a || a === document.body || a === document.documentElement) {
+          return { inModal: false, label: '(body/document)', key: '__body__' };
+        }
+        const r = a.getBoundingClientRect();
+        // DOM 包含優先、位置で補完
+        const byDom = !!(a.closest('[role="dialog"],[role="alertdialog"],dialog,[aria-modal="true"]'));
+        const byPos = r.width > 0 && r.height > 0
+          && r.left >= rect.left - 30 && r.right <= rect.right + 30
+          && r.top >= rect.top - 30 && r.bottom <= rect.bottom + 30;
+        const tag = a.tagName.toLowerCase();
+        const id = a.id ? `#${a.id}` : '';
+        const text = (a.textContent || '').trim().slice(0, 25);
+        const key = `${tag}${id}|${Math.round(r.left)},${Math.round(r.top)}`;
+        return { inModal: byDom || byPos, label: `${tag}${id} "${text}"`, key };
+      }, modal.rect);
+
+      if (!info.inModal) {
+        focusEscaped = true;
+        escapedLabel = info.label;
+        break;
+      }
+      // 同じキーが再登場 → wrap-around 成功
+      if (seenKeys.includes(info.key)) { wrapped = true; break; }
+      seenKeys.push(info.key);
+    }
+
+    // Escape テスト（フォーカスが脱出した場合はモーダルを再度開く）
+    if (focusEscaped) {
+      try { await page.mouse.click(trigger.x, trigger.y); } catch {}
+      await new Promise(r => setTimeout(r, 800));
+      await page.keyboard.press('Tab');
+      await new Promise(r => setTimeout(r, 150));
+    }
+    await page.keyboard.press('Escape');
+    await new Promise(r => setTimeout(r, 500));
+    const modalClosed = await page.evaluate(() => {
+      return !Array.from(document.querySelectorAll(
+        '[role="dialog"],[role="alertdialog"],dialog,[aria-modal="true"],[class*="modal" i]'
+      )).some(el => {
+        const s = getComputedStyle(el);
+        const r = el.getBoundingClientRect();
+        return s.display !== 'none' && s.visibility !== 'hidden' && r.width > 50 && r.height > 50;
+      });
+    });
+
+    const problems = [];
+    if (focusEscaped) {
+      problems.push(`Tab操作でフォーカスがモーダル外に脱出（脱出先: ${escapedLabel}）— モーダルが開いたまま背景を操作できる状態`);
+    }
+    if (!wrapped && !focusEscaped) {
+      problems.push('最終要素からの折り返し（wrap-around）なし — Tab を続けるとモーダルを出てしまう可能性がある');
+    }
+    if (!modalClosed) {
+      problems.push('Escapeキーでモーダルが閉じない');
+    }
+    if (problems.length > 0) {
+      issues.push(...problems.map(p => `${trigger.label} → ${modal.sel}: ${p}`));
+    }
+  }
+
+  return issues;
+}
+
 async function detectKeyboardTrapsByTabbing(page) {
   let focusableCount;
   try {
@@ -1954,7 +2112,10 @@ async function detectKeyboardTrapsByTabbing(page) {
 
 async function check_2_1_2_keyboard_trap(page) {
   try {
-    const { traps } = await detectKeyboardTrapsByTabbing(page);
+    const [{ traps }, modalIssues] = await Promise.all([
+      detectKeyboardTrapsByTabbing(page),
+      checkModalFocusTrap(page)
+    ]);
 
     // 地図系 iframe の存在を別途チェック（trap 誤検出は除外済みだが要手動確認として通知）
     const mapEmbeds = await page.evaluate(() => {
@@ -1974,19 +2135,21 @@ async function check_2_1_2_keyboard_trap(page) {
       `脱出できない場合は iframe の前に「地図をスキップ」リンクを設置するか、tabindex="-1"でフォーカスを受け取らない設定にして住所テキストとGoogleマップリンクで代替してください。`
     );
 
-    const allViolations = [...traps, ...mapNotices];
+    const allViolations = [...traps, ...modalIssues, ...mapNotices];
     const hasTrap = traps.length > 0;
+    const hasModalIssue = modalIssues.length > 0;
     const hasMap = mapNotices.length > 0;
+
+    const status = (hasTrap || hasModalIssue) ? 'fail' : hasMap ? 'manual_required' : 'pass';
+    let message;
+    if (hasTrap) message = `${traps.length}箇所でキーボードトラップを確認`;
+    else if (hasModalIssue) message = `${modalIssues.length}件のモーダルでフォーカストラップの問題を検出`;
+    else if (hasMap) message = `地図iframeが${mapEmbeds.length}件検出されました（キーボードトラップではありませんが要手動確認）`;
+    else message = 'キーボードトラップは検出されませんでした';
 
     return {
       sc: '2.1.2', name: 'キーボードトラップなし',
-      status: hasTrap ? 'fail' : hasMap ? 'manual_required' : 'pass',
-      message: hasTrap
-        ? `${traps.length}箇所でキーボードトラップを確認`
-        : hasMap
-          ? `地図iframeが${mapEmbeds.length}件検出されました（キーボードトラップではありませんが要手動確認）`
-          : 'キーボードトラップは検出されませんでした',
-      violations: allViolations
+      status, message, violations: allViolations
     };
   } catch (e) {
     return { sc: '2.1.2', name: 'キーボードトラップなし', status: 'error', message: e.message, violations: [] };
