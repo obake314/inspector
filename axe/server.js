@@ -5119,8 +5119,60 @@ async function check_3_3_7_redundant_entry(page) {
   }
 }
 
+/** SC 1.1.1 非テキストコンテンツ — 不可視状態の画像 alt 欠落検出
+ *  axe-core は hidden 要素をスキップするため、スクロール連動で後から表示される
+ *  画像（back-to-top ボタン等）の alt 欠落を補完検出する。
+ */
+async function check_1_1_1_hidden_img_alt(page) {
+  try {
+    const violations = await page.evaluate(() => {
+      function getActualSrc(img) {
+        const src = img.getAttribute('src') || '';
+        if (!src || src.startsWith('data:')) {
+          return img.getAttribute('data-src') || img.getAttribute('data-original')
+            || img.getAttribute('data-lazy-src') || img.getAttribute('data-lazy') || src;
+        }
+        return src;
+      }
+      const issues = [];
+      for (const img of document.querySelectorAll('img')) {
+        if (img.getAttribute('aria-hidden') === 'true') continue;
+        const role = (img.getAttribute('role') || '').toLowerCase();
+        if (role === 'presentation' || role === 'none') continue;
+        // 可視要素は axe-core がカバー済みのため不可視のみ対象
+        const cs = getComputedStyle(img);
+        const isHidden = cs.display === 'none' || cs.visibility === 'hidden'
+          || cs.visibility === 'collapse' || parseFloat(cs.opacity) === 0;
+        if (!isHidden) continue;
+        // alt 属性なし (null) のみ違反 — alt="" は装飾宣言なので対象外
+        if (img.getAttribute('alt') !== null) continue;
+        const src = getActualSrc(img);
+        if (!src) continue;
+        const filename = src.split('/').pop().replace(/[?#].*$/, '').slice(0, 60);
+        const id = img.id ? `#${img.id}` : '';
+        const cls = img.className ? `.${String(img.className).trim().split(/\s+/)[0]}` : '';
+        const inLink = !!img.closest('a');
+        issues.push(`img${id}${cls}[src="${filename}"]: alt属性なし（スクロール連動で表示される可能性のある非表示画像）${inLink ? ' ／ リンク内画像' : ''}`);
+        if (issues.length >= 10) break;
+      }
+      return issues;
+    });
+    return {
+      sc: '1.1.1', name: '非テキストコンテンツ（不可視画像のalt欠落）',
+      status: violations.length === 0 ? 'pass' : 'fail',
+      message: violations.length === 0
+        ? '不可視状態の画像にalt欠落なし'
+        : `${violations.length}件: 不可視画像でalt属性なし（スクロール表示後に問題になる可能性）`,
+      violations
+    };
+  } catch (e) {
+    return { sc: '1.1.1', name: '非テキストコンテンツ（不可視画像のalt欠落）', status: 'error', message: e.message, violations: [] };
+  }
+}
+
 /** SC 2.4.4 リンクの目的（コンテキスト内）— Section B 新規
  *  汎用的なリンクテキスト（「こちら」「詳しくは」等）を検出
+ *  遅延読み込み画像（data-src）のリンクも対象とする
  */
 async function check_2_4_4_link_purpose(page) {
   try {
@@ -5129,10 +5181,23 @@ async function check_2_4_4_link_purpose(page) {
       const blacklist = /^(こちら|ここ|詳しくは|詳細|続きを読む|もっと見る|click here|here|read more|more|learn more|details|続き|see more|view more|全文|全て)$/i;
       // ファイル名パターン: Image2, img01, photo_3, figure01, pic2 etc.（拡張子あり/なし両対応）
       const fileNameAltRe = /^(image|img|photo|pic|picture|figure|fig|banner|icon|thumb|thumbnail)[_\-]?\d*(\.[a-z]{2,5})?$/i;
+      function getImgSrc(img) {
+        const src = img.getAttribute('src') || '';
+        if (!src || src.startsWith('data:')) {
+          return img.getAttribute('data-src') || img.getAttribute('data-original')
+            || img.getAttribute('data-lazy-src') || img.getAttribute('data-lazy') || src;
+        }
+        return src;
+      }
+      function isHiddenEl(el) {
+        const cs = getComputedStyle(el);
+        return cs.display === 'none' || cs.visibility === 'hidden';
+      }
       const issues = [];
       for (const a of document.querySelectorAll('a[href]')) {
         const ariaLabel = a.getAttribute('aria-label') || a.getAttribute('aria-labelledby');
         const text = (a.textContent || ariaLabel || '').trim().replace(/\s+/g, ' ');
+        const hiddenNote = isHiddenEl(a) ? '（非表示リンク）' : '';
         if (!text) {
           // テキストなし — alt付きimgのみのリンクかチェック
           const img = a.querySelector('img');
@@ -5140,15 +5205,16 @@ async function check_2_4_4_link_purpose(page) {
           if (!hasAriaLabel) {
             if (!img) {
               const id = a.id ? `#${a.id}` : '';
-              issues.push(`a${id}[href="${(a.getAttribute('href') || '').slice(0, 40)}"]: リンクテキストなし`);
+              issues.push(`a${id}[href="${(a.getAttribute('href') || '').slice(0, 40)}"]: リンクテキストなし${hiddenNote}`);
             } else {
               const alt = img.getAttribute('alt');
               if (alt === null || alt === '') {
                 const id = a.id ? `#${a.id}` : '';
-                issues.push(`a${id}[href="${(a.getAttribute('href') || '').slice(0, 40)}"]: 画像リンクのalt空/なし — リンク目的不明`);
+                const filename = getImgSrc(img).split('/').pop().replace(/[?#].*$/, '').slice(0, 40);
+                issues.push(`a${id}[href="${(a.getAttribute('href') || '').slice(0, 40)}"]: 画像リンクのalt空/なし${filename ? ` — img:${filename}` : ''} — リンク目的不明${hiddenNote}`);
               } else if (fileNameAltRe.test(alt.trim())) {
                 const id = a.id ? `#${a.id}` : '';
-                issues.push(`a${id}[href="${(a.getAttribute('href') || '').slice(0, 40)}"]: 画像alt「${alt}」はファイル名パターン — リンク目的を説明していない`);
+                issues.push(`a${id}[href="${(a.getAttribute('href') || '').slice(0, 40)}"]: 画像alt「${alt}」はファイル名パターン — リンク目的を説明していない${hiddenNote}`);
               }
             }
           }
@@ -5163,9 +5229,13 @@ async function check_2_4_4_link_purpose(page) {
             const img = a.querySelector('img');
             if (img) {
               const alt = img.getAttribute('alt');
-              if (alt && fileNameAltRe.test(alt.trim())) {
+              if (alt === null) {
                 const id = a.id ? `#${a.id}` : '';
-                issues.push(`a${id}[href="${(a.getAttribute('href') || '').slice(0, 40)}"]: 画像alt「${alt}」はファイル名パターン — リンク目的を説明していない`);
+                const filename = getImgSrc(img).split('/').pop().replace(/[?#].*$/, '').slice(0, 40);
+                issues.push(`a${id}[href="${(a.getAttribute('href') || '').slice(0, 40)}"]: 画像リンクのalt属性なし${filename ? ` — img:${filename}` : ''} — リンク目的不明${hiddenNote}`);
+              } else if (alt && fileNameAltRe.test(alt.trim())) {
+                const id = a.id ? `#${a.id}` : '';
+                issues.push(`a${id}[href="${(a.getAttribute('href') || '').slice(0, 40)}"]: 画像alt「${alt}」はファイル名パターン — リンク目的を説明していない${hiddenNote}`);
               }
             }
           }
@@ -5477,6 +5547,7 @@ app.post('/api/enhanced-check', async (req, res) => {
     results.push(await runSc('2.5.4', () => check_2_5_4_motion_actuation(page)));
     results.push(await runSc('3.2.6', () => check_3_2_6_consistent_help(page)));
     results.push(await runSc('3.3.7', () => check_3_3_7_redundant_entry(page)));
+    results.push(await runSc('1.1.1', () => check_1_1_1_hidden_img_alt(page)));
     results.push(await runSc('2.4.4', () => check_2_4_4_link_purpose(page)));
     results.push(await runSc('ARIA', () => check_aria_attributes(page)));
 
@@ -5785,7 +5856,15 @@ app.post('/api/ai-evaluate', async (req, res) => {
 
     // 1.1.1 alt品質評価用: img要素リストを構造化して抽出
     const imgAltList = await page.evaluate(() => {
-      return Array.from(document.querySelectorAll('img')).slice(0, 20).map(img => {
+      function getActualSrc(img) {
+        const src = img.getAttribute('src') || '';
+        if (!src || src.startsWith('data:')) {
+          return img.getAttribute('data-src') || img.getAttribute('data-original')
+            || img.getAttribute('data-lazy-src') || img.getAttribute('data-lazy') || src;
+        }
+        return src;
+      }
+      return Array.from(document.querySelectorAll('img')).slice(0, 30).map(img => {
         const alt = img.getAttribute('alt');
         const hasJapanese = (value) => /[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff]/.test(String(value || ''));
         const normalizeDigits = (value) => String(value || '').replace(/[０-９]/g, ch =>
@@ -5793,7 +5872,7 @@ app.post('/api/ai-evaluate', async (req, res) => {
         );
         const altText = alt === null ? '' : String(alt).trim();
         return {
-          src: (img.getAttribute('src') || '').split('/').pop().replace(/[?#].*$/, '').slice(0, 50),
+          src: getActualSrc(img).split('/').pop().replace(/[?#].*$/, '').slice(0, 50),
           alt: alt,           // null=属性なし, ''=装飾(空alt), string=値あり
           altHasJapanese: hasJapanese(altText),
           altNumericOnly: !!altText && /^[0-9]+$/.test(normalizeDigits(altText).replace(/\s+/g, '')),
@@ -5802,7 +5881,8 @@ app.post('/api/ai-evaluate', async (req, res) => {
           role: img.getAttribute('role') || null,
           inLink: !!img.closest('a'),
           inButton: !!img.closest('button'),
-          isHidden: img.getAttribute('aria-hidden') === 'true'
+          isHidden: img.getAttribute('aria-hidden') === 'true',
+          isScrollHidden: (() => { const cs = getComputedStyle(img); return cs.display === 'none' || cs.visibility === 'hidden'; })()
         };
       });
     });
