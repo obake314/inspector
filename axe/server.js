@@ -4547,29 +4547,57 @@ async function check_1_4_5_images_of_text(page) {
 async function check_2_2_1_timing_adjustable(page) {
   try {
     await page.evaluate(() => {
-      window.__timerCount = 0;
       window.__longTimers = [];
-      const origSetTimeout = window.setTimeout;
+
+      function capture(type, fn, delay) {
+        if (delay <= 20000) return;
+        // コールバックの内容を短縮テキストで取得
+        let fnSnippet = '';
+        try {
+          const src = typeof fn === 'function' ? fn.toString() : String(fn);
+          fnSnippet = src.replace(/\s+/g, ' ').trim().slice(0, 80);
+        } catch {}
+        // 呼び出し元スクリプトをスタックトレースから取得
+        let origin = '';
+        try {
+          const stack = new Error().stack || '';
+          // 自分自身（patch関数）の行を除き、最初の外部URLを探す
+          const lines = stack.split('\n').map(l => l.trim());
+          for (const line of lines) {
+            const m = line.match(/https?:\/\/[^\s)]+/);
+            if (m) { origin = m[0].slice(0, 100); break; }
+          }
+        } catch {}
+        window.__longTimers.push({ type, delay, fnSnippet, origin });
+      }
+
+      const origSetTimeout  = window.setTimeout;
+      const origSetInterval = window.setInterval;
       window.setTimeout = function(fn, delay, ...args) {
-        if (delay > 20000) { // 20秒以上のタイマー
-          window.__timerCount++;
-          window.__longTimers.push(delay);
-        }
+        capture('setTimeout', fn, delay || 0);
         return origSetTimeout(fn, delay, ...args);
       };
+      window.setInterval = function(fn, delay, ...args) {
+        capture('setInterval', fn, delay || 0);
+        return origSetInterval(fn, delay, ...args);
+      };
     });
+
     await new Promise(r => setTimeout(r, 2000));
+
     const result = await page.evaluate(() => ({
-      count: window.__timerCount || 0,
-      timers: (window.__longTimers || []).slice(0, 5)
+      timers: (window.__longTimers || []).slice(0, 6)
     }));
 
-    const issues = result.timers.map(ms => `setTimeout: ${Math.round(ms / 1000)}秒のタイマー検出 — UI上の制限時間であれば延長/無効化手段が必要（分析・keepalive等は対象外）`);
+    const issues = result.timers.map(({ type, delay, fnSnippet, origin }) => {
+      const sec = Math.round(delay / 1000);
+      const fnNote  = fnSnippet ? ` | 処理: ${fnSnippet}` : '';
+      const srcNote = origin    ? ` | 呼び出し元: ${origin}` : '';
+      return `${type} ${sec}秒${fnNote}${srcNote} — UI上の制限時間であれば延長/無効化手段が必要（分析・keepalive等は対象外）`;
+    });
 
     return {
       sc: '2.2.1', name: '制限時間調整',
-      // setTimeout だけではアナリティクス・セッション keepalive と UI 制限時間を区別できないため
-      // タイマーが検出されても manual_required とし、手動確認を促す
       status: issues.length === 0 ? 'pass' : 'manual_required',
       message: issues.length === 0
         ? '長時間タイマー（20秒超）は検出されませんでした'
